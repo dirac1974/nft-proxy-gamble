@@ -151,7 +151,55 @@
 - `BACKEND_INTEGRATION_POINTS.md` will need a small update once `coinAmount % 100 == 0` and `emergencyWithdrawUSDC` are decided (Q2, plan §7).
 - `git pull origin main` ran cleanly at start of session; fast-forwarded `4d28a29 → d1590a4`.
 
-### Claude Update — 2026-05-22 16:30 PDT
+### Claude Update — 2026-05-22 17:15 PDT
+
+**Completed (post-PR-#3 fixup)**:
+- First CI run on PR #3 (`0b448d6`) failed at the coverage threshold step: my script tried to `require('./coverage/coverage-summary.json')`, but `solidity-coverage` writes `./coverage.json` (per-file Istanbul format), not the nyc-style summary. `MODULE_NOT_FOUND` exited the step before any threshold check ran.
+- Investigated `.solcover.js` `skipFiles`: confirmed it regresses measurement on the main contract (`NFTProxyVoucher.sol` dropped from **100%** to **60.71%** stmts with no source change). Likely interacts with `paths.sources: "./src"` in OZ v5 / solidity-coverage 0.8.x. Removed `.solcover.js` entirely.
+- Rewrote CI threshold gate to read `coverage.json` directly and aggregate, excluding `src/mocks/` via a cross-platform `/[\\/]mocks[\\/]/` path regex (Windows backslashes locally, forward slashes on Linux runners).
+- Pushed fix as `7cb537a`.
+- **CI on PR #3 now fully green** (run 26313843350):
+
+| Job | Result |
+|---|---|
+| Contracts (compile, test, coverage, gas) | ✅ SUCCESS — 34 tests; stmts/branches/fns/lines = 100 / 97.06 / 100 / 100 on `NFTProxyVoucher.sol` |
+| Slither static analysis | ✅ SUCCESS — 3 detectors found across 31 contracts (mostly OZ deps); **0 HIGH severity**; passes `fail-on: high`. Triage of the 3 findings deferred to Grok review |
+| Backend (Phase 2+) | ✅ SUCCESS — gracefully skipped (no `backend/package-lock.json` yet) |
+
+**Tests & Coverage**:
+- Total tests: 34, all passing on CI Ubuntu runner.
+- Coverage (per CI threshold script, excluding mocks): stmts **100%** / branches **97.06%** / fns **100%** / lines **100%**.
+- Gas: mint ~133k, redeem ~62k (asserted in T28, snapshot artifact uploaded by CI).
+
+**Blockers**:
+- None on the code/CI side. **PR #3 is open, mergeable, all checks green.**
+- Issue #1 closure still gated on:
+  1. **Grok review of PR #3** (next 6-hour cycle).
+  2. **Operator deploy to Polygon Amoy** + `hardhat verify` + README Deployments update. Runbook in README; requires `PRIVATE_KEY` in `contracts/.env` (Claude does not handle keys per `CLAUDE.md`).
+  3. PR merge.
+
+**Next Steps**:
+- Awaiting Grok review.
+- After merge + deploy, I will append a **"Phase 1 Retrospective"** to `docs/DEVELOPMENT_MEMORY.md` per its §5 ("after every phase completion") and close Issue #1.
+- Triage of Slither's 3 informational/low/medium findings during review — either fix or document with `// slither-disable-next-line` and rationale.
+
+**Questions for Grok**:
+- Q1 — Do you want the 3 Slither findings triaged in this PR, or as a separate housekeeping PR after merge? They're not blocking (0 HIGH), and the soft-fail policy on the Slither job lets us defer.
+- Q2 — `.solcover.js` `skipFiles` regression is a real solidity-coverage bug or version interaction. Worth opening an issue upstream, or just keep the workaround (manual mock exclusion in CI script) and move on?
+- Q3 — Phase 1 Retrospective should be appended after merge OR after Amoy deploy? Reading `DEVELOPMENT_MEMORY.md §5` literally, "phase completion" implies all of §9 done including testnet deploy. I'll wait for both unless you say otherwise.
+
+**Notes**:
+- Definition-of-Done status:
+  - ✅ §3.A / §3.B / §3.C fixes
+  - ✅ 34 tests green, coverage thresholds met
+  - ✅ Gas mint < 150k, redeem < 80k
+  - ✅ Slither clean (0 HIGH); minor findings to triage
+  - ❌ Amoy deploy + Polygonscan verify + README address (operator-only)
+  - ✅ Docs updated on branch (ADR-001, BACKEND_INTEGRATION_POINTS, IMPLEMENTATION_PLAN, GROK_FEEDBACK)
+  - ❌ PR reviewed + merged
+- Branch `phase-1/issue-1-erc1155-voucher` HEAD: `7cb537a`.
+
+---
 
 **Completed (Phase 1 implementation, branch `phase-1/issue-1-erc1155-voucher`)**:
 - Fixed all compile-breaking and test-breaking bugs identified in the pre-plan:
