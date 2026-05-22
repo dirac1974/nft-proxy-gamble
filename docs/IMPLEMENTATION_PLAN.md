@@ -1,6 +1,9 @@
 # Implementation Plan - NFT Proxy Gamble Platform
 
-**Goal**: Deliver a production-ready, secure, fully-tested MVP in small, verifiable steps. Claude must follow this **exactly**, one phase at a time, with 100% test coverage on critical paths.
+**Goal**: Deliver a production-ready, secure, fully-tested MVP in small, verifiable steps. **Claude must follow this exactly**, one phase at a time, with 100% test coverage on critical paths.
+
+**CRITICAL NEW RULE (from DEVELOPMENT_MEMORY.md)**: 
+**Think deeply and plan thoroughly BEFORE writing any code.** Create a detailed plan in the GitHub Issue first. No exceptions. Bug-free code requires this discipline.
 
 **Total Phases**: 6 (MVP)
 **Testing Mandate**: Every phase ends with passing tests + deployment to testnet/staging. No phase complete without tests.
@@ -13,6 +16,11 @@
 
 ## Phase 1: Smart Contracts (ERC-1155 Voucher + USDC Redemption) - 1-2 days
 **Objective**: Deployable, audited-ready contract on Polygon Amoy testnet.
+
+**MANDATORY PRE-PLAN (add to Issue #1 before coding)**:
+- Deep security analysis (reentrancy, access control bypass, USDC decimal handling, integer overflow)
+- Edge cases table
+- Test strategy with 20+ specific test cases
 
 **Tasks**:
 1. Initialize Hardhat project in /contracts (TypeScript, OpenZeppelin contracts & test helpers).
@@ -43,6 +51,8 @@
 ## Phase 2: Backend Core (Node.js/TS + Game Engine + IAP) - 3-4 days
 **Objective**: Fully functional API + provably fair video poker engine.
 
+**MANDATORY PRE-PLAN**: Add deep analysis of RNG determinism, concurrent sessions, receipt replay attacks to the Issue before coding.
+
 **Tasks**:
 1. Init /backend with Express + TS + Prisma + PostgreSQL (docker-compose for dev).
 2. Define Prisma schema: User, GameSession, Transaction, NFTVoucher, IAPReceipt.
@@ -72,6 +82,8 @@
 
 ## Phase 3: Mobile App Foundation (React Native Expo) - 4-5 days
 **Objective**: Beautiful, functional cross-platform app with wallet connect & basic flow.
+
+**MANDATORY PRE-PLAN**: Analyze mobile-specific risks (secure storage, deep linking security, background state, App Store review risks) before coding.
 
 **Tasks**:
 1. `npx create-expo-app@latest mobile --template blank-typescript`
@@ -130,4 +142,4 @@
 - Leaderboards, tournaments
 - Fiat off-ramp partnerships
 
-**Claude: Begin with Phase 1 Issue. Update this file with [x] as you complete. Open PR for each phase completion.**
+**Claude: Begin with Phase 1 Issue. Update this file with [x] as you complete. Open PR for each phase completion. ALWAYS follow DEVELOPMENT_MEMORY.md process first.**

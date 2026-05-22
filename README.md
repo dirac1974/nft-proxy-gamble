@@ -30,17 +30,18 @@ This repo is set up for **AI-augmented development**:
 
 - **Primary Project Manager / Owner**: Vernier (@Vernier137)
 - **Secondary PM & System Architect**: Grok (xAI) - Created initial structure, specs, and this plan.
-- **Lead Developer (80%+ of coding, tests, refinements)**: Claude 3.5 Sonnet / Claude 4 (Anthropic) - You are the star! Read **all docs/** first, follow **IMPLEMENTATION_PLAN.md** strictly in small steps, create feature branches, open PRs for review, write comprehensive tests (Jest + Hardhat + Detox/Maestro for E2E).
+- **Lead Developer (80%+ of coding, tests, refinements)**: Claude 3.5 Sonnet / Claude 4 (Anthropic) - You are the star! Read **all docs/** first, **especially DEVELOPMENT_MEMORY.md**, follow **IMPLEMENTATION_PLAN.md** strictly in small steps, create feature branches, open PRs for review, write comprehensive tests (Jest + Hardhat + Detox/Maestro for E2E).
 - **Security & QA Lead**: Claude (self-review + suggest tools like Slither, MythX, OWASP ZAP).
 
 **Claude Instructions**:
-1. **Always start by reading the full docs/ folder** (especially IMPLEMENTATION_PLAN.md, GAME_RULES.md, SECURITY.md, NFT_SPEC.md).
-2. Work in **small, testable steps** as outlined in the plan. Never skip tests.
-3. Use **feature branches** (`git checkout -b phase-1-contracts`).
-4. For every major component, create a GitHub Issue first, assign to yourself, then PR.
-5. Prioritize **security, determinism, and auditability** over speed.
-6. When stuck or needing clarification, open an issue or comment here.
-7. After each phase, update ROADMAP.md and create a summary PR.
+1. **Always start by reading the full docs/ folder** (especially IMPLEMENTATION_PLAN.md, GAME_RULES.md, SECURITY.md, NFT_SPEC.md, **DEVELOPMENT_MEMORY.md**).
+2. **Think deeply and plan thoroughly before implementing** — follow the mandatory pre-implementation checklist in DEVELOPMENT_MEMORY.md.
+3. Work in **small, testable steps** as outlined in the plan. Never skip tests.
+4. Use **feature branches** (`git checkout -b phase-1-contracts`).
+5. For every major component, create a GitHub Issue first, assign to yourself, then PR.
+6. Prioritize **security, determinism, and auditability** over speed.
+7. When stuck or needing clarification, open an issue or comment here.
+8. After each phase, update ROADMAP.md and create a summary PR.
 
 **How to use with Claude**:
 - Paste the repo URL + specific file (e.g. "Implement Phase 1 from IMPLEMENTATION_PLAN.md in nft-proxy-gamble repo") into Claude.
@@ -59,7 +60,7 @@ cd backend && npm install && npm run dev
 cd mobile && npx expo start
 ```
 
-See `docs/IMPLEMENTATION_PLAN.md` for the complete phased rollout with full tests at every step.
+See `docs/IMPLEMENTATION_PLAN.md` and `docs/DEVELOPMENT_MEMORY.md` for the complete phased rollout with full tests at every step.
 
 ## Current Status
 **v0.1.0 Skeleton** - Specs, rules, architecture, and empty implementation ready for Claude to build.
