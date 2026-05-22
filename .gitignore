@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+build/
+dist/
+.next/
+.expo/
+
+# Hardhat
+cache/
+artifacts/
+typechain/
+
+# Env & secrets
+.env
+.env.local
+.env.*
+
+# IDE
+.idea/
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Mobile
+ios/
+android/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Prisma
+prisma/migrations/
+!prisma/migrations/.gitkeep
+
+# Misc
+*.tsbuildinfo
+coverage/
