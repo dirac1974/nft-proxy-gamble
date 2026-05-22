@@ -1,6 +1,6 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
-import "@openzeppelin/hardhat-upgrades";
+import "solidity-coverage";
 
 import * as dotenv from "dotenv";
 dotenv.config();
@@ -10,7 +10,12 @@ const config: HardhatUserConfig = {
     version: "0.8.24",
     settings: {
       optimizer: { enabled: true, runs: 200 },
+      // OZ v5 utils/Arrays.sol uses `mcopy` (Cancun). Polygon PoS supports Cancun.
+      evmVersion: "cancun",
     },
+  },
+  paths: {
+    sources: "./src",
   },
   networks: {
     hardhat: {},
@@ -24,7 +29,15 @@ const config: HardhatUserConfig = {
     },
   },
   etherscan: {
-    apiKey: process.env.POLYGONSCAN_API_KEY || "",
+    apiKey: {
+      polygonAmoy: process.env.POLYGONSCAN_API_KEY || "",
+      polygon: process.env.POLYGONSCAN_API_KEY || "",
+    },
+  },
+  gasReporter: {
+    enabled: process.env.REPORT_GAS === "true",
+    currency: "USD",
+    outputFile: process.env.GAS_REPORT_FILE || undefined,
   },
 };
 

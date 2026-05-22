@@ -11,11 +11,13 @@ dist/
 cache/
 artifacts/
 typechain/
+typechain-types/
 
 # Env & secrets
 .env
 .env.local
 .env.*
+!.env.example
 
 # IDE
 .idea/
@@ -46,3 +48,6 @@ prisma/migrations/
 # Misc
 *.tsbuildinfo
 coverage/
+coverage.json
+gasReport.txt
+contracts/deployments/

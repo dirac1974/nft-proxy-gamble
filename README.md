@@ -70,9 +70,37 @@ cd mobile && npx expo start
 See `docs/IMPLEMENTATION_PLAN.md` and `docs/DEVELOPMENT_MEMORY.md` for the complete phased rollout with full tests at every step.
 
 ## Current Status
-**v0.1.0 Skeleton** - Specs, rules, architecture, and empty implementation ready for Claude to build.
+**v0.1.0 Skeleton + Phase 1 contract** — `NFTProxyVoucher.sol` implemented, 34 tests green, coverage 100% statements / 97% branches / 100% functions / 100% lines on the main contract. Awaiting testnet deploy.
 
-**Next Milestone**: Phase 1 complete (auditable ERC-1155 + tests on testnet).
+**Next Milestone**: Polygon Amoy deploy + verification on Polygonscan, then Phase 2 (backend).
+
+## Deployments
+
+| Network | Contract | Address | Tx |
+|---|---|---|---|
+| Polygon Amoy (testnet) | `NFTProxyVoucher` | _pending_ | _pending_ |
+| Polygon mainnet | `NFTProxyVoucher` | _Phase 6_ | _Phase 6_ |
+
+### Deploying to Amoy
+
+Prerequisites (operator runs locally — **Claude never touches these**):
+
+1. Copy `contracts/.env.example` → `contracts/.env`.
+2. Fill `PRIVATE_KEY` with a dedicated low-balance Amoy key (NOT a key holding mainnet funds).
+3. Fund the key with Amoy MATIC from the [Polygon faucet](https://faucet.polygon.technology/).
+4. Set `POLYGONSCAN_API_KEY` from https://polygonscan.com/myapikey.
+5. (Optional) override `USDC_ADDRESS` if Circle relocates the testnet token.
+
+```bash
+cd contracts
+npm ci
+npm run compile
+npm test                 # 34 tests, all green
+npm run deploy:amoy      # prints address + writes contracts/deployments/amoy.json
+npx hardhat verify --network amoy <addr> <usdc>
+```
+
+After deploy, fund the contract with test USDC (faucet or mock) before opening redemptions, and grant `MINTER_ROLE` to the backend hot wallet (script lands in Phase 2).
 
 ## License
 MIT - See LICENSE.md

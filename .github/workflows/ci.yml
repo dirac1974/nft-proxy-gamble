@@ -1,27 +1,106 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main, "phase-*/**"]
+  pull_request:
 
 jobs:
-  test:
+  contracts:
+    name: Contracts (compile, test, coverage, gas)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: contracts/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Test
+        run: npm test
+
+      - name: Coverage (threshold gate)
+        run: |
+          npm run coverage
+          node -e "
+            const c = require('./coverage/coverage-summary.json');
+            const t = c['total'];
+            const fail = [];
+            if (t.statements.pct < 92) fail.push('statements ' + t.statements.pct + ' < 92');
+            if (t.branches.pct   < 88) fail.push('branches '   + t.branches.pct   + ' < 88');
+            if (t.functions.pct  < 95) fail.push('functions '  + t.functions.pct  + ' < 95');
+            if (t.lines.pct      < 92) fail.push('lines '      + t.lines.pct      + ' < 92');
+            if (fail.length) { console.error('COVERAGE FAIL:', fail.join('; ')); process.exit(1); }
+            console.log('Coverage thresholds OK:', t);
+          "
+
+      - name: Gas snapshot
+        env:
+          REPORT_GAS: "true"
+          GAS_REPORT_FILE: "gasReport.txt"
+        run: npm test
+
+      - name: Upload gas report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gas-report
+          path: contracts/gasReport.txt
+          if-no-files-found: ignore
+
+  slither:
+    name: Slither static analysis
+    runs-on: ubuntu-latest
+    needs: contracts
+    continue-on-error: true # soft-fail until findings are triaged; tighten after first clean run
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: contracts/package-lock.json
+      - run: npm ci
+        working-directory: contracts
+      - uses: crytic/slither-action@v0.4.0
+        with:
+          target: contracts/
+          solc-version: 0.8.24
+          fail-on: high
+          slither-args: --filter-paths "node_modules|src/mocks"
+
+  # Backend job is gated behind Phase 2 — only runs once a package-lock.json exists.
+  backend:
+    name: Backend (Phase 2+)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-    - name: Install & Test Contracts
-      working-directory: contracts
-      run: |
-        npm ci
-        npm run compile
-        npm test
-    - name: Install & Test Backend
-      working-directory: backend
-      run: |
-        npm ci
-        npm run build
-        npm test
-    # Mobile tests later with EAS or jest
-    - name: Lint
-      run: echo "Add eslint in future phases"
+      - uses: actions/checkout@v4
+      - id: check-lock
+        run: |
+          if [ -f backend/package-lock.json ]; then
+            echo "ready=true" >> $GITHUB_OUTPUT
+          else
+            echo "Backend lockfile not present yet (Phase 2 hasn't shipped) — skipping."
+            echo "ready=false" >> $GITHUB_OUTPUT
+          fi
+      - if: steps.check-lock.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - if: steps.check-lock.outputs.ready == 'true'
+        working-directory: backend
+        run: |
+          npm ci
+          npm run build
+          npm test
