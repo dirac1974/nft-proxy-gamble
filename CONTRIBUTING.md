@@ -4,15 +4,12 @@
 **Security, fairness, transparency, and regulatory mindfulness first.** All code must be testable and auditable. **Bug-free is the only acceptable outcome.**
 
 ## For Claude AI (Primary Implementer) & All Agents
-**MANDATORY**:
-1. **Read DEVELOPMENT_MEMORY.md completely** before any work.
-2. **Follow the "Think Deeply & Plan First" process** — create detailed plan in Issue before coding.
-3. Create a GitHub Issue for every feature/task.
-4. Work on dedicated branches (`feat/phase-1-contracts`).
-5. Write tests BEFORE or alongside implementation (TDD preferred for critical paths like RNG and redemption).
-6. All PRs must pass CI (tests, lint, security scans) **and meet coverage thresholds** (see DEVELOPMENT_MEMORY.md).
-7. Document decisions in code comments and ADRs (Architecture Decision Records) in /docs/adr/.
-8. After each phase, append a retrospective to DEVELOPMENT_MEMORY.md.
+**MANDATORY — READ IN THIS ORDER EVERY TIME YOU START**:
+1. `docs/DEVELOPMENT_MEMORY.md` — Permanent standards, testing rules, output format
+2. `docs/GROK_FEEDBACK.md` — **Live feedback file** (updated every 6 hours by Grok with current action items)
+3. `docs/IMPLEMENTATION_PLAN.md` — Phased execution plan
+
+**Never start coding without reading both DEVELOPMENT_MEMORY.md and GROK_FEEDBACK.md first.**
 
 ## Workflow
 1. Pick or create Issue (include full pre-plan checklist from DEVELOPMENT_MEMORY.md)

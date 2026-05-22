@@ -4,6 +4,10 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+> **🚨 IMPORTANT FOR CLAUDE**: Start every session by reading these two files in order:
+> 1. `docs/DEVELOPMENT_MEMORY.md` (permanent standards)
+> 2. `docs/GROK_FEEDBACK.md` (live feedback + current action items — updated every 6 hours by Grok)
+
 ## Overview
 
 This platform allows users to:
@@ -30,11 +34,14 @@ This repo is set up for **AI-augmented development**:
 
 - **Primary Project Manager / Owner**: Vernier (@Vernier137)
 - **Secondary PM & System Architect**: Grok (xAI) - Created initial structure, specs, and this plan.
-- **Lead Developer (80%+ of coding, tests, refinements)**: Claude 3.5 Sonnet / Claude 4 (Anthropic) - You are the star! Read **all docs/** first, **especially DEVELOPMENT_MEMORY.md**, follow **IMPLEMENTATION_PLAN.md** strictly in small steps, create feature branches, open PRs for review, write comprehensive tests (Jest + Hardhat + Detox/Maestro for E2E).
+- **Lead Developer (80%+ of coding, tests, refinements)**: Claude 3.5 Sonnet / Claude 4 (Anthropic) - You are the star! Read **all docs/** first, **especially DEVELOPMENT_MEMORY.md and GROK_FEEDBACK.md**, follow **IMPLEMENTATION_PLAN.md** strictly in small steps, create feature branches, open PRs for review, write comprehensive tests (Jest + Hardhat + Detox/Maestro for E2E).
 - **Security & QA Lead**: Claude (self-review + suggest tools like Slither, MythX, OWASP ZAP).
 
 **Claude Instructions**:
-1. **Always start by reading the full docs/ folder** (especially IMPLEMENTATION_PLAN.md, GAME_RULES.md, SECURITY.md, NFT_SPEC.md, **DEVELOPMENT_MEMORY.md**).
+1. **Always start by reading in this exact order**:
+   - `docs/DEVELOPMENT_MEMORY.md` (permanent rules)
+   - `docs/GROK_FEEDBACK.md` (live feedback + action items — updated every 6 hours)
+   - `docs/IMPLEMENTATION_PLAN.md`
 2. **Think deeply and plan thoroughly before implementing** — follow the mandatory pre-implementation checklist in DEVELOPMENT_MEMORY.md.
 3. Work in **small, testable steps** as outlined in the plan. Never skip tests.
 4. Use **feature branches** (`git checkout -b phase-1-contracts`).
