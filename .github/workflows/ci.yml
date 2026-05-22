@@ -33,15 +33,42 @@ jobs:
         run: |
           npm run coverage
           node -e "
-            const c = require('./coverage/coverage-summary.json');
-            const t = c['total'];
+            // solidity-coverage writes Istanbul per-file data to coverage.json.
+            // Phase 1 thresholds (per docs/DEVELOPMENT_MEMORY.md §3) apply to the main contract.
+            // Mocks under src/mocks/ are test scaffolding and excluded here. We compute totals
+            // from coverage.json directly (skipFiles has a known interaction with paths.sources).
+            const c = require('./coverage.json');
+            const tot = { s: { hit: 0, total: 0 }, f: { hit: 0, total: 0 }, b: { hit: 0, total: 0 }, l: { hit: 0, total: 0 } };
+            const include = (file) => !/[\\/]mocks[\\/]/.test(file) && file.endsWith('.sol');
+            for (const file of Object.keys(c)) {
+              if (!include(file)) continue;
+              const d = c[file];
+              for (const k of Object.keys(d.s)) { tot.s.total++; if (d.s[k] > 0) tot.s.hit++; }
+              for (const k of Object.keys(d.f)) { tot.f.total++; if (d.f[k] > 0) tot.f.hit++; }
+              for (const k of Object.keys(d.b)) { for (const v of d.b[k]) { tot.b.total++; if (v > 0) tot.b.hit++; } }
+              const lineSeen = new Set();
+              for (const k of Object.keys(d.statementMap)) {
+                const line = d.statementMap[k].start.line;
+                if (!lineSeen.has(line)) { lineSeen.add(line); tot.l.total++; if (d.s[k] > 0) tot.l.hit++; }
+              }
+            }
+            const pct = (h, t) => t === 0 ? 100 : (h * 100 / t);
+            const stmtPct = pct(tot.s.hit, tot.s.total);
+            const brPct   = pct(tot.b.hit, tot.b.total);
+            const fnPct   = pct(tot.f.hit, tot.f.total);
+            const linePct = pct(tot.l.hit, tot.l.total);
+            console.log('Coverage (excluding src/mocks/):');
+            console.log('  statements ' + stmtPct.toFixed(2) + '% (' + tot.s.hit + '/' + tot.s.total + ')');
+            console.log('  branches   ' + brPct.toFixed(2)   + '% (' + tot.b.hit + '/' + tot.b.total + ')');
+            console.log('  functions  ' + fnPct.toFixed(2)   + '% (' + tot.f.hit + '/' + tot.f.total + ')');
+            console.log('  lines      ' + linePct.toFixed(2) + '% (' + tot.l.hit + '/' + tot.l.total + ')');
             const fail = [];
-            if (t.statements.pct < 92) fail.push('statements ' + t.statements.pct + ' < 92');
-            if (t.branches.pct   < 88) fail.push('branches '   + t.branches.pct   + ' < 88');
-            if (t.functions.pct  < 95) fail.push('functions '  + t.functions.pct  + ' < 95');
-            if (t.lines.pct      < 92) fail.push('lines '      + t.lines.pct      + ' < 92');
+            if (stmtPct < 92) fail.push('statements ' + stmtPct.toFixed(2) + ' < 92');
+            if (brPct   < 88) fail.push('branches '   + brPct.toFixed(2)   + ' < 88');
+            if (fnPct   < 95) fail.push('functions '  + fnPct.toFixed(2)   + ' < 95');
+            if (linePct < 92) fail.push('lines '      + linePct.toFixed(2) + ' < 92');
             if (fail.length) { console.error('COVERAGE FAIL:', fail.join('; ')); process.exit(1); }
-            console.log('Coverage thresholds OK:', t);
+            console.log('All coverage thresholds met.');
           "
 
       - name: Gas snapshot
