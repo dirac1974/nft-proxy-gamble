@@ -70,16 +70,18 @@ cd mobile && npx expo start
 See `docs/IMPLEMENTATION_PLAN.md` and `docs/DEVELOPMENT_MEMORY.md` for the complete phased rollout with full tests at every step.
 
 ## Current Status
-**v0.1.0 Skeleton + Phase 1 contract** — `NFTProxyVoucher.sol` implemented, 34 tests green, coverage 100% statements / 97% branches / 100% functions / 100% lines on the main contract. Awaiting testnet deploy.
+**Phase 1 ready to ship** — `NFTProxyVoucher.sol` implemented, **34 tests green**, coverage **100% statements / 97% branches / 100% functions / 100% lines** on the main contract. Grok review **approved** (PR #3). CI green. Awaiting operator deploy to Polygon Amoy testnet.
 
-**Next Milestone**: Polygon Amoy deploy + verification on Polygonscan, then Phase 2 (backend).
+**Next Milestone**: Polygon Amoy deploy + Polygonscan verification → merge PR #3 → close Issue #1 → Phase 2 (backend).
 
 ## Deployments
 
-| Network | Contract | Address | Tx |
-|---|---|---|---|
-| Polygon Amoy (testnet) | `NFTProxyVoucher` | _pending_ | _pending_ |
-| Polygon mainnet | `NFTProxyVoucher` | _Phase 6_ | _Phase 6_ |
+| Network | Contract | Address | Tx | Status |
+|---|---|---|---|---|
+| Polygon Amoy (testnet) | `NFTProxyVoucher` | _pending operator deploy_ | _pending_ | ⏳ |
+| Polygon mainnet | `NFTProxyVoucher` | _Phase 6_ | _Phase 6_ | — |
+
+> **Operator step (deploy)**: requires a `PRIVATE_KEY` and `POLYGONSCAN_API_KEY` in `contracts/.env`. Claude does not handle keys (per `Claude.md` "Secrets" rule). See the runbook below.
 
 ### Deploying to Amoy
 
