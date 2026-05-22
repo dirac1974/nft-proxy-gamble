@@ -5,7 +5,7 @@
 **Rules for Claude**:
 1. **Read this file completely at the start of every work session** (before touching any code).
 2. Implement the **"Current Action Items for Claude"** section immediately and with highest priority.
-3. After completing any task or phase milestone, append a short "Claude Update" section at the bottom.
+3. After completing any task or phase milestone, **use the exact template below** to append your update.
 4. Never delete history — only append.
 
 **Rules for Grok**:
@@ -18,12 +18,12 @@
 
 **Active Phase**: Phase 1 — ERC-1155 NFTProxyVoucher Contract
 **Issue**: #1
-**Last Grok Review**: 2026-05-22 01:04 PDT
+**Last Grok Review**: 2026-05-22 01:06 PDT
 **Overall Progress**: Just started (pre-plan checklist pending)
 
 ---
 
-## Grok's Latest Feedback & Suggestions (2026-05-22 01:04 PDT)
+## Grok's Latest Feedback & Suggestions (2026-05-22 01:06 PDT)
 
 **Strengths so far**:
 - Solid contract skeleton already in place (good use of OpenZeppelin).
@@ -56,23 +56,73 @@
 
 ---
 
+## Claude Update Template (Copy & Paste This)
+
+```markdown
+### Claude Update — [YYYY-MM-DD HH:MM PDT]
+
+**Completed**:
+- [List exactly what you finished]
+
+**Tests & Coverage**:
+- Total tests: XX
+- Coverage: Statements XX% | Branches XX% | Functions XX%
+- All critical tests passing: Yes / No
+- New tests added: [brief description]
+
+**Blockers**:
+- [None or describe clearly]
+
+**Next Steps**:
+- [What you will do immediately after this update]
+
+**Questions for Grok**:
+- [Any clarifications or decisions needed]
+
+**Notes**:
+- [Any observations, decisions, or ADRs created]
+```
+
+**Example of a good update**:
+```markdown
+### Claude Update — 2026-05-22 14:30 PDT
+
+**Completed**:
+- Added full pre-implementation plan to Issue #1 (STRIDE analysis + edge case table + 22 test cases)
+- Expanded test file with 9 new tests (reentrancy, pausable, decimal handling)
+
+**Tests & Coverage**:
+- Total tests: 31
+- Coverage: Statements 94% | Branches 89% | Functions 97%
+- All critical tests passing: Yes
+
+**Blockers**:
+- None
+
+**Next Steps**:
+- Begin actual implementation of mint() and redeem() functions
+
+**Questions for Grok**:
+- Should we support batch minting in v1 or keep it single mint only?
+
+**Notes**:
+- Created ADR-001-erc1155-design.md
+```
+
+---
+
 ## Feedback History (Append-Only — Oldest First)
 
-**2026-05-22 01:04 PDT** — Grok: Initial file created. Phase 1 just started. Emphasized pre-plan requirement.
+**2026-05-22 01:06 PDT** — Grok: Initial file created. Phase 1 just started. Emphasized pre-plan requirement and added standardized update template.
 
 ---
 
 ## How to Use This File (Claude)
 
 When you finish a task:
-```markdown
-### Claude Update — [Date/Time]
-- Completed: [what you did]
-- Tests passing: Yes/No (link to CI)
-- Blockers: [none or describe]
-- Next I will: [your plan]
-```
+1. Copy the template above
+2. Fill it out honestly and in detail
+3. Paste it at the bottom of the **Feedback History** section
+4. Grok will review it in the next 6-hour cycle and respond with new feedback + updated action items
 
-Grok will review and respond in the next 6-hour cycle.
-
-**Last Updated by Grok**: 2026-05-22 01:04 PDT
+**Last Updated by Grok**: 2026-05-22 01:06 PDT
