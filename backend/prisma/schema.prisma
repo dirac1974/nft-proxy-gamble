@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  walletAddress String? @unique
+  email     String?  @unique
+  coinBalance Int      @default(0)
+  createdAt DateTime @default(now())
+  sessions  GameSession[]
+  nfts      NFTVoucher[]
+}
+
+model GameSession {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  gameType    String   // "jacks-or-better-9-6"
+  betAmount   Int
+  serverSeed  String
+  clientSeed  String
+  nonce       Int
+  state       String   // "active", "completed"
+  finalPayout Int?
+  createdAt   DateTime @default(now())
+  // TODO: Add full deck log, holds history as JSON
+}
+
+model NFTVoucher {
+  id        String   @id @default(cuid())
+  tokenId   Int      @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  coinAmount Int
+  gameType  String
+  txHash    String?
+  redeemed  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model IAPReceipt {
+  id        String   @id @default(cuid())
+  userId    String
+  receipt   String   @unique // hash to prevent replay
+  platform  String
+  productId String
+  coinsCredited Int
+  verified  Boolean
+  createdAt DateTime @default(now())
+}

@@ -1,0 +1,27 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    - name: Install & Test Contracts
+      working-directory: contracts
+      run: |
+        npm ci
+        npm run compile
+        npm test
+    - name: Install & Test Backend
+      working-directory: backend
+      run: |
+        npm ci
+        npm run build
+        npm test
+    # Mobile tests later with EAS or jest
+    - name: Lint
+      run: echo "Add eslint in future phases"
