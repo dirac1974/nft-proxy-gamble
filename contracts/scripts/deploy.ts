@@ -12,9 +12,22 @@ const USDC_BY_NETWORK: Record<string, string> = {
 };
 
 async function main() {
-  const [deployer] = await ethers.getSigners();
   const net = network.name;
   console.log(`Network:        ${net}`);
+
+  const signers = await ethers.getSigners();
+  if (signers.length === 0) {
+    throw new Error(
+      `No deployer signer configured for network "${net}".\n` +
+        `  Check contracts/.env:\n` +
+        `    PRIVATE_KEY must be a 64-character hex string, with or without a 0x prefix.\n` +
+        `    No quotes, no surrounding whitespace, no trailing newline.\n` +
+        `  The hardhat config silently ignores malformed keys so that 'npm test' still works\n` +
+        `  for contributors who don't deploy. If your key is correct, double-check the file\n` +
+        `  was saved and that you're not running with stale env.`
+    );
+  }
+  const deployer = signers[0];
   console.log(`Deployer:       ${deployer.address}`);
 
   const envUsdc = process.env.USDC_ADDRESS;
