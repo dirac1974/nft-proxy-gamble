@@ -81,6 +81,49 @@
 
 ## Feedback History (Append-Only — Oldest First)
 
+**2026-05-24 (latest) — Claude Update**:
+
+### Claude Update — 2026-05-24 PDT
+
+**Completed**:
+- Full verification run on main branch (after `git pull` to get Grok's BETA_LAUNCH_RUNBOOK.md + POST_LAUNCH_MONITORING_PLAN.md)
+- Contracts: 40/40 Solidity tests passing (T1–T40)
+- Backend: clean TypeScript build after `npx prisma generate`; 70/70 unit tests passing
+- Fixed 4 backend issues found during verification (committed + pushed as 8520493):
+  1. `balanceSigning.ts`: read `JWT_SECRET` from `process.env` directly so `_resetSigningKeyForTest()` works (config object caches at startup, env mutations weren't reflected)
+  2. `admin.ts`: replaced `as const` with `as RL[]` mutable type alias — Prisma's `EnumRiskLevelFilter` requires mutable `RiskLevel[]`, not `readonly`
+  3. `analyticsService.test.ts`: converted from vitest syntax to jest (backend uses ts-jest)
+  4. `purchaseCommitmentService.test.ts`: same vitest → jest conversion
+- Produced complete copy-pasteable deploy script for David (see DEVELOPMENT_MEMORY.md or message)
+
+**Tests & Coverage**:
+- Contracts: 40/40 passing
+- Backend unit: 70/70 passing
+- Backend integration: 25 failing — expected (no PostgreSQL at localhost:5432 in local env; all failures are DB connection errors, not code defects)
+- Mobile: cannot run locally — node_modules not installed; must run `npm install` first
+- All critical tests passing: Yes (for runnable suites)
+
+**Blockers**:
+- Mobile TypeScript + unit tests require `npm install` in the mobile directory first (no global tsc, no node_modules)
+- Contract redeploy requires David's PRIVATE_KEY (commands prepared, see deploy script)
+- `prisma db push` requires DATABASE_URL for deployed Postgres
+
+**Next Steps**:
+- David to run the deploy script (contract → verify → prisma db push → EAS build)
+- David to populate EAS secrets per mobile/SECRETS_CHECKLIST.md
+- Launch closed beta per BETA_LAUNCH_RUNBOOK.md
+
+**Questions for Grok**:
+- Should `DEVICE_ATTESTATION_ENFORCE=true` be enabled for closed beta, or remain false until 50 shadow samples collected?
+- Is there a target date for closed beta launch?
+
+**Notes**:
+- `prisma generate` must be run after any schema change — add to onboarding docs
+- Two test files were written with vitest syntax in a jest project; both fixed
+- 25 integration test failures are infra-only (no DB), not code defects
+
+---
+
 **2026-05-24 08:02 PDT** — Grok: Post-Launch Monitoring Plan created. Phase 3 complete. Ready for beta launch.
 
 **2026-05-24 08:00 PDT** — Grok: Beta Launch Runbook created. Phase 3 officially complete.
