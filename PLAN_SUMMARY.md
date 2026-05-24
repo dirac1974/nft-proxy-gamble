@@ -1,8 +1,8 @@
 # NFT Proxy Gamble - Complete Development Plan Summary
 
 **Project**: NFT Proxy Gamble Platform
-**Status**: Phase 1 & 2 Complete | Phase 3 In Progress
-**Date**: May 24, 2026
+**Status**: Phase 1 ✅ | Phase 2 ✅ | Phase 3 🚀 In Progress (3.1–3.4 built)
+**Date**: May 24, 2026 | **Last Claude Update**: 2026-05-24
 
 ---
 
@@ -32,15 +32,30 @@ We have built a secure, scalable platform that uses NFTs as a regulatory-friendl
 
 ## Current Phase: Phase 3 - Mobile App (IN PROGRESS)
 
-**PR #7** submitted with strong foundation (23 files, 1,975 lines, 21 tests).
+### Phase 3 PRs & Branch Status
 
-**Key Deliverables So Far**:
-- Expo + React Native setup
-- Dark casino theme
-- Full video poker state machine
-- Wallet connection (viem + WalletConnect)
-- 4-tab navigation
-- CI mobile job
+| PR | Branch | Status | Phase |
+|----|--------|--------|-------|
+| #7 | merged to main | ✅ Merged | 3.1 Foundation |
+| #8 | `phase-3/issue-6-wallet-auth` | 🔍 Open — awaiting review | 3.2 Wallet & Auth |
+| #9 | `phase-3/issue-6-game-polish-iap` | 🔍 Open — awaiting review | 3.3 + 3.4 Polish + IAP |
+
+**Note**: PR #9 targets PR #8's branch. Merge order: #8 → rebase #9 onto main → merge #9.
+
+### Cumulative Deliverables (3.1–3.4)
+
+- Expo + React Native + TypeScript + expo-router v3
+- Dark casino theme (design tokens)
+- Full Video Poker state machine (idle→session_started→dealt→drawn→cashed_out)
+- WalletConnect v2 + viem (connection status machine, network validation, retryAuth)
+- ConnectWalletSheet + NetworkBanner reusable components
+- Staggered card deal animation + hold animation
+- Win overlay (big/medium tiers) + sound service (expo-av)
+- Full paytable modal + strategy tips
+- IAP store + iapService (react-native-iap, server-side receipt verify)
+- IAPSheet with 3 coin products + bonus badges
+- 4-tab navigation (Lobby, Play, NFTs, Profile)
+- CI mobile job (type-check + 57 unit tests)
 
 ---
 
@@ -119,15 +134,15 @@ Copy and paste the following prompt to Claude to begin work according to this pl
 "You are the Lead Developer for the NFT Proxy Gamble platform.
 
 **Current Status**:
-- Phase 1 (Smart Contracts) and Phase 2 (Backend) are complete.
-- Phase 3 (Mobile App) has started. PR #7 is under review.
+- Phase 1 (Smart Contracts) ✅ and Phase 2 (Backend) ✅ are complete.
+- Phase 3 (Mobile App): 3.1 merged, 3.2 in PR #8, 3.3+3.4 in PR #9. Next: Phase 3.5 NFT Redemption.
 
 **Your Mission**:
-Build a secure, beautiful mobile casino app while following the strict security model.
+Continue Phase 3 development with security-first approach per the task breakdown.
 
 **Mandatory Reading (Read in this order)**:
 1. `PLAN_SUMMARY.md` (this file)
-2. `docs/GROK_FEEDBACK.md` (live memory)
+2. `docs/GROK_FEEDBACK.md` (live memory — read fully, including all Claude Updates)
 3. `docs/SECURITY_ARCHITECTURE.md` (critical)
 4. `docs/PHASE_3_TASK_BREAKDOWN.md`
 5. `docs/PR_REVIEW_CHECKLIST.md`
@@ -140,10 +155,10 @@ Build a secure, beautiful mobile casino app while following the strict security 
 - Follow the PR Review Checklist strictly.
 
 **Immediate Next Steps**:
-1. Review PR #7 feedback from Grok
-2. Address security items if needed
-3. Merge PR #7
-4. Continue Phase 3 development following the task breakdown
+1. Merge PR #8 (Phase 3.2) when CI passes
+2. Rebase and merge PR #9 (Phase 3.3+3.4) onto main
+3. Begin Phase 3.5: NFT Redemption (`redeem()` contract call, Transfer NFT modal)
+4. Backend: replace IAP stub with real Apple/Google receipt validation
 
 Start working now and make your first update in `docs/GROK_FEEDBACK.md` after significant progress."
 

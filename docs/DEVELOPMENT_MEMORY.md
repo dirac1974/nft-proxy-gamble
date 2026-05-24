@@ -150,7 +150,7 @@ async function mintVoucher(...) { ... }
 - Never delete history — only append.
 
 **Last Updated**: 2026-05-24 by Claude (Lead Dev)
-**Version**: 1.3
+**Version**: 1.4
 
 ---
 
@@ -193,3 +193,97 @@ async function mintVoucher(...) { ... }
 - MINTER_ROLE grant to hot wallet is the first backend task (scripts/grant-minter.ts).
 - Fund contract with test USDC before enabling redemptions.
 - The deployer key used for testnet must NEVER be reused for mainnet.
+
+---
+
+## Phase 2 Retrospective — Node.js Backend + Provably Fair Game Engine (Completed 2026-05-24)
+
+**Merged**: PR #5 squash-merged to main (SHA: `ac606eb` ancestry)
+**Issue**: #4 auto-closed via commit message `Closes #4`
+**Tests**: 56 passing | ts-jest + Supertest
+
+### Key Decisions Made
+
+- **Commit-reveal RNG**: `serverSeed` committed as SHA-256 hash at session start; revealed on draw. Client supplies `clientSeed`; final deck = `SHA-256(serverSeed + clientSeed + sessionId)`. Prevents server cheating without ZK proof overhead.
+- **Card encoding (ADR-002)**: `rank = card % 13` (0=2…12=A), `suit = floor(card/13)` (0=♣,1=♦,2=♥,3=♠). Encodes 52-card deck as integers 0–51. Frontend `decodeCard()` mirrors this exactly.
+- **Rate limiter skip in test**: `skip: () => config.NODE_ENV === "test"` on both express-rate-limit instances. Root cause of CI `auth.test.ts` returning 401 on the 11th request — `authLimiter max:10` exhausted the test suite.
+- **Prisma JSON cast**: `dealt` / `result` stored as `JsonValue`; must be cast via `as unknown as GameDeal` before destructuring. TypeScript strict mode requires explicit cast.
+- **ts-jest `moduleNameMapper`**: `@/(.*)` → `<rootDir>/src/$1` required in `jest.config.ts` for path aliases to resolve in tests.
+- **IAP receipt validation stubbed**: `backend/src/routes/iap.ts` stubs Apple/Google validation for testnet. Marked TODO for Phase 3.4 / before production.
+- **`mintOrchestrator.ts` stub**: Real contract call (`mint()`) commented out; returns fake `voucherId`. Requires MINTER_ROLE grant to hot wallet + `contracts/deployments/amoy.json` before activation.
+
+### Bugs Caught Before Merge
+
+| Bug | Root Cause | Fix |
+|-----|-----------|-----|
+| auth.test.ts → 401 on 11th request | `authLimiter max:10` exhausted during test run | `skip: skipInTest` on both rate limiters |
+| Prisma JSON type mismatch | `JsonValue` not assignable to typed interface | Explicit `as unknown as T` cast at read sites |
+| ts-jest can't resolve `@/` paths | Missing `moduleNameMapper` in jest config | Added `"^@/(.*)$": "<rootDir>/src/$1"` |
+| Squash merge needed instead of button | Older failed CI commits blocked GitHub merge button | `git merge --squash` + manual commit via CLI |
+
+### What to Watch in Phase 3
+
+- IAP stub must be replaced with real Apple/Google receipt validation before any real money flows.
+- `mintOrchestrator.ts` stub must be wired to real contract call before cashout can actually mint NFTs.
+- The `serverSeed` is stored in DB at session start — never expose it until draw is complete.
+- Rate limiter `skip: skipInTest` pattern must be applied to any future rate limiters added to the app.
+
+---
+
+## Phase 3 Progress — Mobile App (In Progress as of 2026-05-24)
+
+**Branch stack**:
+- `main` ← PR #7 merged (Phase 3.1 Foundation)
+- `phase-3/issue-6-wallet-auth` ← PR #8 open (Phase 3.2)
+- `phase-3/issue-6-game-polish-iap` ← PR #9 open (Phase 3.3 + 3.4)
+
+**Mobile test count**: 57 unit tests across 8 test files
+
+### Architecture Decisions (Phase 3)
+
+- **Server-authoritative balance**: `gameStore.setBalance` called only from `balanceApi.get()` responses and `setResult(result, data.newBalance)` from backend draw response. Client never calculates coin balance.
+- **ConnectionStatus state machine**: `idle → connecting → connected → authenticating → authenticated → error`. Stored in `walletStore`; driven by `useWalletConnect` hook.
+- **Auth dedup guard**: `lastAuthAddress` ref in `useWalletConnect` prevents double-signing on React StrictMode re-renders.
+- **Network validation before signing**: `signAndAuthenticate` calls `isOnRequiredNetwork()` first; throws with user-readable message if wrong chain. `NetworkBanner` offers one-tap switch.
+- **IAP purchase flow**: `iapService` uses `react-native-iap` listeners; receipt sent to backend for server-side validation; `setBalance(newBalance)` only from `iapApi.verify` response. `finishTransaction` called even on backend failure.
+- **Sound service**: expo-av wrapper with graceful no-op — game fully playable without audio files present. Drop `.mp3` into `mobile/src/assets/sounds/` to activate.
+- **WinOverlay tiers**: `classifyWin(payout, betAmount)` → `big` (≥50×/coin), `medium` (≥9×), `small`. Big/medium trigger animated overlay; big also triggers `bigWin` sound.
+- **Deal stagger**: `Card` accepts `dealIndex` prop (0–4) → 80ms-staggered spring from `translateY: -40`.
+
+### Files Created (Phase 3.1–3.4)
+
+| File | Purpose |
+|------|---------|
+| `mobile/src/theme/index.ts` | Design tokens (colors, spacing, radius, typography, shadows) |
+| `mobile/src/stores/walletStore.ts` | Wallet + JWT + ConnectionStatus state |
+| `mobile/src/stores/gameStore.ts` | Game phase machine + server-authoritative balance |
+| `mobile/src/stores/iapStore.ts` | IAP PurchaseStatus + products + history |
+| `mobile/src/services/api.ts` | Typed fetch client; all API endpoints |
+| `mobile/src/services/walletService.ts` | viem WalletClient + signAndAuthenticate + decodeCard |
+| `mobile/src/services/soundService.ts` | expo-av sound wrapper |
+| `mobile/src/services/iapService.ts` | react-native-iap init/purchase/verify flow |
+| `mobile/src/hooks/useWalletConnect.ts` | Centralized WC hook (dedup, retryAuth, switchNetwork) |
+| `mobile/src/components/Card.tsx` | Card with hold + deal stagger animations |
+| `mobile/src/components/GlassCard.tsx` | Reusable glass-morphism card container |
+| `mobile/src/components/BalanceDisplay.tsx` | Animated balance display |
+| `mobile/src/components/ConnectWalletSheet.tsx` | Multi-state connect prompt |
+| `mobile/src/components/NetworkBanner.tsx` | Wrong-network warning with Switch button |
+| `mobile/src/components/PaytableModal.tsx` | Full paytable + strategy modal |
+| `mobile/src/components/WinOverlay.tsx` | Animated win modal + classifyWin helper |
+| `mobile/src/components/IAPSheet.tsx` | Purchase bottom-sheet with 3 products |
+| `mobile/src/app/_layout.tsx` | Root layout: QueryClient + WalletConnect modal |
+| `mobile/src/app/(tabs)/_layout.tsx` | 4-tab navigation |
+| `mobile/src/app/(tabs)/index.tsx` | Lobby screen |
+| `mobile/src/app/(tabs)/play.tsx` | Video Poker game screen |
+| `mobile/src/app/(tabs)/nfts.tsx` | NFT wallet screen (Phase 3.5 wiring pending) |
+| `mobile/src/app/(tabs)/profile.tsx` | Profile + age gate + settings |
+
+### Pending Before Production
+
+- [ ] Wire real `redeem()` contract call in `nfts.tsx` (Phase 3.5)
+- [ ] Real Apple/Google IAP receipt validation in `backend/src/routes/iap.ts`
+- [ ] Grant MINTER_ROLE to hot wallet; activate `mintOrchestrator.ts`
+- [ ] Add `.mp3` sound assets to `mobile/src/assets/sounds/`
+- [ ] Certificate pinning for API calls (Phase 3.6)
+- [ ] E2E tests with Maestro/Detox (Phase 3.6)
+- [ ] EAS Build configuration for App Store / Play Store (Phase 3.7)

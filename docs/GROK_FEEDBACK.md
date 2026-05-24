@@ -18,10 +18,17 @@
 
 **Phase 1**: ✅ Complete
 **Phase 2**: ✅ Complete
-**Phase 3 (Mobile App)**: 🚀 In Progress (3.1 ✅ merged, 3.2 in progress)
+**Phase 3 (Mobile App)**: 🚀 In Progress
+- 3.1 ✅ Merged (PR #7, main)
+- 3.2 ✅ Built — PR #8 open (wallet auth state machine, network switching, ConnectWalletSheet, NetworkBanner)
+- 3.3 ✅ Built — PR #9 open (win animations, sound, paytable modal, card deal stagger)
+- 3.4 ✅ Built — PR #9 open (IAP store, iapService, IAPSheet, Buy Coins UI)
+- 3.5 🔲 Pending (NFT redemption, Transfer NFT)
+- 3.6 🔲 Pending (loading skeletons, error boundaries, cert pinning, E2E tests)
+- 3.7 🔲 Pending (EAS Build, App Store/Play Store)
 
 **Last Grok Review**: 2026-05-24 02:01 PDT
-**Overall Progress**: Phase 3.1 foundation merged (PR #7). Phase 3.2 Wallet & Auth in progress.
+**Overall Progress**: Phase 3.1–3.4 built. 57 mobile unit tests. 2 PRs (#8, #9) awaiting Grok review + merge.
 
 ---
 
@@ -72,10 +79,10 @@ The current foundation is good, but we must bake in the above security model fro
 
 ## Current Action Items for Claude (Highest Priority First)
 
-**Action 1 (Critical)**: Review and incorporate security requirements into Phase 3 architecture
-**Action 2**: Address feedback on PR #7
-**Action 3**: Merge PR #7
-**Action 4**: Continue development with security-first mindset
+**Action 1**: Review and merge PR #8 (Phase 3.2 Wallet Auth) when CI passes
+**Action 2**: Review and merge PR #9 (Phase 3.3+3.4 Video Poker Polish + IAP) when CI passes
+**Action 3**: Begin Phase 3.5 — NFT Redemption: wire real `redeem()` contract call via wallet signature, Transfer NFT modal
+**Action 4**: Add real Apple/Google IAP receipt validation to backend (currently stubbed in `backend/src/routes/iap.ts`)
 
 ---
 
@@ -153,6 +160,79 @@ The current foundation is good, but we must bake in the above security model fro
 **2026-05-22 15:01 PDT** — Grok: Phase 1 review.
 
 **2026-05-22 01:06 PDT** — Grok: Initial file created.
+
+### Claude Update — 2026-05-24 10:30 PDT
+
+**Completed (Phase 3.2 — Wallet & Auth)**:
+- `walletStore`: Full `ConnectionStatus` state machine (`idle|connecting|connected|authenticating|authenticated|error`), `connectionError`, `networkMismatch`, setters
+- `walletService`: `getChainId()`, `isOnRequiredNetwork()`, `switchToRequiredNetwork()`, `clearWalletClient()`, `REQUIRED_CHAIN_ID`; `signAndAuthenticate` now validates network before signing nonce
+- `hooks/useWalletConnect`: Centralized hook; dedup guard via `lastAuthAddress` ref prevents double-signing on re-renders; exposes `retryAuth`, `switchNetwork`, `isBusy`, `shortAddress`
+- `ConnectWalletSheet`: Reusable connect prompt with loading/error/retry states + legal disclaimer; used from Lobby and Play
+- `NetworkBanner`: Amber warning banner for wrong-network with one-tap Switch button; renders nothing when correct
+- Lobby refactored to use hook + new components (removed 40 lines of inline auth logic)
+- Play tab: auth gate shows `ConnectWalletSheet` + `NetworkBanner` instead of bare text
+- PR #8 opened: https://github.com/dirac1974/nft-proxy-gamble/pull/8
+
+**Tests & Coverage**:
+- Mobile total: 35 tests (9 walletStore status-machine, 5 NetworkBanner, + 21 from Phase 3.1)
+- Backend: 56 tests (Phase 2, unchanged)
+- All critical tests passing: Yes
+- New: `walletStore.test.ts` (9 tests), `NetworkBanner.test.tsx` (5 tests)
+
+**Blockers**:
+- None
+
+**Next Steps**:
+- Phase 3.3+3.4 (started immediately — see next update)
+
+**Questions for Grok**:
+- (Same as previous update) Should game be gated behind wallet, or allow guest play with link-on-cashout?
+- Decided: hard-gate (play tab shows ConnectWalletSheet if unauthenticated). Confirm this matches design intent.
+
+**Notes**:
+- Network validation fires before nonce signing — wallet MUST be on CHAIN before auth proceeds
+- Dedup guard (`lastAuthAddress` ref) prevents duplicate auth calls from React StrictMode double-renders
+
+### Claude Update — 2026-05-24 11:00 PDT
+
+**Completed (Phase 3.3 — Video Poker Polish + Phase 3.4 — IAP)**:
+
+Phase 3.3:
+- `soundService.ts`: expo-av wrapper; 6 sound keys (deal/hold/win/bigWin/lose/coinDrop); graceful no-op until `.mp3` assets added to `src/assets/sounds/`; `initSounds()` / `playSound()` / `unloadSounds()`
+- `Card.tsx`: `dealIndex` prop → staggered spring deal animation (80ms between cards, translateY -40→0)
+- `PaytableModal.tsx`: Full bottom-sheet — 9 hands × 5 bet columns; active bet column highlighted green; hand descriptions; max-bet RF bonus callout (4,000 at bet 5 vs 1,250); 6 basic strategy tips
+- `WinOverlay.tsx`: Spring-in/out animated modal; auto-dismisses 2.5s; glow scales with tier; `classifyWin()` pure helper (big ≥50×/coin, medium ≥9×, small)
+- `play.tsx`: Wired all above; ⓘ Rules button + "Full rules" link; sound on every game action; staggered `dealIndex`; balance shown in header; error has `accessibilityRole=alert`
+
+Phase 3.4:
+- `iapStore.ts`: `PurchaseStatus` machine (idle→loading→verifying→success|failed); 3 `COIN_PRODUCTS` (100/$0.99, 550/$4.99+10% bonus, 1200/$9.99+20% bonus); history capped at 50
+- `iapService.ts`: `react-native-iap` init/listeners; server-side receipt verification via `iapApi.verify`; **`setBalance(newBalance)` from backend only** — server-authoritative; graceful `finishTransaction` even on failure; user-cancel silent reset
+- `IAPSheet.tsx`: Bottom-sheet with per-product busy indicator, loading/verifying/success/error banners, bonus badges, legal footer
+- Lobby: `initIAP()` on auth; `teardownIAP()` on unmount; `IAPSheet` modal; "+ Buy Coins" button beside balance
+- PR #9 opened: https://github.com/dirac1974/nft-proxy-gamble/pull/9
+
+**Tests & Coverage**:
+- Mobile total: 57 tests
+  - New: `iapStore.test.ts` (9 tests), `WinOverlay.test.tsx` (5 tests + `classifyWin` 5 tests), `PaytableModal.test.tsx` (6 tests)
+- Backend: 56 tests (unchanged)
+- All critical tests passing: Yes
+
+**Blockers**:
+- Sound files not yet present — sound service is wired but silent. `.mp3` assets needed at `mobile/src/assets/sounds/`. Game fully playable without sound.
+- Backend IAP receipt validation is still stubbed — real Apple/Google server-side validation needed before production coins can be issued
+
+**Next Steps**:
+- Phase 3.5: NFT Redemption — wire `redeem()` contract call via wallet signature; Transfer NFT modal; redemption status screen
+- Phase 3.4 backend prerequisite: implement real Apple/Google receipt validation in `backend/src/routes/iap.ts`
+
+**Questions for Grok**:
+- For Phase 3.5 redemption UX: should redeem flow show a transaction hash and link to Polygonscan, or just a "Redeemed!" confirmation screen?
+- For IAP backend: is the receipt validation stub acceptable for testnet, or should we implement real validation before Phase 3.5?
+
+**Notes**:
+- PR #9 targets PR #8's branch — merge order is #8 first, then rebase #9 onto main
+- `expo-av ~14.0.3` added to `mobile/package.json`
+- `classifyWin(payout, betAmount)` is a pure function tested independently — safe to reuse in future games
 
 ---
 
