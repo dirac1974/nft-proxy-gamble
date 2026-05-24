@@ -33,7 +33,7 @@ export default function LobbyScreen() {
   });
 
   useEffect(() => {
-    if (balanceData) setBalance(balanceData.coinBalance);
+    if (typeof balanceData === "number") setBalance(balanceData);
   }, [balanceData, setBalance]);
 
   useEffect(() => {
