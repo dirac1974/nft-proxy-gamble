@@ -37,7 +37,7 @@ beforeEach(() => {
   mockHmacFn.mockReturnValue(Buffer.from(VALID_SIG, "hex"));
   // Set env var for each test
   process.env.EXPO_PUBLIC_BALANCE_VERIFY_KEY = VALID_KEY_HEX;
-  process.env.NODE_ENV = "test";
+  (process.env as Record<string, string>).NODE_ENV = "test";
 });
 
 describe("verifyAndExtractBalance", () => {
@@ -60,14 +60,14 @@ describe("verifyAndExtractBalance", () => {
 
   it("returns null when EXPO_PUBLIC_BALANCE_VERIFY_KEY is missing in production", () => {
     delete process.env.EXPO_PUBLIC_BALANCE_VERIFY_KEY;
-    process.env.NODE_ENV = "production";
+    (process.env as Record<string, string>).NODE_ENV = "production";
     const result = verifyAndExtractBalance(makeResponse());
     expect(result).toBeNull();
   });
 
   it("returns coinBalance without verification in dev when key is missing", () => {
     delete process.env.EXPO_PUBLIC_BALANCE_VERIFY_KEY;
-    process.env.NODE_ENV = "development";
+    (process.env as Record<string, string>).NODE_ENV = "development";
     const result = verifyAndExtractBalance(makeResponse({ coinBalance: 999 }));
     expect(result).toBe(999);
   });
