@@ -7,50 +7,98 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum SessionState {
+  ACTIVE
+  AWAITING_DRAW
+  CASHED_OUT
+}
+
+enum MintStatus {
+  PENDING
+  MINTING
+  MINTED
+  FAILED
+}
+
+enum TransactionType {
+  IAP_PURCHASE
+  GAME_WIN
+  GAME_LOSS
+  CASHOUT_MINT
+}
+
 model User {
-  id        String   @id @default(cuid())
-  walletAddress String? @unique
-  email     String?  @unique
-  coinBalance Int      @default(0)
-  createdAt DateTime @default(now())
-  sessions  GameSession[]
-  nfts      NFTVoucher[]
+  id            String        @id @default(cuid())
+  walletAddress String        @unique
+  coinBalance   Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  sessions      GameSession[]
+  nftVouchers   NFTVoucher[]
+  iapReceipts   IAPReceipt[]
+  transactions  Transaction[]
 }
 
 model GameSession {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  gameType    String   // "jacks-or-better-9-6"
-  betAmount   Int
-  serverSeed  String
-  clientSeed  String
-  nonce       Int
-  state       String   // "active", "completed"
-  finalPayout Int?
-  createdAt   DateTime @default(now())
-  // TODO: Add full deck log, holds history as JSON
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+  gameType       String       @default("jacks-or-better-9-6")
+  betAmount      Int
+  serverSeed     String
+  serverSeedHash String
+  clientSeed     String
+  state          SessionState @default(ACTIVE)
+  hands          Json         @default("[]")
+  totalPayout    Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  nftVoucher     NFTVoucher?
+  transactions   Transaction[]
+
+  @@index([userId, state])
 }
 
 model NFTVoucher {
-  id        String   @id @default(cuid())
-  tokenId   Int      @unique
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  coinAmount Int
-  gameType  String
-  txHash    String?
-  redeemed  Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id])
+  sessionId   String     @unique
+  session     GameSession @relation(fields: [sessionId], references: [id])
+  tokenId     String?
+  coinBalance Int
+  gameType    String
+  txHash      String?
+  mintStatus  MintStatus @default(PENDING)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  transactions Transaction[]
 }
 
 model IAPReceipt {
-  id        String   @id @default(cuid())
-  userId    String
-  receipt   String   @unique // hash to prevent replay
-  platform  String
-  productId String
-  coinsCredited Int
-  verified  Boolean
-  createdAt DateTime @default(now())
+  id           String      @id @default(cuid())
+  userId       String
+  user         User        @relation(fields: [userId], references: [id])
+  platform     String
+  receiptHash  String      @unique
+  productId    String
+  coinsGranted Int
+  createdAt    DateTime    @default(now())
+  transaction  Transaction?
+}
+
+model Transaction {
+  id           String          @id @default(cuid())
+  userId       String
+  user         User            @relation(fields: [userId], references: [id])
+  type         TransactionType
+  coinDelta    Int
+  balanceAfter Int
+  sessionId    String?
+  session      GameSession?    @relation(fields: [sessionId], references: [id])
+  nftVoucherId String?
+  nftVoucher   NFTVoucher?     @relation(fields: [nftVoucherId], references: [id])
+  iapReceiptId String?         @unique
+  iapReceipt   IAPReceipt?     @relation(fields: [iapReceiptId], references: [id])
+  createdAt    DateTime        @default(now())
 }

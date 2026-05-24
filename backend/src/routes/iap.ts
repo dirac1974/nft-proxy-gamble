@@ -1,0 +1,63 @@
+import { Router } from "express";
+import { z } from "zod";
+import { prisma } from "../db/client.js";
+import { requireAuth } from "../middleware/auth.js";
+import { AppError } from "../middleware/errorHandler.js";
+import { verifyAppleReceipt, verifyGoogleReceipt } from "../services/iapVerifier.js";
+
+const router = Router();
+
+const purchaseSchema = z.discriminatedUnion("platform", [
+  z.object({
+    platform: z.literal("apple"),
+    receiptData: z.string().min(1),
+  }),
+  z.object({
+    platform: z.literal("google"),
+    purchaseToken: z.string().min(1),
+    productId: z.string().min(1),
+  }),
+]);
+
+router.post("/verify-purchase", requireAuth, async (req, res, next) => {
+  try {
+    const body = purchaseSchema.parse(req.body);
+    const userId = req.user!.userId;
+
+    const result =
+      body.platform === "apple"
+        ? await verifyAppleReceipt(body.receiptData)
+        : await verifyGoogleReceipt(body.purchaseToken, body.productId);
+
+    if (!result.valid) throw new AppError(422, "Receipt is invalid or unrecognized product");
+
+    // Atomic: create receipt + credit balance in one transaction
+    const [, user] = await prisma.$transaction([
+      prisma.iAPReceipt.create({
+        data: {
+          userId,
+          platform: body.platform,
+          receiptHash: result.receiptHash,
+          productId: result.productId,
+          coinsGranted: result.coinsGranted,
+        },
+      }),
+      prisma.user.update({
+        where: { id: userId },
+        data: { coinBalance: { increment: result.coinsGranted } },
+        select: { coinBalance: true },
+      }),
+    ]);
+
+    res.json({ coinsGranted: result.coinsGranted, newBalance: user.coinBalance });
+  } catch (err: unknown) {
+    // Prisma unique violation on receiptHash = replay attack
+    if ((err as { code?: string }).code === "P2002") {
+      next(new AppError(409, "Receipt already redeemed"));
+      return;
+    }
+    next(err);
+  }
+});
+
+export default router;
