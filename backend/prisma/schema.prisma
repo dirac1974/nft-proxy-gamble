@@ -27,6 +27,13 @@ enum TransactionType {
   CASHOUT_MINT
 }
 
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  BLOCKED
+}
+
 model User {
   id            String        @id @default(cuid())
   walletAddress String        @unique
@@ -37,6 +44,7 @@ model User {
   nftVouchers   NFTVoucher[]
   iapReceipts   IAPReceipt[]
   transactions  Transaction[]
+  analytics     UserAnalytics?
 }
 
 model GameSession {
@@ -86,6 +94,25 @@ model IAPReceipt {
   onChainTxHash  String?      // Polygon tx hash of PurchaseCommitted event (null until batch flushes)
   createdAt      DateTime     @default(now())
   transaction    Transaction?
+}
+
+model UserAnalytics {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  user              User      @relation(fields: [userId], references: [id])
+  // rolling 1-hour window counters (reset by analyticsService on each update)
+  coinsAddedLastHour  Int     @default(0)
+  cashoutsToday       Int     @default(0)
+  handsLastHour       Int     @default(0)
+  winsLastHour        Int     @default(0)
+  // persistent lifetime counters
+  totalCoinsAdded     Int     @default(0)
+  totalCashoutsAllTime Int    @default(0)
+  // risk assessment
+  riskLevel           RiskLevel @default(LOW)
+  riskFlags           String[]  @default([])
+  lastEvaluatedAt     DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 }
 
 model Transaction {

@@ -12,6 +12,7 @@ import {
 } from "../services/videoPoker.js";
 import { mintVoucher } from "../services/mintOrchestrator.js";
 import { signBalance } from "../services/balanceSigning.js";
+import { recordAnalyticsEvent, getRiskLevel } from "../services/analyticsService.js";
 import type { HandRecord } from "../types/index.js";
 
 const MIN_COIN_BALANCE = 100;
@@ -159,6 +160,11 @@ router.post("/draw", requireAuth, async (req, res, next) => {
         : []),
     ]);
 
+    // Non-blocking — analytics should never block game play
+    recordAnalyticsEvent(userId, { type: "game_result", win: payout > 0 }).catch(
+      (err) => console.error("[analytics] draw event error:", err),
+    );
+
     res.json({
       drawnCards,
       holds,
@@ -190,6 +196,12 @@ router.post("/cashout", requireAuth, async (req, res, next) => {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new AppError(404, "User not found");
     if (user.coinBalance < coinsToCashout) throw new AppError(402, "Insufficient coin balance");
+
+    // Block BLOCKED-risk users from cashing out
+    const currentRisk = await getRiskLevel(userId);
+    if (currentRisk === "BLOCKED") {
+      throw new AppError(403, "Account flagged for suspicious activity. Please contact support.");
+    }
 
     // Rate limit: max 5 cashouts per calendar day per user
     const startOfDay = new Date();
@@ -236,6 +248,11 @@ router.post("/cashout", requireAuth, async (req, res, next) => {
         },
       }),
     ]);
+
+    // Non-blocking analytics event for cashout
+    recordAnalyticsEvent(userId, { type: "cashout" }).catch(
+      (err) => console.error("[analytics] cashout event error:", err),
+    );
 
     // Async mint — client polls /nfts/:id for status
     triggerMint(voucher.id, user.walletAddress, coinsToCashout, session.gameType, sessionId).catch(

@@ -6,6 +6,7 @@ import { AppError } from "../middleware/errorHandler.js";
 import { verifyAppleReceipt, verifyGoogleReceipt } from "../services/iapVerifier.js";
 import { signBalance } from "../services/balanceSigning.js";
 import { queuePurchaseCommitment } from "../services/purchaseCommitmentService.js";
+import { recordAnalyticsEvent } from "../services/analyticsService.js";
 
 const router = Router();
 
@@ -50,6 +51,11 @@ router.post("/verify-purchase", requireAuth, async (req, res, next) => {
         select: { coinBalance: true, walletAddress: true },
       }),
     ]);
+
+    // Non-blocking analytics event for IAP purchase
+    recordAnalyticsEvent(userId, { type: "iap_purchase", coinsAdded: result.coinsGranted }).catch(
+      (err) => console.error("[analytics] iap event error:", err),
+    );
 
     // Queue on-chain commitment (async — does not block coin credit)
     queuePurchaseCommitment({
