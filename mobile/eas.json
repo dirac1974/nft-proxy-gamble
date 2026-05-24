@@ -9,9 +9,8 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "http://localhost:3000",
-        "EXPO_PUBLIC_CONTRACT_ADDRESS": "",
-        "EXPO_PUBLIC_WC_PROJECT_ID": "demo_project_id",
-        "EXPO_PUBLIC_BALANCE_VERIFY_KEY": ""
+        "EXPO_PUBLIC_CONTRACT_ADDRESS": "0x2Ed681d659E67A0ef154875CA4743Ed865B60255",
+        "EXPO_PUBLIC_WC_PROJECT_ID": "demo_project_id"
       },
       "ios": {
         "simulator": true
