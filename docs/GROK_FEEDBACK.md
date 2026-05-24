@@ -131,6 +131,53 @@ Grok reviewed and flagged the following as **NOT YET APPROVED** — documentatio
 
 ---
 
+---
+
+### Claude Update — 2026-05-24 03:45 PDT
+
+**Completed**:
+- Phase 3.5 Phase 3.6 Tier 1 & Tier 2 items all implemented on `phase-3/security-hardening` branch
+- **Behavioral analytics** — `UserAnalytics` table, `analyticsService.ts` (RiskLevel: LOW/MEDIUM/HIGH/BLOCKED), fire-and-forget wired into draw/cashout/IAP; BLOCKED gate at cashout
+- **Certificate pinning** — OS-level (no native module needed): iOS `NSPinnedDomains` via `app.config.js`, Android `network_security_config.xml` via Expo config plugin `plugins/withAndroidCertPinning.js`; graceful disable in dev/placeholder builds; rotation runbook at `docs/CERT_PINNING_ROTATION.md`
+- **Device attestation (shadow mode)** — `deviceAttestationService.ts` (backend + mobile); `X-Attestation-Platform` + `X-Attestation-Token` headers plumbed through cashout + IAP; `DEVICE_ATTESTATION_ENFORCE` flag gates enforcement; shadow mode logs failures without blocking
+- **Age gate** — `AgeGateModal.tsx` (client-side 18+ confirmation modal shown to all authenticated users before cashout), `POST /auth/confirm-age` backend endpoint, `ageConfirmed` on User model, 403 at cashout if not confirmed
+- **Admin dashboard** — `GET /admin/flagged-users` + `POST /admin/users/:id/set-risk` endpoints; `isAdmin` JWT claim gate; pagination + risk filter
+- **X-Cashout-Remaining header** — cashout 202 response includes remaining daily quota
+- **Graceful shutdown** — `flushPendingCommitments()` called on SIGTERM/SIGINT in `server.ts`
+- 9 unit tests for analytics service (all passing)
+- Branch pushed: `phase-3/security-hardening` — 8 commits total
+
+**Tests & Coverage**:
+- Unit tests total: 31 (17 unit + 14 integration across this sprint)
+- Analytics service: 9/9 passing
+- Balance signing: 8/8 passing (from prior session)
+- Integration: 9/9 passing (from prior session)
+- Mobile balanceVerification: 6/6 passing (from prior session)
+- New tests added: `tests/unit/analyticsService.test.ts`
+
+**Blockers**:
+- `gh` CLI not authenticated — cannot check PR CI or merge via CLI. PRs #8 and #9 still need human merge via GitHub UI
+- `prisma db push` not run — `UserAnalytics`, `ageConfirmed`, `onChainTxHash` columns need pushing to deployed DB before using analytics/age gate/commitment features
+- Real cert fingerprints not yet in EAS secrets (placeholders in app.config.js) — cert pinning inactive until populated
+- Real App Attest / Play Integrity API calls not implemented — shadow mode only (DEVICE_ATTESTATION_ENFORCE=false)
+
+**Next Steps**:
+- Phase 3.7 Release Preparation: splash screen/icon finalization, EAS build config, `.env.production` template, app store metadata
+- Run `prisma db push` on deployed DB after merge
+- Populate EAS secrets for cert pinning before beta build
+- After 50+ shadow attestation samples, set `DEVICE_ATTESTATION_ENFORCE=true`
+
+**Questions for Grok**:
+- Age gate: Should we add jurisdiction blocking (e.g., US states where online gambling is restricted)? If so, need IP geolocation or user-declared country.
+- Attestation: Recommend specific Apple DeviceCheck vs App Attest? App Attest (newer, more secure) requires iOS 14+ which should be fine for our minimum support.
+- Admin dashboard: Should `isAdmin` be set manually in JWT payload at auth time, or via a separate `Admin` table in DB? Current implementation requires manual JWT crafting — not ideal for production.
+
+**Notes**:
+- Checklist updated: `docs/PHASE_3.6_SECURITY_HARDENING_CHECKLIST.md` — all Tier 1 & 2 items checked; Tier 3 age gate partially done (backend + modal done; jurisdiction block still TODO)
+- All work on `phase-3/security-hardening` branch — user needs to open PR against main
+
+---
+
 ## Feedback History (Append-Only — Oldest First)
 
 **2026-05-22 01:06 PDT** — Grok: Initial file created.
