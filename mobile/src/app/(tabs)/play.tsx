@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -18,6 +18,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { colors, radius, spacing, typography, shadows } from "@/theme";
 import { Card } from "@/components/Card";
 import { GlassCard } from "@/components/GlassCard";
+import { ProvablyFairModal } from "@/components/ProvablyFairModal";
 import { useGameStore } from "@/stores/gameStore";
 import { useWalletStore } from "@/stores/walletStore";
 import { gameApi } from "@/services/api";
@@ -28,6 +29,7 @@ const RANKS = ["Royal Flush", "Straight Flush", "Four of a Kind", "Full House",
 export default function VideoPokerScreen() {
   const qc = useQueryClient();
   const { isAuthenticated } = useWalletStore();
+  const [verifyVisible, setVerifyVisible] = useState(false);
   const {
     phase, session, dealt, result, betAmount,
     setBetAmount, setSession, setDealt, toggleHold, setResult, reset,
@@ -169,6 +171,13 @@ export default function VideoPokerScreen() {
             <Text style={styles.resultSeed} numberOfLines={1} ellipsizeMode="middle">
               Seed: {result.serverSeed}
             </Text>
+            <Pressable
+              onPress={() => setVerifyVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Verify this hand was dealt fairly"
+            >
+              <Text style={styles.verifyLink}>Verify provably fair ›</Text>
+            </Pressable>
           </GlassCard>
         </Animated.View>
       )}
@@ -236,6 +245,17 @@ export default function VideoPokerScreen() {
         </Text>
       )}
     </ScrollView>
+
+    {/* Provably fair verification modal */}
+    {session && dealt && result && (
+      <ProvablyFairModal
+        visible={verifyVisible}
+        onClose={() => setVerifyVisible(false)}
+        session={session}
+        dealt={dealt}
+        result={result}
+      />
+    )}
   );
 }
 
@@ -288,6 +308,7 @@ const styles = StyleSheet.create({
   resultPayout: { ...typography.heading3, color: colors.win, textAlign: "center" },
   resultLose: { ...typography.body, color: colors.textMuted, textAlign: "center" },
   resultSeed: { ...typography.mono, fontSize: 10, marginTop: spacing.xs },
+  verifyLink: { ...typography.caption, color: colors.purple, textDecorationLine: "underline", marginTop: spacing.xs },
 
   primaryButton: {
     backgroundColor: colors.purple,
