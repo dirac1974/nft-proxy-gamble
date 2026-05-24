@@ -1,6 +1,7 @@
 import Constants from "expo-constants";
 import { useWalletStore } from "@/stores/walletStore";
 import { verifyAndExtractBalance, type SignedBalanceResponse } from "./balanceVerification";
+import { getAttestationHeaders } from "./deviceAttestationService";
 
 const BASE_URL =
   (Constants.expoConfig?.extra?.apiUrl as string | undefined) ??
@@ -93,9 +94,10 @@ export const gameApi = {
     sessionId: string,
     coinsToCashout: number,
   ): Promise<{ voucherId: string; mintStatus: string; newBalance: number }> => {
+    const attestHeaders = await getAttestationHeaders();
     const resp = await request<SignedBalanceResponse & { voucherId: string; mintStatus: string }>(
       "/game/cashout",
-      { method: "POST", body: JSON.stringify({ sessionId, coinsToCashout }) },
+      { method: "POST", body: JSON.stringify({ sessionId, coinsToCashout }), headers: attestHeaders },
     );
     const newBalance = extractVerifiedBalance(resp);
     return { voucherId: resp.voucherId, mintStatus: resp.mintStatus, newBalance };
@@ -124,9 +126,10 @@ export const iapApi = {
     platform: "apple" | "google",
     receipt: string,
   ): Promise<{ coinsGranted: number; newBalance: number }> => {
+    const attestHeaders = await getAttestationHeaders();
     const resp = await request<SignedBalanceResponse & { coinsGranted: number }>(
       "/iap/verify-purchase",
-      { method: "POST", body: JSON.stringify({ platform, receiptData: receipt }) },
+      { method: "POST", body: JSON.stringify({ platform, receiptData: receipt }), headers: attestHeaders },
     );
     const newBalance = extractVerifiedBalance(resp);
     return { coinsGranted: resp.coinsGranted, newBalance };

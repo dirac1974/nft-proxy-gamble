@@ -13,6 +13,11 @@ const schema = z.object({
   CONTRACT_ADDRESS: z.string().optional(),
   APPLE_SHARED_SECRET: z.string().optional(),
   GOOGLE_SERVICE_ACCOUNT_JSON_B64: z.string().optional(),
+  // Device attestation (optional — shadow mode when not set)
+  APPLE_APP_ATTEST_TEAM_ID: z.string().optional(),   // Apple 10-char team ID
+  APPLE_APP_ATTEST_BUNDLE_ID: z.string().optional(), // e.g. com.nftproxygamble.app
+  GOOGLE_PLAY_INTEGRITY_PACKAGE: z.string().optional(), // e.g. com.nftproxygamble.app
+  DEVICE_ATTESTATION_ENFORCE: z.coerce.boolean().default(false), // false = shadow mode
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 });
 

@@ -13,7 +13,8 @@ import {
 import { mintVoucher } from "../services/mintOrchestrator.js";
 import { signBalance } from "../services/balanceSigning.js";
 import { recordAnalyticsEvent, getRiskLevel } from "../services/analyticsService.js";
-import type { HandRecord } from "../types/index.js";
+import { checkDeviceAttestation } from "../services/deviceAttestationService.js";
+import type { HandRecord, AttestationPlatform } from "../types/index.js";
 
 const MIN_COIN_BALANCE = 100;
 const MAX_CASHOUTS_PER_DAY = 5;
@@ -201,6 +202,14 @@ router.post("/cashout", requireAuth, async (req, res, next) => {
     const currentRisk = await getRiskLevel(userId);
     if (currentRisk === "BLOCKED") {
       throw new AppError(403, "Account flagged for suspicious activity. Please contact support.");
+    }
+
+    // Device attestation check (shadow mode until DEVICE_ATTESTATION_ENFORCE=true)
+    const attestPlatform = req.headers["x-attestation-platform"] as AttestationPlatform | undefined;
+    const attestToken = req.headers["x-attestation-token"] as string | undefined;
+    const { allowed: attestOk } = await checkDeviceAttestation(attestPlatform, attestToken, userId);
+    if (!attestOk) {
+      throw new AppError(403, "Device attestation failed. Please update the app.");
     }
 
     // Rate limit: max 5 cashouts per calendar day per user

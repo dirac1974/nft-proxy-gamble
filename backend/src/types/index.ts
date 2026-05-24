@@ -59,3 +59,5 @@ export const IAP_PRODUCTS: Record<string, number> = {
 };
 
 export type Address = `0x${string}`;
+
+export type AttestationPlatform = "ios" | "android";

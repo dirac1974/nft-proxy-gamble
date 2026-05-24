@@ -7,6 +7,8 @@ import { verifyAppleReceipt, verifyGoogleReceipt } from "../services/iapVerifier
 import { signBalance } from "../services/balanceSigning.js";
 import { queuePurchaseCommitment } from "../services/purchaseCommitmentService.js";
 import { recordAnalyticsEvent } from "../services/analyticsService.js";
+import { checkDeviceAttestation } from "../services/deviceAttestationService.js";
+import type { AttestationPlatform } from "../types/index.js";
 
 const router = Router();
 
@@ -26,6 +28,14 @@ router.post("/verify-purchase", requireAuth, async (req, res, next) => {
   try {
     const body = purchaseSchema.parse(req.body);
     const userId = req.user!.userId;
+
+    // Device attestation check (shadow mode until DEVICE_ATTESTATION_ENFORCE=true)
+    const attestPlatform = req.headers["x-attestation-platform"] as AttestationPlatform | undefined;
+    const attestToken = req.headers["x-attestation-token"] as string | undefined;
+    const { allowed: attestOk } = await checkDeviceAttestation(attestPlatform, attestToken, userId);
+    if (!attestOk) {
+      throw new AppError(403, "Device attestation failed. Please update the app.");
+    }
 
     const result =
       body.platform === "apple"
