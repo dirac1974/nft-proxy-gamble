@@ -3,13 +3,10 @@ import { Wallet } from "ethers";
 import { createApp } from "../../src/app";
 import { setupTestDb, teardownTestDb } from "./setup";
 
+// Env vars are set unconditionally by tests/setup.ts (a Jest setupFile) before
+// this module loads, so createApp() picks up the correct JWT_SECRET from config.
 const app = createApp();
 const testWallet = Wallet.createRandom();
-
-// Set required env for config module before importing app
-process.env.JWT_SECRET = "test_secret_that_is_long_enough_for_zod_32chars";
-process.env.DATABASE_URL = process.env.DATABASE_URL ?? "postgresql://nftp:nftp_dev@localhost:5432/nft_proxy_gamble_test";
-process.env.NODE_ENV = "test";
 
 beforeAll(() => setupTestDb());
 afterAll(() => teardownTestDb());

@@ -3,9 +3,7 @@ import { Wallet } from "ethers";
 import { createApp } from "../../src/app";
 import { prisma, setupTestDb, teardownTestDb } from "./setup";
 
-process.env.JWT_SECRET = "test_secret_that_is_long_enough_for_zod_32chars";
-process.env.DATABASE_URL = process.env.DATABASE_URL ?? "postgresql://nftp:nftp_dev@localhost:5432/nft_proxy_gamble_test";
-process.env.NODE_ENV = "test";
+// Env vars set by tests/setup.ts before this module loads.
 
 const app = createApp();
 const testWallet = Wallet.createRandom();

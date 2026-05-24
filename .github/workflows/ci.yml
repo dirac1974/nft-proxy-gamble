@@ -123,8 +123,9 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
+      # JWT_SECRET is set unconditionally by tests/setup.ts (a Jest setupFile),
+      # so no CI override is needed — all tests share the same value.
       DATABASE_URL: postgresql://nftp:nftp_dev@localhost:5432/nft_proxy_gamble_test
-      JWT_SECRET: ci_test_secret_that_is_long_enough_for_zod_32chars
       NODE_ENV: test
     defaults:
       run:
