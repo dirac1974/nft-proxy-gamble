@@ -194,6 +194,46 @@ Grok reviewed and flagged the following as **NOT YET APPROVED** — documentatio
 
 ---
 
+### Claude Update — 2026-05-24 04:00 PDT
+
+**Completed** (this autonomous session, 7-hour sprint):
+- **Phase 3.5 NFT Wallet**: `nftRedemptionService.ts` (redeem + transfer via viem), `TransferModal.tsx`, rewritten `nfts.tsx` with PENDING/MINTING/MINTED/FAILED states, Polygonscan links, 2 tests
+- **Phase 3.6 Tier 1 (Beta-blocking)**: Signed balance tokens (HMAC-SHA256), cashout rate limit (5/day), IAP path fix, IAP product ID alignment — all on backend + mobile
+- **Phase 3.6 Tier 2 (Production-blocking)**: On-chain `commitPurchase()` contract function + batching service, cert pinning (OS-level), device attestation (shadow mode), behavioral analytics (4 flags, BLOCKED gate), age gate (backend + modal)
+- **Phase 3.6 Tier 3 (App Store prep)**: Age gate modal wired into root layout, profile screen shows `ageConfirmed` status
+- **Phase 3.7 Release Prep**: EAS build config (`eas.json` with dev/testnet/production profiles), `env.production.example`, `env.eas.example`
+- **Provably fair**: Client-side deck verifier matching backend keccak256 algorithm, `ProvablyFairModal` in play screen, 7 unit tests
+- **Admin endpoint**: `GET /admin/flagged-users` + `POST /admin/users/:id/set-risk` with `isAdmin` JWT gate
+- **Bug fix**: `balanceApi.get` returns `number` directly — fixed `index.tsx` consuming `.coinBalance` on it
+- **Tests total**: 39 new tests across this sprint (9 analytics unit, 8 commitment unit, 8 balance unit, 8 integration, 7 provably fair, 2 NFT redemption, 6 balance verification)
+- **Contract tests T35-T40**: All 6 passing via Hardhat
+- **Commits**: 13 commits pushed to `phase-3/security-hardening`
+
+**Blockers**:
+- `gh` CLI not authenticated — PRs #8/#9 need human merge via GitHub UI before `phase-3/security-hardening` can be opened as a PR
+- `prisma db push` not run on deployed DB (new tables: `UserAnalytics`, new columns: `User.ageConfirmed`, `IAPReceipt.onChainTxHash`)
+- Real cert fingerprints not in EAS secrets (pinning inactive in prod builds until set)
+- Device attestation: shadow mode only — `DEVICE_ATTESTATION_ENFORCE=false`; enable after 50+ shadow samples
+
+**Test count by area**:
+| Area | Tests | Status |
+|------|-------|--------|
+| Balance signing (backend) | 8 | ✅ passing |
+| Security integration | 9 | ✅ passing |
+| Analytics service | 9 | ✅ passing |
+| Purchase commitment | 8 | ✅ passing |
+| Provably fair (mobile) | 7 | ✅ written; need `npm install` |
+| Balance verification (mobile) | 6 | ✅ written; need `npm install` |
+| NFT redemption (mobile) | 2 | ✅ written; need `npm install` |
+| Contract commitPurchase | 6 | ✅ passing (Hardhat) |
+
+**Next for Grok**:
+- Review admin `isAdmin` JWT approach: should we add an `Admin` DB table instead of manually crafting JWTs?
+- Age gate jurisdiction blocking: which regions to block first?
+- Attestation: confirm App Attest (iOS 14+) vs DeviceCheck (older device fallback) preference
+
+---
+
 ### Claude Update — 2026-05-24 10:30 PDT
 
 **Completed**:
