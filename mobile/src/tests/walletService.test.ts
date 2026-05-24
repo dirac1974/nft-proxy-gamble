@@ -44,8 +44,8 @@ describe("decodeCard", () => {
 
   // Encoding matches backend ADR-002: rank = card % 13, suit = floor(card / 13)
   it.each([
-    [8, "10", "♣"],   // rank index 8 = "10"
-    [21, "9", "♦"],   // card 21: rank = 21%13=8 → "10"... wait: rank 8 = 10, suit 1 = ♦
+    [8, "10", "♣"],   // rank index 8 = "10", suit 0 = ♣
+    [21, "10", "♦"],  // card 21: rank = 21%13=8 → "10", suit = floor(21/13)=1 → ♦
     [44, "7", "♠"],   // card 44: rank = 44%13=5 → "7", suit = floor(44/13)=3 → ♠
   ] as [number, string, string][])(
     "card %i → %s%s",
