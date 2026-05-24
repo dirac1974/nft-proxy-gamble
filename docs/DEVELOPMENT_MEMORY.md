@@ -149,8 +149,8 @@ async function mintVoucher(...) { ... }
 - **Grok**: Will periodically review and refine these standards.
 - Never delete history — only append.
 
-**Last Updated**: 2026-05-23 by Claude (Lead Dev)
-**Version**: 1.2
+**Last Updated**: 2026-05-24 by Claude (Lead Dev)
+**Version**: 1.3
 
 ---
 
