@@ -73,7 +73,7 @@ async function handlePurchaseComplete(purchase: ProductPurchase): Promise<void> 
         ? (purchase.transactionReceipt ?? "")
         : (purchase.purchaseToken ?? "");
 
-    const { coinsAdded, newBalance } = await iapApi.verify(platform, receipt);
+    const { coinsGranted, newBalance } = await iapApi.verify(platform, receipt);
 
     // Server-authoritative: update balance from backend response only
     useGameStore.getState().setBalance(newBalance);
@@ -81,7 +81,7 @@ async function handlePurchaseComplete(purchase: ProductPurchase): Promise<void> 
     const product = COIN_PRODUCTS.find((p) => p.productId === purchase.productId);
     store.addHistory({
       productId: purchase.productId,
-      coins: coinsAdded,
+      coins: coinsGranted,
       timestamp: Date.now(),
     });
 

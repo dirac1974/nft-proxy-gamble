@@ -49,7 +49,7 @@ export default function VideoPokerScreen() {
   // Mutations
   const startMutation = useMutation({
     mutationFn: () => gameApi.startSession(betAmount),
-    onSuccess: (data) => setSession(data),
+    onSuccess: (data) => setSession({ ...data, betAmount }),
   });
 
   const dealMutation = useMutation({
@@ -113,6 +113,7 @@ export default function VideoPokerScreen() {
   }
 
   return (
+    <>
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       {/* Bet selector */}
       <GlassCard style={styles.betCard}>
@@ -256,6 +257,7 @@ export default function VideoPokerScreen() {
         result={result}
       />
     )}
+    </>
   );
 }
 

@@ -1,4 +1,6 @@
-import { keccak256, toUtf8Bytes } from "ethers";
+import { keccak256, toBytes, type Hex } from "viem";
+
+const toUtf8Bytes = (s: string) => toBytes(s);
 
 // Client-side reimplementation of the deck shuffle algorithm.
 // Matches backend/src/services/videoPoker.ts:generateDeck exactly.
@@ -9,7 +11,7 @@ export function generateDeck(serverSeed: string, clientSeed: string, handNumber:
   let hash = keccak256(toUtf8Bytes(`${serverSeed}:${clientSeed}:${handNumber}`));
 
   for (let i = 51; i > 0; i--) {
-    hash = keccak256(hash);
+    hash = keccak256(hash as Hex);
     const j = Number(BigInt(hash) % BigInt(i + 1));
     const tmp = deck[i];
     deck[i] = deck[j]!;

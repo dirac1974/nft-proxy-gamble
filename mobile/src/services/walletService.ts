@@ -7,17 +7,52 @@ const IS_DEV = process.env.NODE_ENV !== "production";
 export const CHAIN = IS_DEV ? polygonAmoy : polygon;
 
 let _walletClient: WalletClient | null = null;
+let _provider: unknown = null;
+
+export const REQUIRED_CHAIN_ID = CHAIN.id;
 
 export function setWalletClient(provider: unknown): void {
+  _provider = provider;
   _walletClient = createWalletClient({
     chain: CHAIN,
     transport: custom(provider as Parameters<typeof custom>[0]),
   });
 }
 
+export function clearWalletClient(): void {
+  _walletClient = null;
+  _provider = null;
+}
+
 export function getWalletClient(): WalletClient {
   if (!_walletClient) throw new Error("Wallet not connected");
   return _walletClient;
+}
+
+interface EthereumProvider {
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+}
+
+export async function isOnRequiredNetwork(): Promise<boolean> {
+  if (!_provider) return false;
+  try {
+    const chainIdHex = (await (_provider as EthereumProvider).request({
+      method: "eth_chainId",
+    })) as string;
+    return parseInt(chainIdHex, 16) === REQUIRED_CHAIN_ID;
+  } catch {
+    return false;
+  }
+}
+
+export async function switchToRequiredNetwork(): Promise<void> {
+  if (!_provider) throw new Error("Wallet not connected");
+  const chainIdHex = `0x${REQUIRED_CHAIN_ID.toString(16)}`;
+  await (_provider as EthereumProvider).request({
+    method: "wallet_switchEthereumChain",
+    params: [{ chainId: chainIdHex }],
+  });
+  useWalletStore.getState().setNetworkMismatch(false);
 }
 
 export async function signAndAuthenticate(address: Address): Promise<void> {

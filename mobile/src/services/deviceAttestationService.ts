@@ -29,6 +29,7 @@ function buildShadowToken(installationId: string): string {
 export interface AttestationHeaders {
   "x-attestation-platform": "ios" | "android";
   "x-attestation-token": string;
+  [key: string]: string;
 }
 
 // Returns headers to include with cashout and IAP requests.

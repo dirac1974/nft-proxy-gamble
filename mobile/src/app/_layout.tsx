@@ -29,6 +29,14 @@ const SESSION_PARAMS = {
   },
 };
 
+const PROVIDER_METADATA = {
+  name: "NFT Proxy Gamble",
+  description: "Provably fair video poker on Polygon",
+  url: "https://nft-proxy-gamble.app",
+  icons: ["https://nft-proxy-gamble.app/icon.png"],
+  redirect: { native: "nfpg://", universal: "" },
+};
+
 export default function RootLayout() {
   const hydrate = useWalletStore((s) => s.hydrate);
   const isAuthenticated = useWalletStore((s) => s.isAuthenticated);
@@ -56,6 +64,7 @@ export default function RootLayout() {
           <WalletConnectModal
             projectId={PROJECT_ID}
             sessionParams={SESSION_PARAMS}
+            providerMetadata={PROVIDER_METADATA}
           />
           <AgeGateModal visible={isAuthenticated && !ageConfirmed} />
         </QueryClientProvider>
