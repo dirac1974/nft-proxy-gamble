@@ -2,51 +2,103 @@
 
 **Use this checklist for every PR in Phase 3 and beyond.**
 
-## General Quality
-- [ ] Code follows project style guide and naming conventions
-- [ ] All new files have proper headers and documentation
-- [ ] No console.log or debug code left in production
-- [ ] TypeScript strict mode with no `any` (unless justified)
+> **BLOCKING items**: Any single BLOCKING failure means the PR **must not be merged** until resolved.
+> Real money (USDC redemption) is at stake — there is no "fix it later" for security gaps.
 
-## Security (Highest Priority - Real Money)
-- [ ] **No client-side balance modification** - All coin changes come from backend only
-- [ ] IAP receipts are validated server-side (not trusted from client)
-- [ ] Sensitive data stored in `expo-secure-store` (never AsyncStorage)
-- [ ] No hardcoded private keys or secrets
-- [ ] Proper error handling (no leaking sensitive info in error messages)
-- [ ] Rate limiting respected in UI
-- [ ] Wallet connection uses secure deep linking / WalletConnect
-- [ ] Certificate pinning implemented or planned
-- [ ] No client can spoof coin balance or purchase history
+---
+
+## Security [BLOCKING — all items below must pass]
+
+### Balance Integrity [BLOCKING]
+- [ ] **[BLOCKING] Backend signs all balance responses with HMAC** — client only displays signed balances; no unsigned balance is ever stored or acted upon
+- [ ] **[BLOCKING] No client-side balance modification** — `gameStore.setBalance` is called exclusively from `balanceApi.get()` or the `draw` response; never calculated client-side
+- [ ] **[BLOCKING] Signed balance token verification** — client verifies `HMAC-SHA256(SIGNING_KEY, "${userId}:${coinBalance}:${sigTimestamp}")` before display; tokens older than 60s are rejected
+- [ ] `sigTimestamp` validated server-side: reject requests where `|now - sigTimestamp| > 60s`
+
+### IAP / Purchase Integrity [BLOCKING]
+- [ ] **[BLOCKING] On-chain purchase commitment event emitted before coins credited** — backend calls `commitPurchase()` on Polygon and waits for receipt before writing new balance to DB
+- [ ] IAP receipts validated server-side against Apple/Google APIs — never trusted from client payload
+- [ ] Receipt hash stored in DB with `UNIQUE` constraint to prevent replay
+- [ ] `finishTransaction({ isConsumable: true })` always called (even on backend failure) to prevent stuck purchases in OS queue
+- [ ] `newBalance` set only from backend IAP-verify response, never from client-provided value
+
+### API & Transport [BLOCKING]
+- [ ] **[BLOCKING] No hardcoded API URLs** — all base URLs and contract addresses read from `process.env` / `app.config.ts` environment variables
+- [ ] All authenticated endpoints verify `Authorization: Bearer <jwt>` header; 401 on any missing/invalid token
+- [ ] Request body schemas validated with Zod (or equivalent) on the backend before processing
+
+### Secrets & Storage
+- [ ] Sensitive data (JWT, wallet address) stored in `expo-secure-store` — never `AsyncStorage` or `mmkv` plaintext
+- [ ] No hardcoded private keys, API keys, or contract secrets anywhere in source
+- [ ] `.env` files excluded from git; secrets use GitHub Secrets in CI
+
+### Wallet & Crypto
+- [ ] Wallet connection uses WalletConnect v2 or secure deep link — no raw private key input
+- [ ] `signMessage` used only for auth nonce — never for fund-moving transactions without user confirmation
+- [ ] Certificate pinning implemented or explicitly tracked as Phase 3.6 TODO
+
+### Anti-Fraud
+- [ ] Rate limiting respected in UI (gray out / disable after limit hit, not silent ignore)
+- [ ] Cashout requires minimum coin balance (100) enforced both client-side hint and server-side hard gate
+- [ ] Session IDs are backend-generated UUIDs — client cannot supply or guess them
+
+---
+
+## General Quality
+
+- [ ] TypeScript strict mode — no `any` without justified `// eslint-disable` comment
+- [ ] No `console.log` / `console.error` left in production paths (use structured logger)
+- [ ] All new files match naming conventions (`kebab-case.ts` utils, `PascalCase.tsx` components)
+- [ ] No dead code or commented-out blocks committed
+
+---
 
 ## Testing
-- [ ] New features have unit/component tests
-- [ ] Critical flows have integration or E2E tests
-- [ ] All tests are passing (CI green)
-- [ ] Test coverage did not decrease significantly
+
+- [ ] New features have unit / component tests (React Native Testing Library)
+- [ ] Critical game flows have integration tests (start → deal → draw → result chain)
+- [ ] All tests passing — CI green before review requested
+- [ ] Test coverage did not decrease vs. base branch
+- [ ] Negative tests: invalid input, network error, 401 response, duplicate IAP receipt
+
+---
 
 ## Architecture & Performance
-- [ ] Proper separation of concerns (services, hooks, components)
-- [ ] React Query used for data fetching where appropriate
-- [ ] Animations are performant (react-native-reanimated)
-- [ ] No unnecessary re-renders
-- [ ] Images and assets optimized
+
+- [ ] Proper separation of concerns: services call API, stores own state, components only read store
+- [ ] React Query used for server state (balance, NFTs) — Zustand for local game state
+- [ ] Animations run on UI thread (react-native-reanimated worklets)
+- [ ] No unnecessary re-renders (memoize heavy list items)
+- [ ] Assets optimized — no raw PNG >200 KB
+
+---
 
 ## UX & Accessibility
-- [ ] Loading states and error handling are clear
-- [ ] App feels responsive (no blocking UI)
-- [ ] Dark theme consistent across all screens
-- [ ] Accessibility labels and roles added
-- [ ] Works on both iOS and Android
+
+- [ ] Loading states visible for all async operations
+- [ ] Error messages user-friendly and never leak stack traces or internal IDs
+- [ ] `accessibilityRole`, `accessibilityLabel`, `accessibilityState` on all interactive elements
+- [ ] Dark theme consistent — no hardcoded `#fff` / `#000` outside theme file
+- [ ] Works on both iOS 16+ and Android 13+
+
+---
 
 ## Documentation
-- [ ] New features documented in relevant MD files if needed
-- [ ] Breaking changes noted in PR description
-- [ ] Screenshots or videos attached for UI changes
+
+- [ ] PR description links to GitHub Issue
+- [ ] Breaking API changes noted and version-bumped
+- [ ] Screenshots / screen recordings attached for any UI change
+- [ ] Relevant `.md` docs updated if architecture or flows changed
+
+---
 
 ## Final Sign-off
-- [ ] PR description is clear and links to issue
-- [ ] All checklist items passed
-- [ ] Ready for merge (or needs specific changes)
 
-**Security Note**: If any security item fails, the PR **must not be merged** until fixed. Real money is at stake.
+- [ ] All BLOCKING security items confirmed passing
+- [ ] All other checklist items passed or explicitly waived with justification
+- [ ] PR description is complete, clear, and references the Issue
+- [ ] Ready for merge
+
+---
+
+**Security Note**: A single BLOCKING failure means the PR is not mergeable. Fix it, push, and re-request review.

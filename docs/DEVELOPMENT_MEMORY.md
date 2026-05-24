@@ -150,7 +150,7 @@ async function mintVoucher(...) { ... }
 - Never delete history — only append.
 
 **Last Updated**: 2026-05-24 by Claude (Lead Dev)
-**Version**: 1.3
+**Version**: 1.5
 
 ---
 
@@ -193,3 +193,77 @@ async function mintVoucher(...) { ... }
 - MINTER_ROLE grant to hot wallet is the first backend task (scripts/grant-minter.ts).
 - Fund contract with test USDC before enabling redemptions.
 - The deployer key used for testnet must NEVER be reused for mainnet.
+
+---
+
+## Phase 2 Retrospective — Backend (Completed 2026-05-24)
+
+**Merged**: PR #5 (squash merge) — closed Issue #4
+**Tests**: 35 backend tests | Provably fair video poker engine verified
+
+### Key Decisions Made
+
+- **Commit-Reveal RNG (ADR-002)**: `serverSeedHash = SHA-256(serverSeed)` committed at session start; `serverSeed` revealed at draw. Deck = `SHA-256(serverSeed + clientSeed + sessionId)`. Proves fairness post-game.
+- **Card encoding**: integer 0–51 where `rank = card % 13`, `suit = floor(card / 13)`. Suits: 0=clubs, 1=diamonds, 2=hearts, 3=spades.
+- **IAP receipt uniqueness**: `receipt_hash` stored with `UNIQUE` constraint in DB — replay attack returns 409 before any balance update.
+- **Prisma JSON cast**: `session.holds` stored as JSON; must cast `(session.holds as boolean[])` before use in TypeScript.
+- **ts-jest moduleNameMapper**: `@/` path aliases require `moduleNameMapper: { "^@/(.*)$": "<rootDir>/src/$1" }` in jest config.
+- **Rate limiter skip in tests**: Express `rate-limit` middleware checks `process.env.NODE_ENV !== 'test'`; avoids 429 errors during test runs.
+
+### Bugs Caught Before Mainnet
+
+| Bug | Root Cause | Fix |
+|-----|-----------|-----|
+| Rate limiter blocking tests | `express-rate-limit` applies in test mode by default | Skip when `NODE_ENV === 'test'` |
+| Prisma JSON boolean cast | TypeScript infers `session.holds` as `Prisma.JsonValue` | Explicit `as boolean[]` cast |
+| ts-jest path alias failure | `@/` imports unresolved in Jest | Add `moduleNameMapper` to jest.config |
+| Double-dealing bug | `serverSeed` reused across deal + draw | Derive slot from `SHA-256(serverSeed + clientSeed + sessionId + slotIndex)` |
+
+---
+
+## Phase 3 Progress — Mobile App (In Progress, 2026-05-24)
+
+**Current position**: End of Week 2 — Phases 3.1–3.4 complete, 57 mobile tests
+
+### Branch Stack
+
+| Branch | PR | Status | Content |
+|--------|----|--------|---------|
+| `phase-3/issue-6-mobile-foundation` | PR #7 | ✅ Merged | Foundation, theme, navigation |
+| `phase-3/issue-6-wallet-auth` | PR #8 | ✅ Merged | WalletConnect v2, SIWE, ConnectionStatus |
+| `phase-3/issue-6-game-polish-iap` | PR #9 | 🔲 Open (stacked on PR #8) | Video poker polish + IAP UI |
+
+### Architecture Decisions (Phase 3)
+
+- **ConnectionStatus state machine**: `idle → connecting → connected → authenticating → authenticated → error`; retryAuth and switchNetwork exposed from `useWalletConnect` hook
+- **`lastAuthAddress` ref**: prevents double-signing on React StrictMode re-renders; only signs if `address !== lastAuthAddress.current`
+- **WinOverlay tiers**: `classifyWin(payout, betAmount) → big (≥50×/coin) | medium (≥9×/coin) | small | null`
+- **Card deal stagger**: `dealIndex` prop × 80ms with `withDelay(dealIndex * DEAL_STAGGER_MS, withSpring(0))`
+- **iapService finishTransaction**: called even on backend verification failure — prevents permanent stuck purchase in OS queue
+- **soundService graceful no-op**: `initSounds()` catches missing `.mp3` assets silently; `playSound()` is no-op when sound not loaded
+- **Server-authoritative balance**: `gameStore.setBalance` called only from `drawMutation.onSuccess` or `iapApi.verify` response — never computed client-side
+
+### New Files (Phase 3.3 + 3.4)
+
+| File | Purpose |
+|------|---------|
+| `mobile/src/services/soundService.ts` | expo-av wrapper; 6 keys; graceful no-op |
+| `mobile/src/components/Card.tsx` | Updated: `dealIndex` stagger animation |
+| `mobile/src/components/PaytableModal.tsx` | 9-hand × 5-bet paytable modal |
+| `mobile/src/components/WinOverlay.tsx` | Animated win overlay with tier classification |
+| `mobile/src/stores/iapStore.ts` | PurchaseStatus machine, 3 products, history (capped 50) |
+| `mobile/src/services/iapService.ts` | react-native-iap integration; receipt forwarding |
+| `mobile/src/components/IAPSheet.tsx` | IAP bottom-sheet modal |
+| `mobile/src/tests/iapStore.test.ts` | 9 tests |
+| `mobile/src/tests/WinOverlay.test.tsx` | 10 tests |
+| `mobile/src/tests/PaytableModal.test.tsx` | 6 tests |
+
+### Pending Production Checklist
+
+- [ ] Real Apple/Google IAP receipt validation (backend stub → live API)
+- [ ] `commitPurchase()` live on Polygon Amoy (Solidity spec in SECURITY_ARCHITECTURE.md)
+- [ ] `purchaseCommitmentService.ts` batching service implemented
+- [ ] Signed balance token HMAC verification wired in mobile client
+- [ ] Device attestation enforced at cashout (Phase 3.5)
+- [ ] Behavioral analytics `user_analytics` table populated (Phase 3.6)
+- [ ] Certificate pinning (Phase 3.6)
