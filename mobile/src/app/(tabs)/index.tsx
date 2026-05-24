@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,21 +8,20 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { useWalletConnectModal } from "@walletconnect/modal-react-native";
 import { colors, radius, spacing, typography, shadows } from "@/theme";
 import { BalanceDisplay } from "@/components/BalanceDisplay";
 import { GlassCard } from "@/components/GlassCard";
+import { ConnectWalletSheet } from "@/components/ConnectWalletSheet";
+import { NetworkBanner } from "@/components/NetworkBanner";
 import { useWalletStore } from "@/stores/walletStore";
+import { useWalletConnect } from "@/hooks/useWalletConnect";
 import { useGameStore } from "@/stores/gameStore";
 import { balanceApi } from "@/services/api";
-import { signAndAuthenticate, setWalletClient } from "@/services/walletService";
-import type { Address } from "viem";
 
 export default function LobbyScreen() {
-  const { address, isConnected, provider, open } = useWalletConnectModal();
-  const { isAuthenticated, disconnect } = useWalletStore();
+  const { isAuthenticated } = useWalletStore();
+  const { disconnect, shortAddress } = useWalletConnect();
   const setBalance = useGameStore((s) => s.setBalance);
-  const [authError, setAuthError] = useState<string | null>(null);
 
   const { data: balanceData } = useQuery({
     queryKey: ["balance"],
@@ -36,114 +34,85 @@ export default function LobbyScreen() {
     if (balanceData) setBalance(balanceData.coinBalance);
   }, [balanceData, setBalance]);
 
-  useEffect(() => {
-    if (isConnected && provider && address && !isAuthenticated) {
-      setAuthError(null);
-      setWalletClient(provider);
-      signAndAuthenticate(address as Address).catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : "Authentication failed";
-        setAuthError(message);
-      });
-    }
-  }, [isConnected, provider, address, isAuthenticated]);
-
-  const shortAddress = address
-    ? `${address.slice(0, 6)}…${address.slice(-4)}`
-    : null;
-
   return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Hero */}
-      <View style={styles.hero}>
-        <Text style={styles.heroTitle}>NFT PROXY</Text>
-        <Text style={styles.heroSubtitle}>GAMBLE</Text>
-        <Text style={styles.heroTagline}>Play → Win → Own</Text>
-      </View>
-
-      {/* Wallet / Balance */}
-      {isAuthenticated ? (
-        <View style={styles.section}>
-          <BalanceDisplay />
-          <Text style={styles.walletAddress}>{shortAddress}</Text>
+    <>
+      <NetworkBanner />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Hero */}
+        <View style={styles.hero}>
+          <Text style={styles.heroTitle}>NFT PROXY</Text>
+          <Text style={styles.heroSubtitle}>GAMBLE</Text>
+          <Text style={styles.heroTagline}>Play → Win → Own</Text>
         </View>
-      ) : (
-        <GlassCard style={styles.connectCard}>
-          <Text style={styles.connectTitle}>Connect Your Wallet</Text>
-          <Text style={styles.connectBody}>
-            Link your Polygon wallet to save progress and cash out NFT vouchers.
-          </Text>
-          {authError && (
-            <Text style={styles.authError} accessibilityRole="alert">
-              {authError}
-            </Text>
-          )}
-          <Pressable
-            style={styles.primaryButton}
-            onPress={() => open()}
-            accessibilityRole="button"
-            accessibilityLabel="Connect wallet via WalletConnect"
-          >
-            <Text style={styles.primaryButtonText}>Connect Wallet</Text>
-          </Pressable>
-        </GlassCard>
-      )}
 
-      {/* Game selector */}
-      <Text style={styles.sectionHeader}>GAMES</Text>
+        {/* Wallet / Balance */}
+        {isAuthenticated ? (
+          <View style={styles.section}>
+            <BalanceDisplay />
+            <Text style={styles.walletAddress}>{shortAddress}</Text>
+          </View>
+        ) : (
+          <ConnectWalletSheet />
+        )}
 
-      <Pressable
-        onPress={() => router.push("/(tabs)/play")}
-        accessibilityRole="button"
-        accessibilityLabel="Play Video Poker — 9/6 Jacks or Better"
-        style={({ pressed }) => [
-          styles.gameCard,
-          pressed && styles.gameCardPressed,
-        ]}>
-        <View style={styles.gameCardInner}>
-          <Text style={styles.gameEmoji}>🃏</Text>
-          <View style={styles.gameInfo}>
-            <Text style={styles.gameTitle}>Video Poker</Text>
-            <Text style={styles.gameSubtitle}>9/6 Jacks or Better</Text>
-            <View style={styles.gameBadgeRow}>
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>RTP 99.54%</Text>
-              </View>
-              <View style={[styles.badge, styles.badgePurple]}>
-                <Text style={styles.badgeText}>1–5 coins/hand</Text>
+        {/* Game selector */}
+        <Text style={styles.sectionHeader}>GAMES</Text>
+
+        <Pressable
+          onPress={() => router.push("/(tabs)/play")}
+          accessibilityRole="button"
+          accessibilityLabel="Play Video Poker — 9/6 Jacks or Better"
+          style={({ pressed }) => [
+            styles.gameCard,
+            pressed && styles.gameCardPressed,
+          ]}
+        >
+          <View style={styles.gameCardInner}>
+            <Text style={styles.gameEmoji}>🃏</Text>
+            <View style={styles.gameInfo}>
+              <Text style={styles.gameTitle}>Video Poker</Text>
+              <Text style={styles.gameSubtitle}>9/6 Jacks or Better</Text>
+              <View style={styles.gameBadgeRow}>
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>RTP 99.54%</Text>
+                </View>
+                <View style={[styles.badge, styles.badgePurple]}>
+                  <Text style={styles.badgeText}>1–5 coins/hand</Text>
+                </View>
               </View>
             </View>
+            <Text style={styles.chevron}>›</Text>
           </View>
-          <Text style={styles.chevron}>›</Text>
-        </View>
-      </Pressable>
-
-      {/* Paytable teaser */}
-      <GlassCard style={styles.paytableCard}>
-        <Text style={styles.paytableTitle}>PAYTABLE HIGHLIGHTS</Text>
-        {PAYTABLE_ROWS.map(({ hand, mult }) => (
-          <View key={hand} style={styles.paytableRow}>
-            <Text style={styles.paytableHand}>{hand}</Text>
-            <Text style={styles.paytableMult}>{mult}×</Text>
-          </View>
-        ))}
-      </GlassCard>
-
-      {/* Disconnect */}
-      {isAuthenticated && (
-        <Pressable
-          onPress={async () => { await disconnect(); }}
-          style={styles.disconnectButton}
-          accessibilityRole="button"
-          accessibilityLabel="Disconnect wallet and clear session"
-        >
-          <Text style={styles.disconnectText}>Disconnect Wallet</Text>
         </Pressable>
-      )}
-    </ScrollView>
+
+        {/* Paytable teaser */}
+        <GlassCard style={styles.paytableCard}>
+          <Text style={styles.paytableTitle}>PAYTABLE HIGHLIGHTS</Text>
+          {PAYTABLE_ROWS.map(({ hand, mult }) => (
+            <View key={hand} style={styles.paytableRow}>
+              <Text style={styles.paytableHand}>{hand}</Text>
+              <Text style={styles.paytableMult}>{mult}×</Text>
+            </View>
+          ))}
+        </GlassCard>
+
+        {/* Disconnect */}
+        {isAuthenticated && (
+          <Pressable
+            onPress={disconnect}
+            style={styles.disconnectButton}
+            accessibilityRole="button"
+            accessibilityLabel="Disconnect wallet and clear session"
+          >
+            <Text style={styles.disconnectText}>Disconnect Wallet</Text>
+          </Pressable>
+        )}
+      </ScrollView>
+    </>
   );
 }
 
@@ -167,19 +136,6 @@ const styles = StyleSheet.create({
 
   section: { gap: spacing.sm, alignItems: "center" },
   walletAddress: { ...typography.mono, color: colors.textMuted },
-
-  connectCard: { gap: spacing.md },
-  connectTitle: { ...typography.heading3 },
-  connectBody: { ...typography.bodySmall },
-  authError: { ...typography.bodySmall, color: colors.lose },
-  primaryButton: {
-    backgroundColor: colors.purple,
-    borderRadius: radius.full,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-    ...shadows.purple,
-  },
-  primaryButtonText: { ...typography.body, fontWeight: "700" },
 
   sectionHeader: {
     ...typography.caption,
