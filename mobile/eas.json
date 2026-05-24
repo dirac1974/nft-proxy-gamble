@@ -1,0 +1,59 @@
+{
+  "cli": {
+    "version": ">= 7.0.0",
+    "requireCommit": true
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://localhost:3000",
+        "EXPO_PUBLIC_CONTRACT_ADDRESS": "",
+        "EXPO_PUBLIC_WC_PROJECT_ID": "demo_project_id",
+        "EXPO_PUBLIC_BALANCE_VERIFY_KEY": ""
+      },
+      "ios": {
+        "simulator": true
+      }
+    },
+    "testnet": {
+      "distribution": "internal",
+      "channel": "testnet",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api-staging.nftproxygamble.com",
+        "EXPO_PUBLIC_CONTRACT_ADDRESS": "0x0000000000000000000000000000000000000000"
+      },
+      "ios": {
+        "enterpriseProvisioning": "adhoc"
+      }
+    },
+    "production": {
+      "distribution": "store",
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.nftproxygamble.com"
+      },
+      "ios": {
+        "autoIncrement": true
+      },
+      "android": {
+        "autoIncrement": true,
+        "buildType": "app-bundle"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "dev@nftproxygamble.com",
+        "ascAppId": "PLACEHOLDER_ASC_APP_ID",
+        "appleTeamId": "PLACEHOLDER_TEAM_ID"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./google-services-key.json",
+        "track": "internal"
+      }
+    }
+  }
+}

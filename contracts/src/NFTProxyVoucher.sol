@@ -45,6 +45,14 @@ contract NFTProxyVoucher is ERC1155, AccessControl, Pausable, ReentrancyGuard {
     );
     event EmergencyWithdrawal(address indexed to, uint256 amount);
 
+    /// @dev Emitted by commitPurchase — creates an immutable on-chain audit record for every IAP.
+    event PurchaseCommitted(
+        address indexed user,
+        uint256 coinsAdded,
+        bytes32 receiptHash,
+        uint256 timestamp
+    );
+
     constructor(address _usdcToken)
         ERC1155("https://api.nftproxygamble.com/metadata/{id}.json")
     {
@@ -103,6 +111,21 @@ contract NFTProxyVoucher is ERC1155, AccessControl, Pausable, ReentrancyGuard {
         usdcToken.safeTransfer(msg.sender, usdcAmount);
 
         emit VoucherRedeemed(tokenId, msg.sender, usdcAmount);
+    }
+
+    /// @notice Record an IAP purchase commitment on-chain for audit trail.
+    /// @dev MINTER_ROLE only. Emits event only — no storage writes, so gas is minimal (~25k).
+    ///      Called by backend after receipt is validated and coins are credited to DB.
+    ///      receiptHash = keccak256/SHA-256 of the original receipt string (off-chain binding).
+    function commitPurchase(
+        address user,
+        uint256 coinsAdded,
+        bytes32 receiptHash
+    ) external onlyRole(MINTER_ROLE) {
+        require(user != address(0), "Zero user address");
+        require(coinsAdded > 0, "Zero coins");
+        require(receiptHash != bytes32(0), "Empty receipt hash");
+        emit PurchaseCommitted(user, coinsAdded, receiptHash, block.timestamp);
     }
 
     /// @notice Update metadata URI (admin only).

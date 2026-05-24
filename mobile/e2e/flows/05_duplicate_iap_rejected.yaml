@@ -1,0 +1,35 @@
+appId: com.nftproxygamble.app
+name: "Adversarial — duplicate IAP receipt returns 409"
+tags:
+  - security
+  - adversarial
+
+# Validates that the backend's UNIQUE constraint on IAPReceipt.receiptHash
+# prevents replay attacks. A replayed receipt must not grant additional coins.
+#
+# Setup: Run this flow with a mock server that:
+#   1. First POST /iap/verify-purchase returns 200 with coinsGranted: 100
+#   2. Identical second POST returns 409 { error: "Receipt already processed" }
+#
+# The mobile client must show an error message, not credit coins a second time.
+
+---
+- launchApp
+
+- assertVisible:
+    id: "balance-display"
+
+# Trigger IAP flow with a replayed receipt hash via test helper
+- runScript:
+    file: ../scripts/replay_iap_receipt.js
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Error must surface — balance must NOT have changed twice
+- assertNotVisible:
+    text: "Purchase complete"
+
+# The 409 should show an error state in the IAP sheet or lobby
+- assertVisible:
+    text: "already processed"

@@ -11,9 +11,15 @@ const MINT_ABI = [
   "function mint(address to, uint256 coinAmount, bytes32 gameType, bytes32 sessionId) external returns (uint256)",
 ];
 
+// commitPurchase added in Phase 3.6 — emits PurchaseCommitted event for audit trail
+const COMMIT_ABI = [
+  "function commitPurchase(address user, uint256 coinsAdded, bytes32 receiptHash) external",
+];
+
 let _provider: JsonRpcProvider | null = null;
 let _nonceManager: NonceManager | null = null;
-let _contract: Contract | null = null;
+let _mintContract: Contract | null = null;
+let _commitContract: Contract | null = null;
 
 function getProvider(): JsonRpcProvider {
   if (!_provider) _provider = new JsonRpcProvider(config.POLYGON_RPC);
@@ -29,12 +35,20 @@ function getNonceManager(): NonceManager {
   return _nonceManager;
 }
 
-function getContract(): Contract {
-  if (!_contract) {
+function getMintContract(): Contract {
+  if (!_mintContract) {
     if (!config.CONTRACT_ADDRESS) throw new Error("CONTRACT_ADDRESS not configured");
-    _contract = new Contract(config.CONTRACT_ADDRESS, MINT_ABI, getNonceManager());
+    _mintContract = new Contract(config.CONTRACT_ADDRESS, MINT_ABI, getNonceManager());
   }
-  return _contract;
+  return _mintContract;
+}
+
+export function getCommitContract(): Contract {
+  if (!_commitContract) {
+    if (!config.CONTRACT_ADDRESS) throw new Error("CONTRACT_ADDRESS not configured");
+    _commitContract = new Contract(config.CONTRACT_ADDRESS, COMMIT_ABI, getNonceManager());
+  }
+  return _commitContract;
 }
 
 export async function mintVoucher(
@@ -43,7 +57,7 @@ export async function mintVoucher(
   gameType: string,
   sessionId: string,
 ): Promise<{ txHash: string; tokenId: string }> {
-  const contract = getContract();
+  const contract = getMintContract();
   const gameTypeBytes = encodeBytes32String(gameType.slice(0, 31));
   const sessionIdBytes = encodeBytes32String(sessionId.slice(0, 31));
 
@@ -57,4 +71,4 @@ export async function mintVoucher(
 }
 
 // Exported for testing
-export { getContract, getNonceManager };
+export { getMintContract as getContract, getNonceManager };

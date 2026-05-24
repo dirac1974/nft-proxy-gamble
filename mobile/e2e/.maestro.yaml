@@ -1,0 +1,9 @@
+appId: com.nftproxygamble.app
+# Run: maestro test mobile/e2e/.maestro.yaml
+# Or individual flow: maestro test mobile/e2e/flows/01_wallet_connect.yaml
+flows:
+  - flows/01_wallet_connect.yaml
+  - flows/02_iap_purchase.yaml
+  - flows/03_game_play_cashout.yaml
+  - flows/04_adversarial_balance.yaml
+  - flows/05_duplicate_iap_rejected.yaml

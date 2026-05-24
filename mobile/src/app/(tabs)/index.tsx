@@ -34,7 +34,7 @@ export default function LobbyScreen() {
   });
 
   useEffect(() => {
-    if (balanceData) setBalance(balanceData.coinBalance);
+    if (typeof balanceData === "number") setBalance(balanceData);
   }, [balanceData, setBalance]);
 
   // Init IAP when user is authenticated; tear down on unmount

@@ -11,9 +11,13 @@ import {
   resolveHand,
 } from "../services/videoPoker.js";
 import { mintVoucher } from "../services/mintOrchestrator.js";
-import type { HandRecord } from "../types/index.js";
+import { signBalance } from "../services/balanceSigning.js";
+import { recordAnalyticsEvent, getRiskLevel } from "../services/analyticsService.js";
+import { checkDeviceAttestation } from "../services/deviceAttestationService.js";
+import type { HandRecord, AttestationPlatform } from "../types/index.js";
 
 const MIN_COIN_BALANCE = 100;
+const MAX_CASHOUTS_PER_DAY = 5;
 
 const router = Router();
 
@@ -73,10 +77,7 @@ router.post("/deal", requireAuth, async (req, res, next) => {
     await prisma.$transaction([
       prisma.gameSession.update({
         where: { id: sessionId },
-        data: {
-          state: "AWAITING_DRAW",
-          hands: newHands,
-        },
+        data: { state: "AWAITING_DRAW", hands: newHands },
       }),
       prisma.user.update({
         where: { id: userId },
@@ -160,12 +161,18 @@ router.post("/draw", requireAuth, async (req, res, next) => {
         : []),
     ]);
 
+    // Non-blocking — analytics should never block game play
+    recordAnalyticsEvent(userId, { type: "game_result", win: payout > 0 }).catch(
+      (err) => console.error("[analytics] draw event error:", err),
+    );
+
     res.json({
       drawnCards,
       holds,
       rank,
       payout,
-      newBalance: updatedUser.coinBalance,
+      serverSeed: session.serverSeed,
+      ...signBalance(userId, updatedUser.coinBalance),
     });
   } catch (err) {
     next(err);
@@ -189,7 +196,39 @@ router.post("/cashout", requireAuth, async (req, res, next) => {
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new AppError(404, "User not found");
+    if (!user.ageConfirmed) throw new AppError(403, "Age confirmation required before cashout.");
     if (user.coinBalance < coinsToCashout) throw new AppError(402, "Insufficient coin balance");
+
+    // Block BLOCKED-risk users from cashing out
+    const currentRisk = await getRiskLevel(userId);
+    if (currentRisk === "BLOCKED") {
+      throw new AppError(403, "Account flagged for suspicious activity. Please contact support.");
+    }
+
+    // Device attestation check (shadow mode until DEVICE_ATTESTATION_ENFORCE=true)
+    const attestPlatform = req.headers["x-attestation-platform"] as AttestationPlatform | undefined;
+    const attestToken = req.headers["x-attestation-token"] as string | undefined;
+    const { allowed: attestOk } = await checkDeviceAttestation(attestPlatform, attestToken, userId);
+    if (!attestOk) {
+      throw new AppError(403, "Device attestation failed. Please update the app.");
+    }
+
+    // Rate limit: max 5 cashouts per calendar day per user
+    const startOfDay = new Date();
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const cashoutsToday = await prisma.transaction.count({
+      where: {
+        userId,
+        type: "CASHOUT_MINT",
+        createdAt: { gte: startOfDay },
+      },
+    });
+    if (cashoutsToday >= MAX_CASHOUTS_PER_DAY) {
+      throw new AppError(
+        429,
+        `Daily cashout limit reached (${MAX_CASHOUTS_PER_DAY}/day). Try again tomorrow.`,
+      );
+    }
 
     const [, voucher] = await prisma.$transaction([
       prisma.gameSession.update({
@@ -220,16 +259,23 @@ router.post("/cashout", requireAuth, async (req, res, next) => {
       }),
     ]);
 
-    // Trigger async mint — don't await, client polls /nfts/:id
+    // Non-blocking analytics event for cashout
+    recordAnalyticsEvent(userId, { type: "cashout" }).catch(
+      (err) => console.error("[analytics] cashout event error:", err),
+    );
+
+    // Async mint — client polls /nfts/:id for status
     triggerMint(voucher.id, user.walletAddress, coinsToCashout, session.gameType, sessionId).catch(
       (err) => console.error("[mint] failed for voucher", voucher.id, err),
     );
 
-    res.status(202).json({
-      voucherId: voucher.id,
-      coinBalance: coinsToCashout,
-      mintStatus: "PENDING",
-    });
+    res.status(202)
+      .header("X-Cashout-Remaining", String(MAX_CASHOUTS_PER_DAY - cashoutsToday - 1))
+      .json({
+        voucherId: voucher.id,
+        mintStatus: "PENDING",
+        ...signBalance(userId, user.coinBalance - coinsToCashout),
+      });
   } catch (err) {
     next(err);
   }

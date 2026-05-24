@@ -1,22 +1,23 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   Alert,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import Constants from "expo-constants";
 import { colors, radius, spacing, typography } from "@/theme";
 import { GlassCard } from "@/components/GlassCard";
 import { BalanceDisplay } from "@/components/BalanceDisplay";
+import { AgeGateModal } from "@/components/AgeGateModal";
 import { useWalletStore } from "@/stores/walletStore";
 import { CHAIN } from "@/services/walletService";
 
 export default function ProfileScreen() {
-  const { address, isAuthenticated, disconnect } = useWalletStore();
-  const [ageGateVisible, setAgeGateVisible] = useState(false);
+  const { address, isAuthenticated, disconnect, ageConfirmed } = useWalletStore();
+  const contractAddress = (Constants.expoConfig?.extra?.contractAddress as string | undefined) ?? "Not configured";
 
   const handleDisconnect = () => {
     Alert.alert(
@@ -60,10 +61,12 @@ export default function ProfileScreen() {
       {/* Legal */}
       <GlassCard>
         <Text style={styles.sectionTitle}>LEGAL & COMPLIANCE</Text>
-        <Pressable style={styles.row} onPress={() => setAgeGateVisible(true)}>
+        <View style={styles.row}>
           <Text style={styles.rowLabel}>Age Verification</Text>
-          <Text style={styles.rowChevron}>›</Text>
-        </Pressable>
+          <Text style={[styles.rowValue, ageConfirmed ? styles.statusActive : styles.rowValue]}>
+            {ageConfirmed ? "Confirmed 18+" : "Pending"}
+          </Text>
+        </View>
         <View style={styles.row}>
           <Text style={styles.rowLabel}>Jurisdiction</Text>
           <Text style={styles.rowValue}>Entertainment only — not real money gambling</Text>
@@ -87,7 +90,9 @@ export default function ProfileScreen() {
         <View style={styles.row}>
           <Text style={styles.rowLabel}>Contract</Text>
           <Text style={styles.rowValue} numberOfLines={1}>
-            0xf0d9bD16…cEC15Cd
+            {contractAddress.length > 20
+              ? `${contractAddress.slice(0, 10)}…${contractAddress.slice(-8)}`
+              : contractAddress}
           </Text>
         </View>
         <View style={styles.row}>
@@ -98,26 +103,18 @@ export default function ProfileScreen() {
 
       {/* Disconnect */}
       {isAuthenticated && (
-        <Pressable style={styles.disconnectButton} onPress={handleDisconnect}>
+        <Pressable
+          style={styles.disconnectButton}
+          onPress={handleDisconnect}
+          accessibilityRole="button"
+          accessibilityLabel="Disconnect wallet and clear session"
+        >
           <Text style={styles.disconnectText}>Disconnect Wallet</Text>
         </Pressable>
       )}
 
-      {/* Age gate modal */}
-      <Modal visible={ageGateVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Age Verification</Text>
-            <Text style={styles.modalBody}>
-              You must be 18 years of age or older to use this application.
-              By continuing, you confirm that you meet this requirement.
-            </Text>
-            <Pressable style={styles.modalButton} onPress={() => setAgeGateVisible(false)}>
-              <Text style={styles.modalButtonText}>I am 18 or older — Continue</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+      {/* Age gate — only shown if authenticated but not yet confirmed */}
+      <AgeGateModal visible={isAuthenticated && !ageConfirmed} />
     </ScrollView>
   );
 }
@@ -161,29 +158,4 @@ const styles = StyleSheet.create({
   },
   disconnectText: { ...typography.body, color: colors.lose, fontWeight: "700" },
 
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: spacing.xl,
-  },
-  modalCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.xl,
-    gap: spacing.lg,
-    width: "100%",
-  },
-  modalTitle: { ...typography.heading2, textAlign: "center" },
-  modalBody: { ...typography.body, color: colors.textSecondary, textAlign: "center", lineHeight: 22 },
-  modalButton: {
-    backgroundColor: colors.purple,
-    borderRadius: radius.full,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-  },
-  modalButtonText: { ...typography.body, fontWeight: "700" },
 });
