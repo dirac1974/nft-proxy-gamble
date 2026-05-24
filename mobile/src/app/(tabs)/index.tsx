@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -13,15 +13,18 @@ import { BalanceDisplay } from "@/components/BalanceDisplay";
 import { GlassCard } from "@/components/GlassCard";
 import { ConnectWalletSheet } from "@/components/ConnectWalletSheet";
 import { NetworkBanner } from "@/components/NetworkBanner";
+import { IAPSheet } from "@/components/IAPSheet";
 import { useWalletStore } from "@/stores/walletStore";
 import { useWalletConnect } from "@/hooks/useWalletConnect";
 import { useGameStore } from "@/stores/gameStore";
 import { balanceApi } from "@/services/api";
+import { initIAP, teardownIAP } from "@/services/iapService";
 
 export default function LobbyScreen() {
   const { isAuthenticated } = useWalletStore();
   const { disconnect, shortAddress } = useWalletConnect();
   const setBalance = useGameStore((s) => s.setBalance);
+  const [iapVisible, setIapVisible] = useState(false);
 
   const { data: balanceData } = useQuery({
     queryKey: ["balance"],
@@ -34,9 +37,17 @@ export default function LobbyScreen() {
     if (balanceData) setBalance(balanceData.coinBalance);
   }, [balanceData, setBalance]);
 
+  // Init IAP when user is authenticated; tear down on unmount
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    void initIAP();
+    return () => { teardownIAP(); };
+  }, [isAuthenticated]);
+
   return (
     <>
       <NetworkBanner />
+      <IAPSheet visible={iapVisible} onClose={() => setIapVisible(false)} />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
@@ -54,6 +65,14 @@ export default function LobbyScreen() {
           <View style={styles.section}>
             <BalanceDisplay />
             <Text style={styles.walletAddress}>{shortAddress}</Text>
+            <Pressable
+              onPress={() => setIapVisible(true)}
+              style={styles.buyCoinsButton}
+              accessibilityRole="button"
+              accessibilityLabel="Buy coins"
+            >
+              <Text style={styles.buyCoinsText}>+ Buy Coins</Text>
+            </Pressable>
           </View>
         ) : (
           <ConnectWalletSheet />
@@ -136,6 +155,14 @@ const styles = StyleSheet.create({
 
   section: { gap: spacing.sm, alignItems: "center" },
   walletAddress: { ...typography.mono, color: colors.textMuted },
+  buyCoinsButton: {
+    borderWidth: 1,
+    borderColor: colors.neonGreen,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+  },
+  buyCoinsText: { ...typography.bodySmall, color: colors.neonGreen, fontWeight: "700" },
 
   sectionHeader: {
     ...typography.caption,
