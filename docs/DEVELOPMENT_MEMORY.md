@@ -303,8 +303,8 @@ async function mintVoucher(...) { ... }
 - [x] Provably fair client verifier (7 unit tests)
 - [x] E2E Maestro flows written (5 flows: auth, IAP, game, 2 adversarial)
 - [x] Accessibility audit passed — all interactive elements have role + label
-- [ ] `prisma db push` on deployed DB (UserAnalytics, User.ageConfirmed, IAPReceipt.onChainTxHash)
-- [ ] Re-deploy NFTProxyVoucher.sol to Amoy with `commitPurchase()` — see DEPLOYMENT_RUNBOOK.md
+- [x] Supabase project provisioned + schema applied (project `yzodntgnaydfkqvibmff`, Transaction Pooler used for IPv4 compat)
+- [x] NFTProxyVoucher re-deployed to Amoy with `commitPurchase()` — `0x2Ed681d659E67A0ef154875CA4743Ed865B60255` (verified on Polygonscan, MINTER_ROLE held by backend wallet)
 - [ ] Populate EAS secrets — see mobile/SECRETS_CHECKLIST.md
 - [ ] Enable `DEVICE_ATTESTATION_ENFORCE=true` after 50+ shadow samples
 - [ ] Real Apple/Google IAP receipt validation (backend stub → live API)
