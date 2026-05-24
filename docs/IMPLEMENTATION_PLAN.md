@@ -23,26 +23,44 @@
 - Test strategy with 20+ specific test cases
 
 **Tasks**:
-1. Initialize Hardhat project in /contracts (TypeScript, OpenZeppelin contracts & test helpers).
-2. Implement `NFTProxyVoucher.sol`:
-   - ERC-1155 with unique tokenIds (counter)
-   - `mapping(uint256 => uint256) public coinBalance;` (immutable on-chain value)
-   - MINTER_ROLE (backend signer)
-   - `mint(address to, uint256 coinAmount, string memory gameType, uint256 sessionId)` only MINTER
-   - `redeem(uint256 tokenId)` - burns, transfers USDC (assume 1 coin = 0.01 USDC, or configurable rate)
-   - Events: VoucherMinted, VoucherRedeemed, etc.
-   - tokenURI returns dynamic metadata JSON (or IPFS hash base)
-   - Pausable, AccessControl, ReentrancyGuard
-3. Write comprehensive Hardhat tests (at least 15 tests):
-   - Mint/redeem happy path
-   - Only minter can mint
-   - Balance updates correctly
-   - Cannot redeem twice / non-owner
-   - USDC transfer math
-   - Events emitted
-   - Edge: zero amount, max uint, etc.
-4. Deploy script to Amoy + verify on Polygonscan.
-5. Create /docs/adr/001-erc1155-design.md explaining choices (why 1155 vs 721, on-chain balance vs metadata only).
+1. [x] Initialize Hardhat project in /contracts (TypeScript, OpenZeppelin contracts & test helpers).
+2. [x] Implement `NFTProxyVoucher.sol`:
+   - [x] ERC-1155 with unique tokenIds (counter, starts at 0)
+   - [x] `mapping(uint256 => uint256) public coinBalance;` (immutable until redeem)
+   - [x] MINTER_ROLE (backend signer), PAUSER_ROLE (operator), DEFAULT_ADMIN_ROLE (governance)
+   - [x] `mint(address to, uint256 coinAmount, bytes32 gameType, bytes32 sessionId)` only MINTER (bytes32 per ADR-001 Phase 1 Notes, owner Q3 sign-off)
+   - [x] `redeem(uint256 tokenId)` - burns, transfers USDC via `SafeERC20.safeTransfer` (exact math `coins * 10_000` raw USDC units; 100 coins = 1 USDC)
+   - [x] Events: VoucherMinted, VoucherRedeemed, EmergencyWithdrawal
+   - [x] tokenURI returns base URI with `{id}` placeholder (OZ ERC-1155 default; marketplaces substitute client-side)
+   - [x] Pausable, AccessControl, ReentrancyGuard (OZ v5 `utils/` paths)
+   - [x] On-chain bounds: `MIN_COIN_BALANCE = 100`, `MAX_COIN_BALANCE = 100_000` (owner Q2 sign-off)
+   - [x] `emergencyWithdrawUSDC(uint256, address)` admin-only for Phase 5 migration / regulator response
+3. [x] Hardhat tests — 34 tests total, all green:
+   - [x] Mint/redeem happy path (T1, T2)
+   - [x] Only minter can mint (T3, T27)
+   - [x] Balance updates correctly (T1, T7, T24)
+   - [x] Cannot redeem twice / non-owner (T5, T6, T17)
+   - [x] USDC transfer math, exact + arbitrary amounts (T2, T7, T9, T24, T29)
+   - [x] Events emitted (T8, T9, T26)
+   - [x] Edge: zero amount + below min (T4), max boundary (T12, T23)
+   - [x] Pausable semantics + transfers allowed while paused (T10, T11, T25, T31)
+   - [x] Reentrancy guard (T22, malicious USDC mock)
+   - [x] P2P transfer + redeem-by-new-owner (T21)
+   - [x] `emergencyWithdrawUSDC` admin-only + zero-recipient revert (T13, T26)
+   - [x] Gas snapshots: mint < 150k, redeem < 80k (T28)
+   - [x] Property test (T29, fast-check)
+   - [x] `supportsInterface` (T33), constructor zero-USDC revert (T32), bytes32 validation (T34)
+   - [x] Coverage on `NFTProxyVoucher.sol`: stmts 100%, branches 97.06%, fns 100%, lines 100%
+4. [ ] Deploy script to Amoy + verify on Polygonscan. _Deploy script done; awaiting PRIVATE_KEY in `.env` for live testnet deploy._
+5. [x] ADR at `/docs/adr/001-erc1155-voucher-design.md` with Phase 1 Implementation Notes appended (existing ADR retained; appended not rewritten per pre-plan §7).
+
+**Additional Phase 1 deliverables**:
+- [x] `MockERC20` and `ReentrantERC20` test mocks added
+- [x] `.env.example` documenting required env vars
+- [x] `.gitignore` updated for `typechain-types/`, `!.env.example`
+- [x] `tsconfig.json` for hardhat + tests
+- [x] `BACKEND_INTEGRATION_POINTS.md` rewritten with bytes32 canonicalisation, MIN/MAX bounds, exact USDC math, admin surface, retry semantics
+- [x] CI workflow extended: coverage threshold gate, gas snapshot artifact, Slither soft-fail job, backend job gated until Phase 2
 
 **Success Criteria**: All tests pass, contract verified on testnet, deployment address in README.
 

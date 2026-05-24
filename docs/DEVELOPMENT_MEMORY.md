@@ -149,5 +149,47 @@ async function mintVoucher(...) { ... }
 - **Grok**: Will periodically review and refine these standards.
 - Never delete history — only append.
 
-**Last Updated**: 2026-05-22 by Grok (Secondary PM)
-**Version**: 1.1
+**Last Updated**: 2026-05-23 by Claude (Lead Dev)
+**Version**: 1.2
+
+---
+
+## Phase 1 Retrospective — ERC-1155 NFTProxyVoucher (Completed 2026-05-23)
+
+**Deployed**: `0xf0d9bD16292A06a189220E4369a561442aEC15Cd` on Polygon Amoy  
+**Verified**: https://amoy.polygonscan.com/address/0xf0d9bD16292A06a189220E4369a561442aEC15Cd#code  
+**Tests**: 34 passing | Coverage: 100% statements / 97% branches / 100% functions / 100% lines
+
+### Key Decisions Made
+
+- **bytes32 for gameType/sessionId** (not string): saves ~30k gas per mint; backend must use `ethers.encodeBytes32String()`. Zero-byte inputs revert.
+- **USDC math**: `coins * 10_000` raw units (not `coins / 100`). The division formula underpays by 10^6. 350 coins → 3.50 USDC exactly.
+- **emergencyWithdrawUSDC(amount, to)**: admin-only; emits `EmergencyWithdrawal`. Scoped by amount, not sweep-all.
+- **EVM `cancun`**: Required for OZ v5 — `Arrays.sol` uses `mcopy` opcode. Any future contract must keep `evmVersion: "cancun"`.
+- **No redeemFor(address)**: deferred to Phase 2 per owner decision.
+- **MAX_COIN_BALANCE = 100,000**: on-chain enforced. MIN = 100.
+
+### Bugs Caught Before Mainnet
+
+| Bug | Root Cause | Fix |
+|-----|-----------|-----|
+| OZ v5 import paths | `security/` → `utils/` for Pausable + ReentrancyGuard | Updated imports |
+| USDC underpayment | `coins / 100` = 1 USDC for 100 coins, not 10^4 raw units | `coins * USDC_UNITS_PER_COIN` |
+| mcopy compile failure | OZ v5 Arrays.sol needs Cancun EVM | `evmVersion: "cancun"` |
+| Coverage gate MODULE_NOT_FOUND | Script read `coverage-summary.json`; solidity-coverage writes `coverage.json` | Fixed file path + regex filter |
+| .solcover.js broke coverage | `skipFiles` interacts badly with `paths.sources: "./src"` | Removed .solcover.js entirely |
+| CI Windows path separator | `file.includes('/mocks/')` misses `\` | `/[\\/]mocks[\\/]/.test(file)` |
+| Etherscan V1 deprecated | hardhat etherscan config used network keys | Switched to V2 API: `https://api.etherscan.io/v2/api?chainid=80002` |
+
+### Testnet Deploy Lessons
+
+- Polygon Amoy faucet has 24h rate limit; Alchemy requires mainnet ETH. **Chainlink faucet** (`faucets.chain.link/polygon-amoy`) is the most permissive — no mainnet ETH needed, gives 0.5 MATIC.
+- Amoy minimum gas tip cap is **25 gwei**. Contract deploy costs ~0.12–0.19 MATIC depending on base fee. Fund deployer with **at least 0.3 MATIC** before attempting deploy.
+- Polygonscan V2 API verification: use `customChains` in hardhat.config with `apiURL: "https://api.etherscan.io/v2/api?chainid=80002"` and single `apiKey` string (not per-network map).
+
+### What to Watch in Phase 2
+
+- Backend must canonicalize gameType/sessionId to exactly 32 bytes before calling `mint()` — trailing zeros matter.
+- MINTER_ROLE grant to hot wallet is the first backend task (scripts/grant-minter.ts).
+- Fund contract with test USDC before enabling redemptions.
+- The deployer key used for testnet must NEVER be reused for mainnet.

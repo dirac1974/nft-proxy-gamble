@@ -70,9 +70,39 @@ cd mobile && npx expo start
 See `docs/IMPLEMENTATION_PLAN.md` and `docs/DEVELOPMENT_MEMORY.md` for the complete phased rollout with full tests at every step.
 
 ## Current Status
-**v0.1.0 Skeleton** - Specs, rules, architecture, and empty implementation ready for Claude to build.
+**Phase 1 complete** — `NFTProxyVoucher.sol` deployed and verified on Polygon Amoy. **34 tests green**, coverage **100% statements / 97% branches / 100% functions / 100% lines**. Grok review **approved** (PR #3). CI green.
 
-**Next Milestone**: Phase 1 complete (auditable ERC-1155 + tests on testnet).
+**Next Milestone**: Phase 2 (backend — Node.js + Express + Prisma + PostgreSQL).
+
+## Deployments
+
+| Network | Contract | Address | Tx | Status |
+|---|---|---|---|---|
+| Polygon Amoy (testnet) | `NFTProxyVoucher` | [`0xf0d9bD16292A06a189220E4369a561442aEC15Cd`](https://amoy.polygonscan.com/address/0xf0d9bD16292A06a189220E4369a561442aEC15Cd#code) | [`0x48f730c9`](https://amoy.polygonscan.com/tx/0x48f730c9e2a88e7c846d5ed558f07c807337d31dca087e4d08ba1b309a33c40f) | ✅ Verified |
+| Polygon mainnet | `NFTProxyVoucher` | _Phase 6_ | _Phase 6_ | — |
+
+> **Operator step (deploy)**: requires a `PRIVATE_KEY` and `POLYGONSCAN_API_KEY` in `contracts/.env`. Claude does not handle keys (per `Claude.md` "Secrets" rule). See the runbook below.
+
+### Deploying to Amoy
+
+Prerequisites (operator runs locally — **Claude never touches these**):
+
+1. Copy `contracts/.env.example` → `contracts/.env`.
+2. Fill `PRIVATE_KEY` with a dedicated low-balance Amoy key (NOT a key holding mainnet funds).
+3. Fund the key with Amoy MATIC from the [Polygon faucet](https://faucet.polygon.technology/).
+4. Set `POLYGONSCAN_API_KEY` from https://polygonscan.com/myapikey.
+5. (Optional) override `USDC_ADDRESS` if Circle relocates the testnet token.
+
+```bash
+cd contracts
+npm ci
+npm run compile
+npm test                 # 34 tests, all green
+npm run deploy:amoy      # prints address + writes contracts/deployments/amoy.json
+npx hardhat verify --network amoy <addr> <usdc>
+```
+
+After deploy, fund the contract with test USDC (faucet or mock) before opening redemptions, and grant `MINTER_ROLE` to the backend hot wallet (script lands in Phase 2).
 
 ## License
 MIT - See LICENSE.md

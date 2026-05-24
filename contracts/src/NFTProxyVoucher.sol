@@ -3,39 +3,52 @@ pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol"; // USDC
+import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @title NFT Proxy Voucher - ERC-1155 with on-chain coin balance for secure redemption
-/// @notice Used as proxy for in-game coin balances. Minted on cashout, redeemable 1:1 for USDC (100 coins = 1 USDC).
-/// @dev Security: coinBalance stored on-chain (immutable). Metadata is for display only.
+/// @notice Minted on cashout, redeemable for USDC at 100 coins = 1 USDC.
+/// @dev coinBalance stored on-chain (immutable until redeem). gameType + sessionId stored as bytes32
+///      per ADR-001 Phase 1 Implementation Notes. SafeERC20 used for USDC transfer.
 contract NFTProxyVoucher is ERC1155, AccessControl, Pausable, ReentrancyGuard {
+    using SafeERC20 for IERC20;
+
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
-    uint256 private _tokenIdCounter;
-    IERC20 public immutable usdcToken; // Polygon USDC: 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174 (mainnet) or test
+    uint256 public constant MAX_COIN_BALANCE = 100_000;
+    uint256 public constant MIN_COIN_BALANCE = 100;
+    uint256 public constant COINS_PER_USDC = 100;
+    /// @dev 100 coins = 1 USDC (6 dp) => 10_000 raw USDC units per coin. Exact math, no truncation.
+    uint256 public constant USDC_UNITS_PER_COIN = 10_000;
 
-    // On-chain immutable value (critical for security - not in metadata)
+    uint256 private _tokenIdCounter;
+    IERC20 public immutable usdcToken;
+
     mapping(uint256 => uint256) public coinBalance;
-    mapping(uint256 => string) public gameType;
+    mapping(uint256 => bytes32) public gameType;
     mapping(uint256 => uint256) public mintedTimestamp;
 
     event VoucherMinted(
         uint256 indexed tokenId,
         address indexed to,
         uint256 coinAmount,
-        string gameType,
-        uint256 sessionId
+        bytes32 indexed gameType,
+        bytes32 sessionId
     );
     event VoucherRedeemed(
         uint256 indexed tokenId,
         address indexed redeemer,
         uint256 usdcAmount
     );
+    event EmergencyWithdrawal(address indexed to, uint256 amount);
 
-    constructor(address _usdcToken) ERC1155("https://api.nftproxygamble.com/metadata/{id}.json") {
+    constructor(address _usdcToken)
+        ERC1155("https://api.nftproxygamble.com/metadata/{id}.json")
+    {
+        require(_usdcToken != address(0), "USDC address required");
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MINTER_ROLE, msg.sender);
         _grantRole(PAUSER_ROLE, msg.sender);
@@ -43,13 +56,21 @@ contract NFTProxyVoucher is ERC1155, AccessControl, Pausable, ReentrancyGuard {
     }
 
     /// @notice Mint a new voucher (only backend minter). Sets immutable coinBalance.
+    /// @param to            User's self-custodial wallet
+    /// @param coinAmount    Coins to encode; must be > 0, <= MAX_COIN_BALANCE, multiple of COINS_PER_USDC
+    /// @param _gameType     Canonical game id as bytes32 (e.g. ethers.encodeBytes32String("jacks-or-better-9-6"))
+    /// @param sessionId     Backend session id as bytes32 (e.g. encodeBytes32String of session UUID)
     function mint(
         address to,
         uint256 coinAmount,
-        string memory _gameType,
-        uint256 sessionId
+        bytes32 _gameType,
+        bytes32 sessionId
     ) external onlyRole(MINTER_ROLE) whenNotPaused returns (uint256) {
-        require(coinAmount > 0, "Coin amount must be > 0");
+        require(coinAmount >= MIN_COIN_BALANCE, "Below min coin balance");
+        require(coinAmount <= MAX_COIN_BALANCE, "Above max coin balance");
+        require(_gameType != bytes32(0), "Invalid game type");
+        require(sessionId != bytes32(0), "Invalid session id");
+
         uint256 tokenId = _tokenIdCounter++;
 
         coinBalance[tokenId] = coinAmount;
@@ -63,25 +84,28 @@ contract NFTProxyVoucher is ERC1155, AccessControl, Pausable, ReentrancyGuard {
     }
 
     /// @notice Redeem voucher for USDC. Burns NFT, sends equivalent USDC (100 coins = 1 USDC).
+    /// @dev Transfers are NOT gated by whenNotPaused — only mint and redeem are. Users can always
+    ///      move their assets even during a regulatory pause.
     function redeem(uint256 tokenId) external nonReentrant whenNotPaused {
         require(balanceOf(msg.sender, tokenId) == 1, "Not owner or already redeemed");
         uint256 coins = coinBalance[tokenId];
         require(coins > 0, "Invalid voucher");
 
-        uint256 usdcAmount = coins / 100; // 100 coins = 1 USDC (adjust if needed)
-        require(usdcToken.balanceOf(address(this)) >= usdcAmount, "Insufficient USDC liquidity");
+        uint256 usdcAmount = coins * USDC_UNITS_PER_COIN;
+        require(
+            usdcToken.balanceOf(address(this)) >= usdcAmount,
+            "Insufficient USDC liquidity"
+        );
 
-        // Burn first (prevents reentrancy issues)
         _burn(msg.sender, tokenId, 1);
-        delete coinBalance[tokenId]; // Clear for safety
+        delete coinBalance[tokenId];
 
-        // Transfer USDC
-        require(usdcToken.transfer(msg.sender, usdcAmount), "USDC transfer failed");
+        usdcToken.safeTransfer(msg.sender, usdcAmount);
 
         emit VoucherRedeemed(tokenId, msg.sender, usdcAmount);
     }
 
-    /// @notice Update metadata URI (admin only, for future art updates)
+    /// @notice Update metadata URI (admin only).
     function setURI(string memory newuri) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setURI(newuri);
     }
@@ -94,12 +118,21 @@ contract NFTProxyVoucher is ERC1155, AccessControl, Pausable, ReentrancyGuard {
         _unpause();
     }
 
-    // Override to use on-chain data if needed, but metadata service handles display
+    /// @notice Admin-only emergency drain of USDC. Used for contract migration or regulator response.
+    /// @dev Phase 5 will move admin to a Gnosis Safe and consider adding a timelock.
+    function emergencyWithdrawUSDC(uint256 amount, address to)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        require(to != address(0), "Zero recipient");
+        usdcToken.safeTransfer(to, amount);
+        emit EmergencyWithdrawal(to, amount);
+    }
+
     function uri(uint256 tokenId) public view override returns (string memory) {
         return super.uri(tokenId);
     }
 
-    // The following functions are overrides required by Solidity.
     function supportsInterface(bytes4 interfaceId)
         public
         view
