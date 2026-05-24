@@ -258,12 +258,56 @@ async function mintVoucher(...) { ... }
 | `mobile/src/tests/WinOverlay.test.tsx` | 10 tests |
 | `mobile/src/tests/PaytableModal.test.tsx` | 6 tests |
 
-### Pending Production Checklist
+### Phase 3.5–3.6 Security Hardening — Architecture Decisions
 
+- **Signed balance token**: `HMAC-SHA256(JWT_SECRET, "nfpg_balance_v1")` as signing key; payload = `"nfpg_balance_v1"|userId|balance|timestamp`; 5-min staleness window on mobile. All 4 balance-touching endpoints sign.
+- **`commitPurchase()` gas strategy**: Event-only (no storage writes) = ~25k gas. Sufficient for audit trail; off-chain DB is the gate (UNIQUE receipt hash). On-chain = immutable evidence, not the enforcement layer.
+- **RiskLevel as string literals**: Not a Prisma enum in TS, to avoid requiring `prisma generate` before tests. Type defined in `analyticsService.ts` as `"LOW" | "MEDIUM" | "HIGH" | "BLOCKED"`.
+- **Cert pinning via OS mechanisms**: iOS `NSPinnedDomains` in `Info.plist` (via `app.config.js`), Android `network_security_config.xml` via Expo config plugin. Avoids native module install/link — works with managed workflow.
+- **Device attestation defaults**: `DEVICE_ATTESTATION_ENFORCE=false` in all environments. Shadow mode logs denials but never blocks. Enable via env var after 50+ production samples.
+- **Age gate flow**: `POST /auth/verify` returns `ageConfirmed`. `AgeGateModal` rendered in `_layout.tsx` when `isAuthenticated && !ageConfirmed`. Cashout gate returns 403 if not confirmed.
+- **Admin auth**: `isAdmin: boolean` in JWT claim. No DB table — must be manually set when minting tokens. To revisit for Phase 4.
+
+### New Files (Phase 3.5–3.7)
+
+| File | Purpose |
+|------|---------|
+| `backend/src/services/balanceSigning.ts` | HMAC-SHA256 sign/verify for balance tokens |
+| `backend/src/services/analyticsService.ts` | 4 anomaly flags, RiskLevel ladder, BLOCKED gate |
+| `backend/src/services/deviceAttestationService.ts` | iOS App Attest + Android Play Integrity stubs (shadow) |
+| `backend/src/services/purchaseCommitmentService.ts` | On-chain batch commitment (BATCH_SIZE=20, 5min) |
+| `backend/src/routes/admin.ts` | `GET /admin/flagged-users`, `POST /admin/users/:id/set-risk` |
+| `mobile/src/services/balanceVerification.ts` | Client HMAC verify before display |
+| `mobile/src/services/provablyFair.ts` | keccak256 deck verifier (matches backend exactly) |
+| `mobile/src/services/nftRedemptionService.ts` | viem `writeContract` for redeem + transfer |
+| `mobile/src/services/deviceAttestationService.ts` | Returns shadow attestation headers |
+| `mobile/src/components/AgeGateModal.tsx` | Full-screen age gate, calls backend on confirm |
+| `mobile/src/components/ProvablyFairModal.tsx` | Seed hash + deck match verification display |
+| `mobile/src/components/TransferModal.tsx` | NFT transfer UI + viem writeContract |
+| `mobile/app.config.js` | Replaces app.json; cert pin config; EAS extra fields |
+| `mobile/plugins/withAndroidCertPinning.js` | Expo config plugin for Android network_security_config |
+| `mobile/eas.json` | dev/testnet/production EAS build profiles |
+| `mobile/e2e/flows/01-05_*.yaml` | Maestro E2E flows: wallet, IAP, game, adversarial |
+| `docs/DEPLOYMENT_RUNBOOK.md` | Prisma migration + contract deploy exact commands |
+| `mobile/SECRETS_CHECKLIST.md` | EAS secrets pre-beta gate checklist |
+| `docs/CERT_PINNING_ROTATION.md` | SPKI hash generation + rotation runbook |
+
+### Pending Production Checklist (updated 2026-05-24)
+
+- [x] Signed balance token HMAC verification wired in mobile client
+- [x] `commitPurchase()` in NFTProxyVoucher.sol with Hardhat tests (T35–T40)
+- [x] `purchaseCommitmentService.ts` batching service (8 unit tests)
+- [x] Device attestation shadow mode implemented
+- [x] Behavioral analytics `UserAnalytics` table + 4 anomaly flags (9 tests)
+- [x] Certificate pinning (OS-level, via Expo config plugin)
+- [x] Provably fair client verifier (7 unit tests)
+- [x] E2E Maestro flows written (5 flows: auth, IAP, game, 2 adversarial)
+- [x] Accessibility audit passed — all interactive elements have role + label
+- [ ] `prisma db push` on deployed DB (UserAnalytics, User.ageConfirmed, IAPReceipt.onChainTxHash)
+- [ ] Re-deploy NFTProxyVoucher.sol to Amoy with `commitPurchase()` — see DEPLOYMENT_RUNBOOK.md
+- [ ] Populate EAS secrets — see mobile/SECRETS_CHECKLIST.md
+- [ ] Enable `DEVICE_ATTESTATION_ENFORCE=true` after 50+ shadow samples
 - [ ] Real Apple/Google IAP receipt validation (backend stub → live API)
-- [ ] `commitPurchase()` live on Polygon Amoy (Solidity spec in SECURITY_ARCHITECTURE.md)
-- [ ] `purchaseCommitmentService.ts` batching service implemented
-- [ ] Signed balance token HMAC verification wired in mobile client
-- [ ] Device attestation enforced at cashout (Phase 3.5)
-- [ ] Behavioral analytics `user_analytics` table populated (Phase 3.6)
-- [ ] Certificate pinning (Phase 3.6)
+- [ ] App Store / Play Store metadata, screenshots, privacy policy URL
+- [ ] Jurisdiction block list (US, UK recommended to start)
+- [ ] External security audit / penetration testing

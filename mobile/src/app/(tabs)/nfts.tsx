@@ -119,10 +119,12 @@ function VoucherCard({
         )}
 
         {item.txHash && (
-          <Pressable onPress={() => Linking.openURL(polygonscanUrl(item.txHash!))}>
-            <Text style={styles.txLink} accessibilityRole="link">
-              View mint tx ↗
-            </Text>
+          <Pressable
+            onPress={() => Linking.openURL(polygonscanUrl(item.txHash!))}
+            accessibilityRole="link"
+            accessibilityLabel="View mint transaction on Polygonscan"
+          >
+            <Text style={styles.txLink}>View mint tx ↗</Text>
           </Pressable>
         )}
 
@@ -160,10 +162,12 @@ function VoucherCard({
         {redeemStatus === "confirmed" && redeemTxHash && (
           <View style={styles.successRow}>
             <Text style={styles.successText}>Redeemed! USDC sent to your wallet.</Text>
-            <Pressable onPress={() => Linking.openURL(polygonscanUrl(redeemTxHash))}>
-              <Text style={styles.txLink} accessibilityRole="link">
-                View tx ↗
-              </Text>
+            <Pressable
+              onPress={() => Linking.openURL(polygonscanUrl(redeemTxHash))}
+              accessibilityRole="link"
+              accessibilityLabel="View redemption transaction on Polygonscan"
+            >
+              <Text style={styles.txLink}>View tx ↗</Text>
             </Pressable>
           </View>
         )}

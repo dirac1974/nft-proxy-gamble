@@ -1,0 +1,79 @@
+appId: com.nftproxygamble.app
+name: "Video Poker — play 5 hands then cashout to NFT"
+tags:
+  - game
+  - cashout
+  - critical
+
+---
+- launchApp
+
+# Navigate to play tab
+- tapOn:
+    text: "Play"
+
+# Needs coins — assume 100+ from IAP test or prior state
+- assertVisible:
+    text: "NEW GAME"
+
+# Play 5 hands
+- repeat:
+    times: 5
+    commands:
+      - tapOn:
+          text: "NEW GAME"
+      - waitForAnimationToEnd:
+          timeout: 3000
+      - tapOn:
+          text: "DEAL"
+      - waitForAnimationToEnd:
+          timeout: 4000
+      # Hold first card
+      - tapOn:
+          index: 0
+          id: "card-0"
+      - tapOn:
+          text: "DRAW"
+      - waitForAnimationToEnd:
+          timeout: 4000
+      - assertVisible:
+          text: "PLAY AGAIN"
+
+# After last hand, verify provably fair if result is visible
+- assertVisible:
+    text: "Verify provably fair"
+
+- tapOn:
+    text: "Verify provably fair"
+
+- assertVisible:
+    text: "Provably Fair Verification"
+
+# Should pass verification
+- assertVisible:
+    text: "✓ Hand verified"
+
+- tapOn:
+    text: "Close"
+
+# Cashout (requires 100+ coins)
+- assertVisible:
+    text: "Cash Out"
+    enabled: true
+
+- tapOn:
+    text: "Cash Out"
+
+- waitForAnimationToEnd:
+    timeout: 10000
+
+# Navigate to NFTs tab
+- tapOn:
+    text: "NFTs"
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# NFT should appear (PENDING or MINTING initially)
+- assertVisible:
+    text: "voucher"

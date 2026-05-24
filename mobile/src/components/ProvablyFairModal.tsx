@@ -92,11 +92,18 @@ export function ProvablyFairModal({
           <Pressable
             style={styles.verifyLink}
             onPress={() => Linking.openURL(VERIFY_URL)}
+            accessibilityRole="link"
+            accessibilityLabel="Open provably fair documentation"
           >
             <Text style={styles.verifyLinkText}>How to verify independently ↗</Text>
           </Pressable>
 
-          <Pressable style={styles.closeButton} onPress={onClose} accessibilityRole="button">
+          <Pressable
+            style={styles.closeButton}
+            onPress={onClose}
+            accessibilityRole="button"
+            accessibilityLabel="Close provably fair verification"
+          >
             <Text style={styles.closeText}>Close</Text>
           </Pressable>
         </View>

@@ -103,7 +103,12 @@ export default function ProfileScreen() {
 
       {/* Disconnect */}
       {isAuthenticated && (
-        <Pressable style={styles.disconnectButton} onPress={handleDisconnect}>
+        <Pressable
+          style={styles.disconnectButton}
+          onPress={handleDisconnect}
+          accessibilityRole="button"
+          accessibilityLabel="Disconnect wallet and clear session"
+        >
           <Text style={styles.disconnectText}>Disconnect Wallet</Text>
         </Pressable>
       )}

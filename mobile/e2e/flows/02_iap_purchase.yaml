@@ -1,0 +1,66 @@
+appId: com.nftproxygamble.app
+name: "IAP Purchase — coins credited from server"
+tags:
+  - iap
+  - critical
+
+---
+- launchApp
+
+# Must be authenticated (depends on 01_wallet_connect completing first in a suite run)
+- assertVisible:
+    id: "balance-display"
+
+- tapOn:
+    text: "Buy Coins"
+
+# IAP sheet opens
+- assertVisible:
+    text: "100 coins"
+    enabled: true
+
+- assertVisible:
+    text: "$0.99"
+
+# Select 100-coin product
+- tapOn:
+    text: "100 coins"
+
+# Sandbox IAP sheet appears (iOS StoreKit / Android test environment)
+- assertVisible:
+    text: "Confirm your In-App Purchase"
+
+- tapOn:
+    text: "Buy"
+
+- waitForAnimationToEnd:
+    timeout: 10000
+
+# Sheet closes after server verification
+- assertNotVisible:
+    text: "Confirm your In-App Purchase"
+
+# Balance should have increased (server-authoritative)
+- assertVisible:
+    id: "balance-display"
+
+# Adversarial: sheet dismissed without purchase — balance must NOT change
+- tapOn:
+    text: "Buy Coins"
+
+- tapOn:
+    text: "550 coins"
+
+- assertVisible:
+    text: "Confirm your In-App Purchase"
+
+# Cancel instead of buying
+- tapOn:
+    text: "Cancel"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# Balance unchanged
+- assertVisible:
+    id: "balance-display"

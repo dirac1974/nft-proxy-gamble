@@ -1,0 +1,44 @@
+appId: com.nftproxygamble.app
+name: "Adversarial — forged balance payload rejected"
+tags:
+  - security
+  - adversarial
+
+# This flow is intended to be run with a mock server (e.g. WireMock / msw) that
+# returns a /balance response with an invalid or missing balanceSig.
+# The client must silently drop the update and NOT display the tampered balance.
+#
+# Setup: Before running, configure the mock server rule:
+#   POST /test/inject-bad-balance-sig   (test-only endpoint, disabled in prod)
+#
+# The mobile client's balanceVerification.ts rejects any balance response
+# where HMAC-SHA256(EXPO_PUBLIC_BALANCE_VERIFY_KEY, "nfpg_balance_v1"|userId|balance|timestamp)
+# does not match the returned balanceSig, or where sigTimestamp is stale (>5 min).
+
+---
+- launchApp
+
+- assertVisible:
+    id: "balance-display"
+
+# Record current balance text for comparison
+- copyTextFrom:
+    id: "balance-display"
+
+# Inject bad signature via test helper (only available in testnet build)
+- runScript:
+    file: ../scripts/inject_bad_balance_sig.js
+
+# Force balance refresh
+- swipe:
+    direction: DOWN
+    from:
+      x: 50%
+      y: 30%
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# Balance display must NOT have changed to the tampered value (9999999 coins)
+- assertNotVisible:
+    text: "9,999,999"

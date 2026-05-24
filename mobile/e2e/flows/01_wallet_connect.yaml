@@ -1,0 +1,66 @@
+appId: com.nftproxygamble.app
+name: "Wallet Connect + SIWE Authentication"
+tags:
+  - auth
+  - critical
+
+---
+- launchApp:
+    clearState: true
+
+# Lobby tab should show connect prompt
+- assertVisible:
+    text: "Connect Wallet"
+    enabled: true
+
+- tapOn:
+    text: "Connect Wallet"
+
+# WalletConnect sheet opens
+- assertVisible:
+    text: "Connect via QR"
+
+- tapOn:
+    text: "Connect via QR"
+
+# In sandbox mode WalletConnect deep-link completes automatically.
+# Wait for authenticated state — balance display appears.
+- waitForAnimationToEnd:
+    timeout: 8000
+
+- assertVisible:
+    id: "balance-display"
+
+# Sign-In With Ethereum confirmation prompt
+- assertVisible:
+    text: "Sign to authenticate"
+    enabled: true
+
+- tapOn:
+    text: "Sign to authenticate"
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Age gate appears for new users
+- assertVisible:
+    text: "Age Verification"
+
+- assertVisible:
+    text: "I am 18 or older"
+
+- tapOn:
+    text: "I am 18 or older"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# Age gate dismissed — Lobby now fully visible
+- assertNotVisible:
+    text: "Age Verification"
+
+- assertVisible:
+    text: "NFT PROXY"
+
+- assertVisible:
+    text: "Video Poker"

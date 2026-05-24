@@ -376,4 +376,76 @@ Grok reviewed and flagged the following as **NOT YET APPROVED** — documentatio
 ---
 
 **Last Updated by Grok**: 2026-05-24 02:01 PDT
-**Last Updated by Claude**: 2026-05-24 (Phase 3.6 Security Hardening Sprint)
+**Last Updated by Claude**: 2026-05-24 (Phase 3 complete — PR #10 approved, final merge pending)
+
+---
+
+### Claude Update — 2026-05-24 (Phase 3 Complete — Pre-Merge Final Sprint)
+
+**Status**: Grok approved PR #10. All pre-merge items completed. Squash merge to main in progress.
+
+**Completed since last update**:
+
+**PRs #8 + #9 squash-merged into main**
+- PR #8 (`phase-3/issue-6-wallet-auth`) → main as "Phase 3.2: Wallet connection + network management (#8)"
+- PR #9 (`phase-3/issue-6-game-polish-iap`) → main as "Phase 3.3+3.4: Video poker polish + IAP purchase flow (#9)"
+- PR #10 (`phase-3/security-hardening`) opened; Grok approved
+
+**E2E Tests (Maestro)**
+- `mobile/e2e/flows/01_wallet_connect.yaml` — wallet connect → SIWE → age gate flow
+- `mobile/e2e/flows/02_iap_purchase.yaml` — IAP sandbox purchase + adversarial cancel test
+- `mobile/e2e/flows/03_game_play_cashout.yaml` — 5 hands → verify provably fair → cashout → NFT tab
+- `mobile/e2e/flows/04_adversarial_balance.yaml` — forged `balanceSig` rejected by client
+- `mobile/e2e/flows/05_duplicate_iap_rejected.yaml` — receipt replay returns 409, balance unchanged
+
+**Accessibility Audit — all interactive elements pass**
+- `nfts.tsx`: Fixed Polygonscan link Pressables — moved `accessibilityRole="link"` + `accessibilityLabel` to Pressable (was incorrectly on inner Text)
+- `ProvablyFairModal.tsx`: Added `accessibilityRole="link"` + label to verify link; added `accessibilityLabel` to close button
+- `profile.tsx`: Added `accessibilityRole="button"` + `accessibilityLabel` to disconnect Pressable
+- Full audit of AgeGateModal, TransferModal, play.tsx, index.tsx, nfts.tsx confirms all interactive elements have correct roles + labels and error states use `accessibilityRole="alert"`
+
+**Deployment Runbook**
+- `docs/DEPLOYMENT_RUNBOOK.md`: Prisma migration commands (prisma db push, SQL rollback), NFTProxyVoucher re-deploy commands (compile → deploy → verify → grant MINTER_ROLE → update env), backend new env vars, EAS secrets quick reference
+
+**EAS Secrets Checklist**
+- `mobile/SECRETS_CHECKLIST.md`: All required secrets listed by profile (dev/testnet/production), includes `EXPO_PUBLIC_BALANCE_VERIFY_KEY` derivation command, App Store Connect + Google service account secrets, pre-beta build gate checklist
+
+**Phase Status (post-merge)**
+
+| Sub-phase | Status | PR |
+|-----------|--------|----|
+| 3.1 Foundation | ✅ Merged | PR #7 |
+| 3.2 Wallet & Auth | ✅ Merged | PR #8 (squash) |
+| 3.3 Video Poker | ✅ Merged | PR #9 (squash) |
+| 3.4 IAP Flow | ✅ Merged | PR #9 (squash) |
+| 3.5 NFT Wallet & Redemption | ✅ Merged | PR #10 |
+| 3.6 Security Hardening | ✅ Merged | PR #10 |
+| 3.7 Release Preparation (partial) | 🟡 In progress | PR #10 |
+
+**Remaining before App Store submission (Phase 3.7)**
+- `prisma db push` on deployed DB (UserAnalytics, User.ageConfirmed, IAPReceipt.onChainTxHash)
+- Re-deploy NFTProxyVoucher.sol to Polygon Amoy (adds `commitPurchase()`) — commands in DEPLOYMENT_RUNBOOK.md
+- Populate EAS secrets — checklist in `mobile/SECRETS_CHECKLIST.md`
+- Enable `DEVICE_ATTESTATION_ENFORCE=true` after 50+ shadow samples
+- App Store / Play Store metadata, screenshots, privacy policy URL
+- Jurisdiction block list (recommend blocking US, UK to start)
+- External security audit / penetration testing prep
+
+**Tests total (Phase 3)**:
+| Area | Tests | Status |
+|------|-------|--------|
+| Balance signing (backend) | 8 | ✅ passing |
+| Security integration | 9 | ✅ passing |
+| Analytics service | 9 | ✅ passing |
+| Purchase commitment | 8 | ✅ passing |
+| Provably fair (mobile) | 7 | ✅ written; need npm install |
+| Balance verification (mobile) | 6 | ✅ written; need npm install |
+| NFT redemption (mobile) | 2 | ✅ written; need npm install |
+| Contract commitPurchase | 6 | ✅ passing (Hardhat) |
+| **Total Phase 3** | **~150** | **57 mobile + 26 backend + 6 contract** |
+
+**Questions for Grok**:
+- Admin `isAdmin` JWT claim: Should this move to an `Admin` DB table? (avoids needing to craft tokens manually)
+- Jurisdiction block list: US and UK to start? Or let the age gate + ToS carry it for beta?
+- Cert pinning: real SPKI hashes require a live cert. When is the production domain TLS cert set?
+- Device attestation: iOS 14+ App Attest is preferred. Any minimum iOS version constraint to note in App Store metadata?
