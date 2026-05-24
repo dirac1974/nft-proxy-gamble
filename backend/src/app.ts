@@ -8,6 +8,7 @@ import iapRoutes from "./routes/iap.js";
 import gameRoutes from "./routes/game.js";
 import nftRoutes from "./routes/nfts.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { config } from "./config/index.js";
 
 export function createApp(): express.Application {
   const app = express();
@@ -16,8 +17,9 @@ export function createApp(): express.Application {
   app.use(cors());
   app.use(express.json());
 
-  const authLimiter = rateLimit({ windowMs: 60_000, max: 10, standardHeaders: true, legacyHeaders: false });
-  const gameLimiter = rateLimit({ windowMs: 60_000, max: 60, standardHeaders: true, legacyHeaders: false });
+  const skipInTest = () => config.NODE_ENV === "test";
+  const authLimiter = rateLimit({ windowMs: 60_000, max: 10, skip: skipInTest, standardHeaders: true, legacyHeaders: false });
+  const gameLimiter = rateLimit({ windowMs: 60_000, max: 60, skip: skipInTest, standardHeaders: true, legacyHeaders: false });
 
   app.get("/health", (_req, res) => res.json({ status: "ok", timestamp: new Date().toISOString() }));
 
