@@ -1,14 +1,12 @@
 import Constants from "expo-constants";
 import { useWalletStore } from "@/stores/walletStore";
+import { verifyAndExtractBalance, type SignedBalanceResponse } from "./balanceVerification";
 
 const BASE_URL =
   (Constants.expoConfig?.extra?.apiUrl as string | undefined) ??
   "http://localhost:3000";
 
-async function request<T>(
-  path: string,
-  options: RequestInit = {}
-): Promise<T> {
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = useWalletStore.getState().jwtToken;
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
@@ -27,6 +25,16 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
+// Verify a signed balance response and extract the coin balance.
+// Throws if signature is invalid or expired — prevents showing untrusted balance.
+function extractVerifiedBalance(response: SignedBalanceResponse): number {
+  const balance = verifyAndExtractBalance(response);
+  if (balance === null) {
+    throw new Error("Balance signature verification failed — please reconnect.");
+  }
+  return balance;
+}
+
 // Auth
 export const authApi = {
   nonce: (address: string) =>
@@ -39,9 +47,12 @@ export const authApi = {
     }),
 };
 
-// Balance
+// Balance — returns verified balance only
 export const balanceApi = {
-  get: () => request<{ coinBalance: number }>("/balance"),
+  get: async (): Promise<number> => {
+    const resp = await request<SignedBalanceResponse>("/balance");
+    return extractVerifiedBalance(resp);
+  },
 };
 
 // Game
@@ -49,7 +60,7 @@ export const gameApi = {
   startSession: (betAmount: number) =>
     request<{ sessionId: string; serverSeedHash: string; clientSeed: string }>(
       "/game/start-session",
-      { method: "POST", body: JSON.stringify({ betAmount }) }
+      { method: "POST", body: JSON.stringify({ betAmount }) },
     ),
 
   deal: (sessionId: string) =>
@@ -58,23 +69,37 @@ export const gameApi = {
       body: JSON.stringify({ sessionId }),
     }),
 
-  draw: (sessionId: string, holds: boolean[]) =>
-    request<{
-      drawnCards: number[];
-      rank: string;
-      payout: number;
-      serverSeed: string;
-      newBalance: number;
-    }>("/game/draw", {
+  draw: async (
+    sessionId: string,
+    holds: boolean[],
+  ): Promise<{
+    drawnCards: number[];
+    rank: string;
+    payout: number;
+    serverSeed: string;
+    newBalance: number;
+  }> => {
+    const resp = await request<
+      SignedBalanceResponse & { drawnCards: number[]; rank: string; payout: number; serverSeed: string }
+    >("/game/draw", {
       method: "POST",
       body: JSON.stringify({ sessionId, holds }),
-    }),
+    });
+    const newBalance = extractVerifiedBalance(resp);
+    return { drawnCards: resp.drawnCards, rank: resp.rank, payout: resp.payout, serverSeed: resp.serverSeed, newBalance };
+  },
 
-  cashout: (sessionId: string, coinsToCashout: number) =>
-    request<{ voucherId: string; mintStatus: string }>("/game/cashout", {
-      method: "POST",
-      body: JSON.stringify({ sessionId, coinsToCashout }),
-    }),
+  cashout: async (
+    sessionId: string,
+    coinsToCashout: number,
+  ): Promise<{ voucherId: string; mintStatus: string; newBalance: number }> => {
+    const resp = await request<SignedBalanceResponse & { voucherId: string; mintStatus: string }>(
+      "/game/cashout",
+      { method: "POST", body: JSON.stringify({ sessionId, coinsToCashout }) },
+    );
+    const newBalance = extractVerifiedBalance(resp);
+    return { voucherId: resp.voucherId, mintStatus: resp.mintStatus, newBalance };
+  },
 };
 
 // NFTs
@@ -91,11 +116,17 @@ export const nftApi = {
     >("/nfts"),
 };
 
-// IAP
+// IAP — path corrected to match backend route
 export const iapApi = {
-  verify: (platform: "apple" | "google", receipt: string) =>
-    request<{ coinsAdded: number; newBalance: number }>("/iap/verify", {
-      method: "POST",
-      body: JSON.stringify({ platform, receipt }),
-    }),
+  verify: async (
+    platform: "apple" | "google",
+    receipt: string,
+  ): Promise<{ coinsGranted: number; newBalance: number }> => {
+    const resp = await request<SignedBalanceResponse & { coinsGranted: number }>(
+      "/iap/verify-purchase",
+      { method: "POST", body: JSON.stringify({ platform, receiptData: receipt }) },
+    );
+    const newBalance = extractVerifiedBalance(resp);
+    return { coinsGranted: resp.coinsGranted, newBalance };
+  },
 };

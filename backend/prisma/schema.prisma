@@ -76,15 +76,16 @@ model NFTVoucher {
 }
 
 model IAPReceipt {
-  id           String      @id @default(cuid())
-  userId       String
-  user         User        @relation(fields: [userId], references: [id])
-  platform     String
-  receiptHash  String      @unique
-  productId    String
-  coinsGranted Int
-  createdAt    DateTime    @default(now())
-  transaction  Transaction?
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+  platform       String
+  receiptHash    String       @unique
+  productId      String
+  coinsGranted   Int
+  onChainTxHash  String?      // Polygon tx hash of PurchaseCommitted event (null until batch flushes)
+  createdAt      DateTime     @default(now())
+  transaction    Transaction?
 }
 
 model Transaction {

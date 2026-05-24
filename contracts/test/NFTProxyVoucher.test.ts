@@ -418,4 +418,69 @@ describe("NFTProxyVoucher", function () {
       voucher.connect(minter).mint(user1.address, 100, GAME, ethers.ZeroHash)
     ).to.be.revertedWith("Invalid session id");
   });
+
+  // ============================================================
+  // T35–T40  Phase 3.6 — commitPurchase tests
+  // ============================================================
+
+  it("T35. commitPurchase emits PurchaseCommitted with correct args", async function () {
+    const receiptHash = ethers.keccak256(ethers.toUtf8Bytes("receipt-abc123"));
+    const tx = await voucher
+      .connect(minter)
+      .commitPurchase(user1.address, 100n, receiptHash);
+    const receipt = await tx.wait();
+
+    // Find the PurchaseCommitted event
+    const event = receipt.logs
+      .map((log: any) => {
+        try {
+          return voucher.interface.parseLog(log);
+        } catch {
+          return null;
+        }
+      })
+      .find((e: any) => e?.name === "PurchaseCommitted");
+
+    expect(event).to.not.be.null;
+    expect(event!.args.user).to.equal(user1.address);
+    expect(event!.args.coinsAdded).to.equal(100n);
+    expect(event!.args.receiptHash).to.equal(receiptHash);
+    expect(event!.args.timestamp).to.be.gt(0n);
+  });
+
+  it("T36. commitPurchase reverts for non-MINTER_ROLE", async function () {
+    const receiptHash = ethers.keccak256(ethers.toUtf8Bytes("receipt-xyz"));
+    await expect(
+      voucher.connect(user1).commitPurchase(user1.address, 100n, receiptHash)
+    ).to.be.revertedWithCustomError(voucher, "AccessControlUnauthorizedAccount");
+  });
+
+  it("T37. commitPurchase reverts on zero user address", async function () {
+    const receiptHash = ethers.keccak256(ethers.toUtf8Bytes("receipt-zero"));
+    await expect(
+      voucher.connect(minter).commitPurchase(ethers.ZeroAddress, 100n, receiptHash)
+    ).to.be.revertedWith("Zero user address");
+  });
+
+  it("T38. commitPurchase reverts on zero coinsAdded", async function () {
+    const receiptHash = ethers.keccak256(ethers.toUtf8Bytes("receipt-zero-coins"));
+    await expect(
+      voucher.connect(minter).commitPurchase(user1.address, 0n, receiptHash)
+    ).to.be.revertedWith("Zero coins");
+  });
+
+  it("T39. commitPurchase reverts on empty receiptHash", async function () {
+    await expect(
+      voucher.connect(minter).commitPurchase(user1.address, 100n, ethers.ZeroHash)
+    ).to.be.revertedWith("Empty receipt hash");
+  });
+
+  it("T40. commitPurchase gas < 50,000 (event-only, no storage)", async function () {
+    const receiptHash = ethers.keccak256(ethers.toUtf8Bytes("receipt-gas-test"));
+    const tx = await voucher
+      .connect(minter)
+      .commitPurchase(user1.address, 500n, receiptHash);
+    const receipt = await tx.wait();
+    expect(receipt.gasUsed).to.be.lt(50_000n);
+  });
 });

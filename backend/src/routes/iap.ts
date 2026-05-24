@@ -4,6 +4,8 @@ import { prisma } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { verifyAppleReceipt, verifyGoogleReceipt } from "../services/iapVerifier.js";
+import { signBalance } from "../services/balanceSigning.js";
+import { queuePurchaseCommitment } from "../services/purchaseCommitmentService.js";
 
 const router = Router();
 
@@ -32,7 +34,7 @@ router.post("/verify-purchase", requireAuth, async (req, res, next) => {
     if (!result.valid) throw new AppError(422, "Receipt is invalid or unrecognized product");
 
     // Atomic: create receipt + credit balance in one transaction
-    const [, user] = await prisma.$transaction([
+    const [receipt, user] = await prisma.$transaction([
       prisma.iAPReceipt.create({
         data: {
           userId,
@@ -45,11 +47,22 @@ router.post("/verify-purchase", requireAuth, async (req, res, next) => {
       prisma.user.update({
         where: { id: userId },
         data: { coinBalance: { increment: result.coinsGranted } },
-        select: { coinBalance: true },
+        select: { coinBalance: true, walletAddress: true },
       }),
     ]);
 
-    res.json({ coinsGranted: result.coinsGranted, newBalance: user.coinBalance });
+    // Queue on-chain commitment (async — does not block coin credit)
+    queuePurchaseCommitment({
+      user: user.walletAddress as `0x${string}`,
+      coinsAdded: result.coinsGranted,
+      receiptHash: `0x${result.receiptHash}` as `0x${string}`,
+      iapRecordId: receipt.id,
+    }).catch((err) => console.error("[commitPurchase] queue failed", err));
+
+    res.json({
+      coinsGranted: result.coinsGranted,
+      ...signBalance(userId, user.coinBalance),
+    });
   } catch (err: unknown) {
     // Prisma unique violation on receiptHash = replay attack
     if ((err as { code?: string }).code === "P2002") {

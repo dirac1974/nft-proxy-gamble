@@ -48,8 +48,14 @@ export interface IAPVerifyResult {
 }
 
 export const IAP_PRODUCTS: Record<string, number> = {
+  "nfpg.coins.100": 100,
+  "nfpg.coins.550": 550,
+  "nfpg.coins.1200": 1200,
+  // Legacy product IDs — kept for any existing receipts
   coins_100: 100,
   coins_500: 500,
   coins_1000: 1000,
   coins_5000: 5000,
 };
+
+export type Address = `0x${string}`;

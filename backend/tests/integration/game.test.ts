@@ -71,13 +71,17 @@ describe("full game flow: start → deal → draw", () => {
     expect(dealRes.status).toBe(200);
     expect((dealRes.body as { dealtCards: number[] }).dealtCards).toHaveLength(5);
 
-    const balanceAfter = (
-      await request(app).get("/balance").set("Authorization", `Bearer ${authToken}`)
-    ).body.coinBalance as number;
+    // Balance after deal: signed response
+    const balanceRes = await request(app)
+      .get("/balance")
+      .set("Authorization", `Bearer ${authToken}`);
+    const balanceAfter = balanceRes.body.coinBalance as number;
     expect(balanceAfter).toBe(balanceBefore - 2);
+    // Verify signed balance format
+    expect(balanceRes.body.balanceSig).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it("draw returns rank, payout, and final hand", async () => {
+  it("draw returns rank, payout, serverSeed, signed balance, and final hand", async () => {
     const drawRes = await request(app)
       .post("/game/draw")
       .set("Authorization", `Bearer ${authToken}`)
@@ -87,6 +91,11 @@ describe("full game flow: start → deal → draw", () => {
     expect((drawRes.body as { drawnCards: number[] }).drawnCards).toHaveLength(5);
     expect(typeof (drawRes.body as { payout: number }).payout).toBe("number");
     expect(typeof (drawRes.body as { rank: string }).rank).toBe("string");
+    // Commit-reveal: serverSeed revealed on draw
+    expect((drawRes.body as { serverSeed: string }).serverSeed).toBeTruthy();
+    // Signed balance: balanceSig + sigTimestamp present
+    expect((drawRes.body as { balanceSig: string }).balanceSig).toMatch(/^[0-9a-f]{64}$/);
+    expect(typeof (drawRes.body as { sigTimestamp: number }).sigTimestamp).toBe("number");
   });
 
   it("second draw on same session returns 409", async () => {
@@ -110,7 +119,7 @@ describe("POST /game/cashout", () => {
     cashoutSessionId = (startRes.body as { sessionId: string }).sessionId;
   });
 
-  it("creates an NFT voucher and returns 202", async () => {
+  it("creates an NFT voucher and returns 202 with signed balance", async () => {
     const res = await request(app)
       .post("/game/cashout")
       .set("Authorization", `Bearer ${authToken}`)
@@ -119,6 +128,11 @@ describe("POST /game/cashout", () => {
     expect(res.status).toBe(202);
     expect((res.body as { voucherId: string }).voucherId).toBeTruthy();
     expect((res.body as { mintStatus: string }).mintStatus).toBe("PENDING");
+    // Signed balance in cashout response
+    expect((res.body as { balanceSig: string }).balanceSig).toMatch(/^[0-9a-f]{64}$/);
+    expect(typeof (res.body as { sigTimestamp: number }).sigTimestamp).toBe("number");
+    // Post-cashout balance should be 900 (1000 - 100)
+    expect((res.body as { coinBalance: number }).coinBalance).toBe(900);
   });
 
   it("returns 402 when coinsToCashout > balance", async () => {

@@ -6,8 +6,6 @@ import { useWalletStore } from "@/stores/walletStore";
 const IS_DEV = process.env.NODE_ENV !== "production";
 export const CHAIN = IS_DEV ? polygonAmoy : polygon;
 
-// WalletConnect provider — injected by @walletconnect/modal-react-native
-// The modal is initialized in _layout.tsx and exposes a global provider.
 let _walletClient: WalletClient | null = null;
 
 export function setWalletClient(provider: unknown): void {
@@ -29,9 +27,9 @@ export async function signAndAuthenticate(address: Address): Promise<void> {
     account: address,
     message: nonce,
   });
-  const { token } = await authApi.verify(address, signature);
+  const { token, userId } = await authApi.verify(address, signature);
   useWalletStore.getState().connect(address);
-  useWalletStore.getState().setJwt(token);
+  useWalletStore.getState().setJwt(token, userId);
 }
 
 // Card display helpers (card integer 0-51 → rank + suit)
