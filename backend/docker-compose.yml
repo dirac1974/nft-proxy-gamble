@@ -1,0 +1,36 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nftp
+      POSTGRES_PASSWORD: nftp_dev
+      POSTGRES_DB: nft_proxy_gamble
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nftp -d nft_proxy_gamble"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://nftp:nftp_dev@db:5432/nft_proxy_gamble
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+
+volumes:
+  pgdata:
