@@ -1,17 +1,15 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-
 // Mock dependencies before importing service
-vi.mock("../../src/db/client.js", () => ({
+jest.mock("../../src/db/client.js", () => ({
   prisma: {
-    iAPReceipt: { update: vi.fn() },
+    iAPReceipt: { update: jest.fn() },
   },
 }));
 
-const mockCommitPurchase = vi.fn();
-const mockWait = vi.fn();
+const mockCommitPurchase = jest.fn();
+const mockWait = jest.fn();
 
-vi.mock("../../src/services/mintOrchestrator.js", () => ({
-  getCommitContract: vi.fn(() => ({
+jest.mock("../../src/services/mintOrchestrator.js", () => ({
+  getCommitContract: jest.fn(() => ({
     commitPurchase: mockCommitPurchase,
   })),
 }));
@@ -25,8 +23,8 @@ import {
 import { prisma } from "../../src/db/client.js";
 import { getCommitContract } from "../../src/services/mintOrchestrator.js";
 
-const mockUpdate = prisma.iAPReceipt.update as ReturnType<typeof vi.fn>;
-const mockGetContract = getCommitContract as ReturnType<typeof vi.fn>;
+const mockUpdate = prisma.iAPReceipt.update as jest.Mock;
+const mockGetContract = getCommitContract as jest.Mock;
 
 const SAMPLE: Parameters<typeof queuePurchaseCommitment>[0] = {
   user: "0xdeadbeef00000000000000000000000000000001",
@@ -37,7 +35,7 @@ const SAMPLE: Parameters<typeof queuePurchaseCommitment>[0] = {
 
 beforeEach(() => {
   _resetForTest();
-  vi.clearAllMocks();
+  jest.clearAllMocks();
   mockCommitPurchase.mockResolvedValue({ wait: mockWait });
   mockWait.mockResolvedValue({ hash: "0xtxhash001" });
   mockUpdate.mockResolvedValue({});
@@ -100,7 +98,6 @@ describe("flushPendingCommitments", () => {
     await queuePurchaseCommitment({ ...SAMPLE, iapRecordId: "fail-a" });
     await queuePurchaseCommitment({ ...SAMPLE, iapRecordId: "success-b" });
     await flushPendingCommitments();
-    // Second item should still be committed despite first failure
     expect(mockCommitPurchase).toHaveBeenCalledTimes(2);
     expect(mockUpdate).toHaveBeenCalledTimes(1); // only the success
   });

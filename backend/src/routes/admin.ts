@@ -30,9 +30,10 @@ router.get("/flagged-users", requireAdmin, async (req, res, next) => {
   try {
     const { riskLevel, page, limit } = querySchema.parse(req.query);
 
+    type RL = "LOW" | "MEDIUM" | "HIGH" | "BLOCKED";
     const where = riskLevel
-      ? { riskLevel: riskLevel as "LOW" | "MEDIUM" | "HIGH" | "BLOCKED" }
-      : { riskLevel: { in: ["MEDIUM", "HIGH", "BLOCKED"] as const } };
+      ? { riskLevel: riskLevel as RL }
+      : { riskLevel: { in: ["MEDIUM", "HIGH", "BLOCKED"] as RL[] } };
 
     const [rows, total] = await Promise.all([
       prisma.userAnalytics.findMany({

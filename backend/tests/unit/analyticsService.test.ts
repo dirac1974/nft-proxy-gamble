@@ -1,15 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-
 // Mock prisma before importing service
-vi.mock("../../src/db/client.js", () => ({
+jest.mock("../../src/db/client.js", () => ({
   prisma: {
     transaction: {
-      count: vi.fn(),
-      aggregate: vi.fn(),
+      count: jest.fn(),
+      aggregate: jest.fn(),
     },
     userAnalytics: {
-      upsert: vi.fn(),
-      findUnique: vi.fn(),
+      upsert: jest.fn(),
+      findUnique: jest.fn(),
     },
   },
 }));
@@ -17,10 +15,10 @@ vi.mock("../../src/db/client.js", () => ({
 import { prisma } from "../../src/db/client.js";
 import { recordAnalyticsEvent, getRiskLevel, type RiskLevel } from "../../src/services/analyticsService.js";
 
-const mockCount = prisma.transaction.count as ReturnType<typeof vi.fn>;
-const mockAggregate = prisma.transaction.aggregate as ReturnType<typeof vi.fn>;
-const mockUpsert = prisma.userAnalytics.upsert as ReturnType<typeof vi.fn>;
-const mockFindUnique = prisma.userAnalytics.findUnique as ReturnType<typeof vi.fn>;
+const mockCount = prisma.transaction.count as jest.Mock;
+const mockAggregate = prisma.transaction.aggregate as jest.Mock;
+const mockUpsert = prisma.userAnalytics.upsert as jest.Mock;
+const mockFindUnique = prisma.userAnalytics.findUnique as jest.Mock;
 
 function setupMocks({
   hands = 10,
@@ -42,7 +40,7 @@ function setupMocks({
 }
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  jest.clearAllMocks();
 });
 
 describe("recordAnalyticsEvent", () => {

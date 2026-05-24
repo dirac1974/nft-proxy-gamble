@@ -4,7 +4,10 @@ import { config } from "../config/index.js";
 // Derived from JWT_SECRET so no new env var is needed.
 // Separate key means a balance token cannot be confused with a JWT.
 function deriveSigningKey(): Buffer {
-  return createHmac("sha256", config.JWT_SECRET).update("nfpg_balance_v1").digest();
+  // Use process.env directly so _resetSigningKeyForTest() works in unit tests
+  // (config object caches values at startup, env mutations aren't reflected through it).
+  const secret = process.env.JWT_SECRET ?? config.JWT_SECRET;
+  return createHmac("sha256", secret).update("nfpg_balance_v1").digest();
 }
 
 let _signingKey: Buffer | null = null;
