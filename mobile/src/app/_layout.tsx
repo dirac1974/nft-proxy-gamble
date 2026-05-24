@@ -7,6 +7,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { WalletConnectModal } from "@walletconnect/modal-react-native";
 import { colors } from "@/theme";
 import { useWalletStore } from "@/stores/walletStore";
+import { AgeGateModal } from "@/components/AgeGateModal";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,6 +31,8 @@ const SESSION_PARAMS = {
 
 export default function RootLayout() {
   const hydrate = useWalletStore((s) => s.hydrate);
+  const isAuthenticated = useWalletStore((s) => s.isAuthenticated);
+  const ageConfirmed = useWalletStore((s) => s.ageConfirmed);
 
   useEffect(() => {
     hydrate();
@@ -54,6 +57,7 @@ export default function RootLayout() {
             projectId={PROJECT_ID}
             sessionParams={SESSION_PARAMS}
           />
+          <AgeGateModal visible={isAuthenticated && !ageConfirmed} />
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

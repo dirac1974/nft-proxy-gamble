@@ -53,9 +53,31 @@ router.post("/verify", async (req, res, next) => {
     });
 
     const token = signToken({ userId: user.id, walletAddress: lower });
-    res.json({ token, userId: user.id });
+    res.json({ token, userId: user.id, ageConfirmed: user.ageConfirmed });
   } catch (err) {
     next(err);
+  }
+});
+
+// POST /auth/confirm-age — called once after user accepts 18+ modal
+router.post("/confirm-age", async (req, res, next) => {
+  // Requires auth header but not walletStore — anyone with a valid JWT can confirm
+  const header = req.headers.authorization;
+  if (!header?.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Missing Authorization header" });
+    return;
+  }
+  try {
+    const jwt = await import("jsonwebtoken");
+    const { config } = await import("../config/index.js");
+    const payload = jwt.default.verify(header.slice(7), config.JWT_SECRET) as { userId: string };
+    await prisma.user.update({
+      where: { id: payload.userId },
+      data: { ageConfirmed: true },
+    });
+    res.json({ ageConfirmed: true });
+  } catch {
+    next(new AppError(401, "Invalid or expired token"));
   }
 });
 

@@ -42,10 +42,13 @@ export const authApi = {
     request<{ nonce: string }>(`/auth/nonce?address=${address}`),
 
   verify: (address: string, signature: string) =>
-    request<{ token: string; userId: string }>("/auth/verify", {
+    request<{ token: string; userId: string; ageConfirmed: boolean }>("/auth/verify", {
       method: "POST",
       body: JSON.stringify({ address, signature }),
     }),
+
+  confirmAge: () =>
+    request<{ ageConfirmed: boolean }>("/auth/confirm-age", { method: "POST" }),
 };
 
 // Balance — returns verified balance only

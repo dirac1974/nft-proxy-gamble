@@ -38,6 +38,7 @@ export interface DrawResult {
 export interface JwtPayload {
   userId: string;
   walletAddress: string;
+  isAdmin?: boolean;
 }
 
 export interface IAPVerifyResult {

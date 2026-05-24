@@ -11,8 +11,10 @@ interface WalletState {
   jwtToken: string | null;
   isConnecting: boolean;
   isAuthenticated: boolean;
+  ageConfirmed: boolean;
   connect: (address: string) => void;
-  setJwt: (token: string, userId: string) => void;
+  setJwt: (token: string, userId: string, ageConfirmed?: boolean) => void;
+  setAgeConfirmed: () => void;
   disconnect: () => Promise<void>;
   hydrate: () => Promise<void>;
 }
@@ -23,17 +25,20 @@ export const useWalletStore = create<WalletState>((set) => ({
   jwtToken: null,
   isConnecting: false,
   isAuthenticated: false,
+  ageConfirmed: false,
 
   connect: (address) => {
     SecureStore.setItemAsync(WALLET_KEY, address).catch(() => null);
     set({ address, isConnecting: false });
   },
 
-  setJwt: (token, userId) => {
+  setJwt: (token, userId, ageConfirmed = false) => {
     SecureStore.setItemAsync(JWT_KEY, token).catch(() => null);
     SecureStore.setItemAsync(USERID_KEY, userId).catch(() => null);
-    set({ jwtToken: token, userId, isAuthenticated: true });
+    set({ jwtToken: token, userId, isAuthenticated: true, ageConfirmed });
   },
+
+  setAgeConfirmed: () => set({ ageConfirmed: true }),
 
   disconnect: async () => {
     await Promise.all([
@@ -52,6 +57,7 @@ export const useWalletStore = create<WalletState>((set) => ({
     ]);
     if (token && address && userId) {
       set({ jwtToken: token, address, userId, isAuthenticated: true });
+      // ageConfirmed is fetched fresh from server on next auth check — not persisted locally
     }
   },
 }));

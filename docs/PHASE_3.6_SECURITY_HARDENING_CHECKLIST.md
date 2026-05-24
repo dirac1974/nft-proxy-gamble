@@ -29,7 +29,7 @@
 - [x] `POST /game/cashout` — counts `CASHOUT_MINT` transactions in current UTC day per user
 - [x] Returns `429` with message `Daily cashout limit reached (5/day)` when exceeded
 - [x] Integration test: `security.test.ts` — seeds 5 cashouts, verifies 6th returns 429
-- [ ] TODO: Add response header `X-Cashout-Remaining: N` so mobile can show remaining quota
+- [x] `X-Cashout-Remaining: N` header added to cashout 202 response
 
 ### 4. IAP Route Path Consistency [DONE ✅]
 - [x] Backend route: `POST /iap/verify-purchase`
@@ -62,25 +62,36 @@
 - [ ] TODO: `prisma db push` / `prisma migrate dev` on deployed DB
 - [ ] TODO: Integration test: verify `onChainTxHash` populated after flush (requires Amoy node)
 
-### 8. Certificate Pinning
-- [ ] Install `react-native-ssl-pinning` or configure OkHttp pin (Android)
-- [ ] Add API hostname + certificate fingerprints to mobile config
-- [ ] Test: MITM via mitmproxy fails with cert pin error
-- [ ] Fallback strategy: pin rotation procedure for cert expiry
+### 8. Certificate Pinning [DONE ✅]
+- [x] `mobile/app.config.js` — iOS `NSPinnedDomains` in `Info.plist` (OS-enforced TLS)
+- [x] `mobile/plugins/withAndroidCertPinning.js` — Android `network_security_config.xml` config plugin
+- [x] Pin values from `CERT_PIN_PRIMARY` / `CERT_PIN_BACKUP` EAS secrets; disabled if placeholders
+- [x] Debug overrides: cleartext + user trust anchors allowed in debug builds
+- [x] `docs/CERT_PINNING_ROTATION.md` — rotation runbook with SPKI hash generation commands
+- [ ] TODO: Populate real cert fingerprints in EAS secrets before beta build
+- [ ] TODO: Manual MITM test (mitmproxy) to verify rejection
 
-### 9. Device Attestation — Stub to Enforced
-- [ ] Install `@react-native-app-attest/DCAppAttestService` (iOS) + `@anush008/react-native-play-integrity` (Android)
-- [ ] `backend/src/routes/attestation.ts` — `POST /attestation/verify` route
-- [ ] Backend verifies assertion with Apple/Google APIs
-- [ ] Enforce at `POST /game/cashout`: reject if `attestation.riskLevel === "high"`
-- [ ] Fallback: if Apple/Google attest service unavailable → allow play, require re-attest before cashout
-- [ ] Tests: mock high-risk attestation → cashout rejected
+### 9. Device Attestation — Shadow Mode [DONE ✅ — shadow; enforce pending]
+- [x] `backend/src/services/deviceAttestationService.ts` — Apple + Google stub verifiers
+- [x] `DEVICE_ATTESTATION_ENFORCE` config flag (default false = shadow mode)
+- [x] Shadow mode: logs result, never blocks; enforce mode: 403 on bad token
+- [x] Backend checks attestation at `POST /game/cashout` and `POST /iap/verify-purchase`
+- [x] `mobile/src/services/deviceAttestationService.ts` — shadow HMAC token sent with cashout/IAP
+- [ ] TODO: Implement real Apple App Attest API call (requires `APPLE_APP_ATTEST_TEAM_ID`)
+- [ ] TODO: Implement real Google Play Integrity API call (requires service account)
+- [ ] TODO: Set `DEVICE_ATTESTATION_ENFORCE=true` after 50+ shadow samples confirm coverage
 
-### 10. Behavioral Analytics
-- [ ] DB: add `user_analytics` table (see `SECURITY_ARCHITECTURE.md` §Behavioral Analytics)
-- [ ] Backend: populate `hands_played`, `total_wagered`, `total_won`, `cashouts_today` after each game/cashout
-- [ ] Anomaly triggers wired: win_rate > 42% → flag; coins_added_1h > 10,000 → soft block; cashouts_today > 5 → rate limit
-- [ ] Admin endpoint: `GET /admin/flagged-users` (requires `ADMIN_ROLE` JWT claim)
+### 10. Behavioral Analytics [DONE ✅]
+- [x] `UserAnalytics` table in `prisma/schema.prisma` — rolling window counters + `RiskLevel` field
+- [x] `backend/src/services/analyticsService.ts` — `recordAnalyticsEvent()`, `getRiskLevel()`
+- [x] Anomaly flags: `high_velocity` (>400 hands/hr), `high_win_rate` (>42% with ≥20 hands), `high_coins_added` (>10k/hr), `cashout_limit_reached`
+- [x] Risk ladder: 0 flags=LOW, 1=MEDIUM, 2=HIGH, 3+=BLOCKED
+- [x] `BLOCKED` users blocked at cashout endpoint (403)
+- [x] Fire-and-forget analytics in draw/cashout/IAP routes — never blocks gameplay
+- [x] 9 unit tests
+- [x] `backend/src/routes/admin.ts` — `GET /admin/flagged-users`, `POST /admin/users/:id/set-risk`
+- [x] `requireAdmin` middleware — `isAdmin: boolean` JWT claim check
+- [x] `JwtPayload` extended with `isAdmin?: boolean`
 
 ---
 
@@ -124,8 +135,10 @@ Run: `cd backend && npx prisma db push` (dev) or `npx prisma migrate dev --name 
 | IAP replay prevention | 1 integration | ✅ Done |
 | `commitPurchase` (contract) | 0 | 🔲 TODO |
 | `purchaseCommitmentService` (unit) | 0 | 🔲 TODO |
-| `balanceVerification.ts` (mobile) | 0 | 🔲 TODO |
-| Certificate pinning | 0 | 🔲 TODO (Phase 3.6 end) |
-| Device attestation | 0 | 🔲 TODO (Phase 3.6 end) |
+| `balanceVerification.ts` (mobile) | 6 | ✅ Done |
+| Behavioral analytics (backend unit) | 9 | ✅ Done |
+| Certificate pinning (manual MITM) | 0 | 🔲 TODO (pre-beta) |
+| Device attestation shadow mode | 0 | 🔲 TODO |
+| Admin flagged-users endpoint | 0 | 🔲 TODO |
 
-**Total new tests in this sprint**: 16 (8 unit + 8 integration)
+**Total new tests in this sprint**: 31 (17 unit + 14 integration)

@@ -27,9 +27,9 @@ export async function signAndAuthenticate(address: Address): Promise<void> {
     account: address,
     message: nonce,
   });
-  const { token, userId } = await authApi.verify(address, signature);
+  const { token, userId, ageConfirmed } = await authApi.verify(address, signature);
   useWalletStore.getState().connect(address);
-  useWalletStore.getState().setJwt(token, userId);
+  useWalletStore.getState().setJwt(token, userId, ageConfirmed);
 }
 
 // Card display helpers (card integer 0-51 → rank + suit)

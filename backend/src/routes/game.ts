@@ -196,6 +196,7 @@ router.post("/cashout", requireAuth, async (req, res, next) => {
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new AppError(404, "User not found");
+    if (!user.ageConfirmed) throw new AppError(403, "Age confirmation required before cashout.");
     if (user.coinBalance < coinsToCashout) throw new AppError(402, "Insufficient coin balance");
 
     // Block BLOCKED-risk users from cashing out
@@ -268,11 +269,13 @@ router.post("/cashout", requireAuth, async (req, res, next) => {
       (err) => console.error("[mint] failed for voucher", voucher.id, err),
     );
 
-    res.status(202).json({
-      voucherId: voucher.id,
-      mintStatus: "PENDING",
-      ...signBalance(userId, user.coinBalance - coinsToCashout),
-    });
+    res.status(202)
+      .header("X-Cashout-Remaining", String(MAX_CASHOUTS_PER_DAY - cashoutsToday - 1))
+      .json({
+        voucherId: voucher.id,
+        mintStatus: "PENDING",
+        ...signBalance(userId, user.coinBalance - coinsToCashout),
+      });
   } catch (err) {
     next(err);
   }

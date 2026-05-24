@@ -38,6 +38,7 @@ model User {
   id            String        @id @default(cuid())
   walletAddress String        @unique
   coinBalance   Int           @default(0)
+  ageConfirmed  Boolean       @default(false)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   sessions      GameSession[]
