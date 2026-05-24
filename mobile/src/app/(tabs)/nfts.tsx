@@ -1,83 +1,212 @@
-import React from "react";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { colors, radius, spacing, typography } from "@/theme";
 import { GlassCard } from "@/components/GlassCard";
+import { TransferModal } from "@/components/TransferModal";
 import { useWalletStore } from "@/stores/walletStore";
-import { nftApi, gameApi } from "@/services/api";
+import { nftApi } from "@/services/api";
+import {
+  redeemVoucher,
+  waitForRedemption,
+  transferVoucher,
+  polygonscanUrl,
+} from "@/services/nftRedemptionService";
+import type { Address } from "viem";
 
 interface Voucher {
   id: string;
-  coinAmount: number;
+  coinBalance: number;
   mintStatus: string;
-  tokenId: number | null;
+  tokenId: string | null;
+  txHash: string | null;
+  gameType: string;
   createdAt: string;
 }
 
-function VoucherCard({ item }: { item: Voucher }) {
-  const qc = useQueryClient();
+type TxStatus = "idle" | "pending" | "confirming" | "confirmed" | "failed";
+
+function VoucherCard({
+  item,
+  walletAddress,
+  onRedeemed,
+}: {
+  item: Voucher;
+  walletAddress: string;
+  onRedeemed: () => void;
+}) {
+  const [redeemStatus, setRedeemStatus] = useState<TxStatus>("idle");
+  const [redeemTxHash, setRedeemTxHash] = useState<string | null>(null);
+  const [redeemError, setRedeemError] = useState<string | null>(null);
+  const [transferOpen, setTransferOpen] = useState(false);
+
   const isPending = item.mintStatus === "PENDING" || item.mintStatus === "MINTING";
-  const isMinted = item.mintStatus === "MINTED";
+  const isMinted = item.mintStatus === "MINTED" && item.tokenId != null;
+  const isRedeemBusy = redeemStatus === "pending" || redeemStatus === "confirming";
 
   const date = new Date(item.createdAt).toLocaleDateString(undefined, {
-    month: "short", day: "numeric", year: "numeric",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   });
 
+  const handleRedeem = useCallback(async () => {
+    if (!item.tokenId) return;
+    setRedeemStatus("pending");
+    setRedeemError(null);
+    try {
+      const txHash = await redeemVoucher(BigInt(item.tokenId), walletAddress as Address);
+      setRedeemTxHash(txHash);
+      setRedeemStatus("confirming");
+      await waitForRedemption(txHash);
+      setRedeemStatus("confirmed");
+      onRedeemed();
+    } catch (err) {
+      setRedeemError((err as Error).message ?? "Redemption failed");
+      setRedeemStatus("failed");
+    }
+  }, [item.tokenId, walletAddress, onRedeemed]);
+
+  const handleTransfer = useCallback(
+    async (toAddress: string) => {
+      if (!item.tokenId) throw new Error("Token not yet minted");
+      const txHash = await transferVoucher(
+        BigInt(item.tokenId),
+        walletAddress as Address,
+        toAddress as Address,
+      );
+      await waitForRedemption(txHash); // reuse wait helper
+      onRedeemed();
+    },
+    [item.tokenId, walletAddress, onRedeemed],
+  );
+
   return (
-    <GlassCard neonBorder={isMinted} style={styles.voucherCard}>
-      <View style={styles.voucherHeader}>
-        <View>
-          <Text style={styles.voucherCoins}>{item.coinAmount.toLocaleString()} coins</Text>
-          <Text style={styles.voucherUsd}>≈ ${(item.coinAmount / 100).toFixed(2)} USDC</Text>
+    <>
+      <GlassCard neonBorder={isMinted} style={styles.voucherCard}>
+        <View style={styles.voucherHeader}>
+          <View>
+            <Text style={styles.voucherCoins}>{item.coinBalance.toLocaleString()} coins</Text>
+            <Text style={styles.voucherUsd}>
+              ≈ ${(item.coinBalance / 100).toFixed(2)} USDC
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.statusBadge,
+              isPending && styles.statusPending,
+              isMinted && styles.statusMinted,
+              item.mintStatus === "FAILED" && styles.statusFailed,
+            ]}
+          >
+            <Text style={styles.statusText}>{item.mintStatus}</Text>
+          </View>
         </View>
-        <View style={[styles.statusBadge, isPending && styles.statusPending, isMinted && styles.statusMinted]}>
-          <Text style={styles.statusText}>{item.mintStatus}</Text>
-        </View>
-      </View>
 
-      <Text style={styles.voucherDate}>{date}</Text>
+        <Text style={styles.voucherDate}>{date}</Text>
 
-      {item.tokenId != null && (
-        <Text style={styles.tokenId}>Token #{item.tokenId}</Text>
-      )}
+        {item.tokenId != null && (
+          <Text style={styles.tokenId}>Token #{item.tokenId}</Text>
+        )}
 
-      {isMinted && (
-        <View style={styles.actionRow}>
-          <Pressable style={styles.redeemButton}>
-            <Text style={styles.redeemText}>Redeem → USDC</Text>
+        {item.txHash && (
+          <Pressable onPress={() => Linking.openURL(polygonscanUrl(item.txHash!))}>
+            <Text style={styles.txLink} accessibilityRole="link">
+              View mint tx ↗
+            </Text>
           </Pressable>
-          <Pressable style={styles.transferButton}>
-            <Text style={styles.transferText}>Transfer</Text>
-          </Pressable>
-        </View>
-      )}
+        )}
 
-      {isPending && (
-        <View style={styles.pendingRow}>
-          <ActivityIndicator size="small" color={colors.textMuted} />
-          <Text style={styles.pendingText}>Mint in progress…</Text>
-        </View>
-      )}
-    </GlassCard>
+        {isMinted && redeemStatus === "idle" && (
+          <View style={styles.actionRow}>
+            <Pressable
+              style={styles.redeemButton}
+              onPress={handleRedeem}
+              disabled={isRedeemBusy}
+              accessibilityRole="button"
+              accessibilityLabel={`Redeem ${item.coinBalance} coins for USDC`}
+            >
+              <Text style={styles.redeemText}>Redeem → USDC</Text>
+            </Pressable>
+            <Pressable
+              style={styles.transferButton}
+              onPress={() => setTransferOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Transfer NFT to another wallet"
+            >
+              <Text style={styles.transferText}>Transfer</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {isRedeemBusy && (
+          <View style={styles.pendingRow}>
+            <ActivityIndicator size="small" color={colors.neonGreen} />
+            <Text style={styles.pendingText}>
+              {redeemStatus === "pending" ? "Awaiting wallet signature…" : "Confirming on-chain…"}
+            </Text>
+          </View>
+        )}
+
+        {redeemStatus === "confirmed" && redeemTxHash && (
+          <View style={styles.successRow}>
+            <Text style={styles.successText}>Redeemed! USDC sent to your wallet.</Text>
+            <Pressable onPress={() => Linking.openURL(polygonscanUrl(redeemTxHash))}>
+              <Text style={styles.txLink} accessibilityRole="link">
+                View tx ↗
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
+        {redeemStatus === "failed" && redeemError && (
+          <Text style={styles.errorText} accessibilityRole="alert">
+            {redeemError}
+          </Text>
+        )}
+
+        {isPending && (
+          <View style={styles.pendingRow}>
+            <ActivityIndicator size="small" color={colors.textMuted} />
+            <Text style={styles.pendingText}>Mint in progress…</Text>
+          </View>
+        )}
+      </GlassCard>
+
+      <TransferModal
+        visible={transferOpen}
+        coinAmount={item.coinBalance}
+        onClose={() => setTransferOpen(false)}
+        onConfirm={handleTransfer}
+      />
+    </>
   );
 }
 
 export default function NFTsScreen() {
-  const { isAuthenticated } = useWalletStore();
+  const { isAuthenticated, address } = useWalletStore();
+  const qc = useQueryClient();
+
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["nfts"],
     queryFn: nftApi.list,
     enabled: isAuthenticated,
     refetchInterval: 30_000,
   });
+
+  const handleRedeemed = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ["nfts"] });
+    qc.invalidateQueries({ queryKey: ["balance"] });
+  }, [qc]);
 
   if (!isAuthenticated) {
     return (
@@ -112,9 +241,15 @@ export default function NFTsScreen() {
     <FlatList
       style={styles.list}
       contentContainerStyle={styles.listContent}
-      data={data}
-      keyExtractor={(item) => item.id}
-      renderItem={({ item }) => <VoucherCard item={item as Voucher} />}
+      data={data as Voucher[]}
+      keyExtractor={(item) => (item as Voucher).id}
+      renderItem={({ item }) => (
+        <VoucherCard
+          item={item as Voucher}
+          walletAddress={address ?? ""}
+          onRedeemed={handleRedeemed}
+        />
+      )}
       refreshControl={
         <RefreshControl
           refreshing={isRefetching}
@@ -136,7 +271,14 @@ const styles = StyleSheet.create({
   listContent: { padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md },
   header: { ...typography.bodySmall, marginBottom: spacing.xs },
 
-  centred: { flex: 1, backgroundColor: colors.background, justifyContent: "center", alignItems: "center", gap: spacing.md, padding: spacing.xl },
+  centred: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: spacing.md,
+    padding: spacing.xl,
+  },
   lockIcon: { fontSize: 48 },
   lockText: { ...typography.body, textAlign: "center", color: colors.textSecondary },
   emptyIcon: { fontSize: 48 },
@@ -144,11 +286,16 @@ const styles = StyleSheet.create({
   emptyBody: { ...typography.bodySmall, textAlign: "center" },
 
   voucherCard: { gap: spacing.sm },
-  voucherHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  voucherHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
   voucherCoins: { ...typography.heading3, color: colors.neonGreen },
   voucherUsd: { ...typography.bodySmall },
   voucherDate: { ...typography.caption },
   tokenId: { ...typography.mono },
+  txLink: { ...typography.caption, color: colors.purple, textDecorationLine: "underline" },
 
   statusBadge: {
     borderRadius: radius.sm,
@@ -158,22 +305,32 @@ const styles = StyleSheet.create({
   },
   statusPending: { backgroundColor: `${colors.warning}33` },
   statusMinted: { backgroundColor: `${colors.neonGreen}22` },
+  statusFailed: { backgroundColor: `${colors.lose}22` },
   statusText: { ...typography.caption, fontWeight: "700", color: colors.textSecondary },
 
   actionRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.xs },
   redeemButton: {
-    flex: 1, backgroundColor: colors.purple,
-    borderRadius: radius.full, paddingVertical: spacing.sm,
+    flex: 1,
+    backgroundColor: colors.purple,
+    borderRadius: radius.full,
+    paddingVertical: spacing.sm,
     alignItems: "center",
   },
   redeemText: { ...typography.bodySmall, fontWeight: "700" },
   transferButton: {
-    flex: 1, borderWidth: 1, borderColor: colors.border,
-    borderRadius: radius.full, paddingVertical: spacing.sm,
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.full,
+    paddingVertical: spacing.sm,
     alignItems: "center",
   },
   transferText: { ...typography.bodySmall, color: colors.textSecondary },
 
   pendingRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   pendingText: { ...typography.bodySmall, color: colors.textMuted },
+
+  successRow: { gap: spacing.xs },
+  successText: { ...typography.bodySmall, color: colors.neonGreen },
+  errorText: { ...typography.bodySmall, color: colors.lose },
 });

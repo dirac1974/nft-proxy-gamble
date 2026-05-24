@@ -103,17 +103,19 @@ export const gameApi = {
 };
 
 // NFTs
+export interface Voucher {
+  id: string;
+  coinBalance: number;
+  mintStatus: string;
+  tokenId: string | null;
+  txHash: string | null;
+  gameType: string;
+  createdAt: string;
+}
+
 export const nftApi = {
-  list: () =>
-    request<
-      Array<{
-        id: string;
-        coinAmount: number;
-        mintStatus: string;
-        tokenId: number | null;
-        createdAt: string;
-      }>
-    >("/nfts"),
+  list: () => request<Voucher[]>("/nfts"),
+  getById: (id: string) => request<Voucher>(`/nfts/${id}`),
 };
 
 // IAP — path corrected to match backend route
