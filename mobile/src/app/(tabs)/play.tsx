@@ -18,6 +18,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { colors, radius, spacing, typography, shadows } from "@/theme";
 import { Card } from "@/components/Card";
 import { GlassCard } from "@/components/GlassCard";
+import { ConnectWalletSheet } from "@/components/ConnectWalletSheet";
+import { NetworkBanner } from "@/components/NetworkBanner";
 import { useGameStore } from "@/stores/gameStore";
 import { useWalletStore } from "@/stores/walletStore";
 import { gameApi } from "@/services/api";
@@ -103,14 +105,25 @@ export default function VideoPokerScreen() {
 
   if (!isAuthenticated) {
     return (
-      <View style={styles.centred}>
-        <Text style={styles.lockIcon}>🔒</Text>
-        <Text style={styles.lockText}>Connect your wallet on the Lobby tab to play.</Text>
-      </View>
+      <>
+        <NetworkBanner />
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+          <View style={styles.centred}>
+            <Text style={styles.lockIcon}>🔒</Text>
+            <Text style={styles.lockText}>Connect a wallet to play</Text>
+          </View>
+          <ConnectWalletSheet
+            title="Wallet Required"
+            subtitle="You need a connected Polygon wallet to play Video Poker."
+          />
+        </ScrollView>
+      </>
     );
   }
 
   return (
+    <>
+      <NetworkBanner />
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       {/* Bet selector */}
       <GlassCard style={styles.betCard}>
@@ -236,6 +249,7 @@ export default function VideoPokerScreen() {
         </Text>
       )}
     </ScrollView>
+    </>
   );
 }
 
