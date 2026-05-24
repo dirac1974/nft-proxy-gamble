@@ -70,15 +70,15 @@ cd mobile && npx expo start
 See `docs/IMPLEMENTATION_PLAN.md` and `docs/DEVELOPMENT_MEMORY.md` for the complete phased rollout with full tests at every step.
 
 ## Current Status
-**Phase 1 ready to ship** — `NFTProxyVoucher.sol` implemented, **34 tests green**, coverage **100% statements / 97% branches / 100% functions / 100% lines** on the main contract. Grok review **approved** (PR #3). CI green. Awaiting operator deploy to Polygon Amoy testnet.
+**Phase 1 complete** — `NFTProxyVoucher.sol` deployed and verified on Polygon Amoy. **34 tests green**, coverage **100% statements / 97% branches / 100% functions / 100% lines**. Grok review **approved** (PR #3). CI green.
 
-**Next Milestone**: Polygon Amoy deploy + Polygonscan verification → merge PR #3 → close Issue #1 → Phase 2 (backend).
+**Next Milestone**: Phase 2 (backend — Node.js + Express + Prisma + PostgreSQL).
 
 ## Deployments
 
 | Network | Contract | Address | Tx | Status |
 |---|---|---|---|---|
-| Polygon Amoy (testnet) | `NFTProxyVoucher` | _pending operator deploy_ | _pending_ | ⏳ |
+| Polygon Amoy (testnet) | `NFTProxyVoucher` | [`0xf0d9bD16292A06a189220E4369a561442aEC15Cd`](https://amoy.polygonscan.com/address/0xf0d9bD16292A06a189220E4369a561442aEC15Cd#code) | [`0x48f730c9`](https://amoy.polygonscan.com/tx/0x48f730c9e2a88e7c846d5ed558f07c807337d31dca087e4d08ba1b309a33c40f) | ✅ Verified |
 | Polygon mainnet | `NFTProxyVoucher` | _Phase 6_ | _Phase 6_ | — |
 
 > **Operator step (deploy)**: requires a `PRIVATE_KEY` and `POLYGONSCAN_API_KEY` in `contracts/.env`. Claude does not handle keys (per `Claude.md` "Secrets" rule). See the runbook below.

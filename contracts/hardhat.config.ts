@@ -39,10 +39,25 @@ const config: HardhatUserConfig = {
     },
   },
   etherscan: {
-    apiKey: {
-      polygonAmoy: process.env.POLYGONSCAN_API_KEY || "",
-      polygon: process.env.POLYGONSCAN_API_KEY || "",
-    },
+    apiKey: process.env.POLYGONSCAN_API_KEY || "",
+    customChains: [
+      {
+        network: "amoy",
+        chainId: 80002,
+        urls: {
+          apiURL: "https://api.etherscan.io/v2/api?chainid=80002",
+          browserURL: "https://amoy.polygonscan.com",
+        },
+      },
+      {
+        network: "polygon",
+        chainId: 137,
+        urls: {
+          apiURL: "https://api.etherscan.io/v2/api?chainid=137",
+          browserURL: "https://polygonscan.com",
+        },
+      },
+    ],
   },
   gasReporter: {
     enabled: process.env.REPORT_GAS === "true",

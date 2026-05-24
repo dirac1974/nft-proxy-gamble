@@ -50,4 +50,6 @@ prisma/migrations/
 coverage/
 coverage.json
 gasReport.txt
-contracts/deployments/
+# Track deployment JSONs but not any local override files
+!contracts/deployments/
+contracts/deployments/*.local.json
