@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -23,8 +23,9 @@ export default function LobbyScreen() {
   const { address, isConnected, provider, open } = useWalletConnectModal();
   const { isAuthenticated, disconnect } = useWalletStore();
   const setBalance = useGameStore((s) => s.setBalance);
+  const [authError, setAuthError] = useState<string | null>(null);
 
-  const { data: balanceData, refetch: refetchBalance } = useQuery({
+  const { data: balanceData } = useQuery({
     queryKey: ["balance"],
     queryFn: balanceApi.get,
     enabled: isAuthenticated,
@@ -37,8 +38,12 @@ export default function LobbyScreen() {
 
   useEffect(() => {
     if (isConnected && provider && address && !isAuthenticated) {
+      setAuthError(null);
       setWalletClient(provider);
-      signAndAuthenticate(address as Address).catch(console.warn);
+      signAndAuthenticate(address as Address).catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : "Authentication failed";
+        setAuthError(message);
+      });
     }
   }, [isConnected, provider, address, isAuthenticated]);
 
@@ -71,7 +76,17 @@ export default function LobbyScreen() {
           <Text style={styles.connectBody}>
             Link your Polygon wallet to save progress and cash out NFT vouchers.
           </Text>
-          <Pressable style={styles.primaryButton} onPress={() => open()}>
+          {authError && (
+            <Text style={styles.authError} accessibilityRole="alert">
+              {authError}
+            </Text>
+          )}
+          <Pressable
+            style={styles.primaryButton}
+            onPress={() => open()}
+            accessibilityRole="button"
+            accessibilityLabel="Connect wallet via WalletConnect"
+          >
             <Text style={styles.primaryButtonText}>Connect Wallet</Text>
           </Pressable>
         </GlassCard>
@@ -80,10 +95,14 @@ export default function LobbyScreen() {
       {/* Game selector */}
       <Text style={styles.sectionHeader}>GAMES</Text>
 
-      <Pressable onPress={() => router.push("/(tabs)/play")} style={({ pressed }) => [
-        styles.gameCard,
-        pressed && styles.gameCardPressed,
-      ]}>
+      <Pressable
+        onPress={() => router.push("/(tabs)/play")}
+        accessibilityRole="button"
+        accessibilityLabel="Play Video Poker — 9/6 Jacks or Better"
+        style={({ pressed }) => [
+          styles.gameCard,
+          pressed && styles.gameCardPressed,
+        ]}>
         <View style={styles.gameCardInner}>
           <Text style={styles.gameEmoji}>🃏</Text>
           <View style={styles.gameInfo}>
@@ -118,6 +137,8 @@ export default function LobbyScreen() {
         <Pressable
           onPress={async () => { await disconnect(); }}
           style={styles.disconnectButton}
+          accessibilityRole="button"
+          accessibilityLabel="Disconnect wallet and clear session"
         >
           <Text style={styles.disconnectText}>Disconnect Wallet</Text>
         </Pressable>
@@ -150,6 +171,7 @@ const styles = StyleSheet.create({
   connectCard: { gap: spacing.md },
   connectTitle: { ...typography.heading3 },
   connectBody: { ...typography.bodySmall },
+  authError: { ...typography.bodySmall, color: colors.lose },
   primaryButton: {
     backgroundColor: colors.purple,
     borderRadius: radius.full,

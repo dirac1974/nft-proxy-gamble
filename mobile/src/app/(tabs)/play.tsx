@@ -182,6 +182,9 @@ export default function VideoPokerScreen() {
         ]}
         onPress={onPrimaryPress}
         disabled={isLoading || cashoutMutation.isPending}
+        accessibilityRole="button"
+        accessibilityLabel={primaryLabel}
+        accessibilityState={{ busy: isLoading }}
       >
         {isLoading ? (
           <ActivityIndicator color={colors.background} />
@@ -196,6 +199,9 @@ export default function VideoPokerScreen() {
           style={[styles.cashoutButton, cashoutMutation.isPending && styles.primaryButtonPressed]}
           onPress={() => cashoutMutation.mutate()}
           disabled={cashoutMutation.isPending}
+          accessibilityRole="button"
+          accessibilityLabel={`Cash out ${coinBalance} coins to NFT voucher`}
+          accessibilityState={{ busy: cashoutMutation.isPending }}
         >
           {cashoutMutation.isPending
             ? <ActivityIndicator color={colors.neonGreen} />

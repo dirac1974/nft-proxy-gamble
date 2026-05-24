@@ -32,8 +32,16 @@ export function Card({ cardIndex, held, onToggleHold, disabled = false }: CardPr
     backgroundColor: held ? colors.cardHeld : colors.cardBackground,
   }));
 
+  const a11yLabel = `${card.label}, ${held ? "held" : "not held"}. ${disabled ? "" : "Tap to " + (held ? "release" : "hold")}`;
+
   return (
-    <Pressable onPress={disabled ? undefined : onToggleHold} style={styles.wrapper}>
+    <Pressable
+      onPress={disabled ? undefined : onToggleHold}
+      style={styles.wrapper}
+      accessibilityRole="button"
+      accessibilityLabel={a11yLabel}
+      accessibilityState={{ selected: held, disabled }}
+    >
       <Animated.View style={[styles.card, animStyle]}>
         {/* Top-left rank + suit */}
         <View style={styles.topLabel}>

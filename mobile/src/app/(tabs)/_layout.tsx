@@ -1,10 +1,7 @@
 import React from "react";
+import { Text } from "react-native";
 import { Tabs } from "expo-router";
 import { colors } from "@/theme";
-
-function TabIcon({ label, emoji }: { label: string; emoji: string }) {
-  return null; // expo-router renders tabBarLabel separately; icon placeholder
-}
 
 export default function TabsLayout() {
   return (
@@ -65,6 +62,12 @@ export default function TabsLayout() {
 }
 
 function TabBarEmoji({ emoji, color }: { emoji: string; color: string }) {
-  const { Text } = require("react-native");
-  return <Text style={{ fontSize: 20, opacity: color === colors.neonGreen ? 1 : 0.5 }}>{emoji}</Text>;
+  return (
+    <Text
+      style={{ fontSize: 20, opacity: color === colors.neonGreen ? 1 : 0.5 }}
+      accessibilityElementsHidden
+    >
+      {emoji}
+    </Text>
+  );
 }
