@@ -68,6 +68,7 @@ describe("WinOverlay component", () => {
     const { getByRole } = render(
       <WinOverlay visible={true} rank="Flush" payout={6} tier="small" onDismiss={noop} />
     );
-    expect(getByRole("alert")).toBeTruthy();
+    // includeHiddenElements: card starts at opacity 0 due to entrance animation
+    expect(getByRole("alert", { includeHiddenElements: true })).toBeTruthy();
   });
 });
