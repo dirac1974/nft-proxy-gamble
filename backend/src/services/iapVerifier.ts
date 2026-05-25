@@ -7,6 +7,16 @@ export function hashReceipt(receiptData: string): string {
   return createHash("sha256").update(receiptData).digest("hex");
 }
 
+// Safe lookup that avoids matching Object.prototype properties (e.g. a malicious
+// productId like "constructor" or "__proto__" would otherwise resolve to a
+// function reference, which `?? 0` doesn't guard against because the value is
+// truthy, just not a number).
+function lookupCoinsForProduct(productId: string): number {
+  if (!Object.prototype.hasOwnProperty.call(IAP_PRODUCTS, productId)) return 0;
+  const value = IAP_PRODUCTS[productId];
+  return typeof value === "number" && value > 0 ? value : 0;
+}
+
 export async function verifyAppleReceipt(receiptData: string): Promise<IAPVerifyResult> {
   const url =
     config.NODE_ENV === "production"
@@ -38,7 +48,7 @@ export async function verifyAppleReceipt(receiptData: string): Promise<IAPVerify
   }
 
   const productId = latestReceipt.product_id;
-  const coinsGranted = IAP_PRODUCTS[productId] ?? 0;
+  const coinsGranted = lookupCoinsForProduct(productId);
   return {
     valid: coinsGranted > 0,
     productId,
@@ -57,7 +67,7 @@ export async function verifyGoogleReceipt(
     throw new Error("Google Play verification not yet configured for production");
   }
 
-  const coinsGranted = IAP_PRODUCTS[productId] ?? 0;
+  const coinsGranted = lookupCoinsForProduct(productId);
   return {
     valid: coinsGranted > 0 && purchaseToken.length > 10,
     productId,

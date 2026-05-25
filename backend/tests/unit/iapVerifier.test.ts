@@ -39,4 +39,19 @@ describe("verifyGoogleReceipt (dev/test mode)", () => {
     const result = await verifyGoogleReceipt("short", "coins_100");
     expect(result.valid).toBe(false);
   });
+
+  // Prototype-pollution defense: a malicious productId that names a property
+  // on Object.prototype (constructor, __proto__, toString, hasOwnProperty)
+  // must not resolve to a truthy value via the IAP_PRODUCTS lookup. Before
+  // hardening, `IAP_PRODUCTS["constructor"]` returned the Object constructor
+  // function — truthy, but `coinsGranted > 0` was false so it slipped past
+  // by accident. Hardened lookup uses Object.prototype.hasOwnProperty.call.
+  it.each(["constructor", "__proto__", "toString", "hasOwnProperty"])(
+    "rejects prototype-property productId '%s'",
+    async (poisonId) => {
+      const result = await verifyGoogleReceipt("validtoken12345", poisonId);
+      expect(result.valid).toBe(false);
+      expect(result.coinsGranted).toBe(0);
+    },
+  );
 });
