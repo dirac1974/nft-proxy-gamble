@@ -112,15 +112,23 @@
 - [x] `deviceAttestationService.ts` (backend + mobile); shadow mode logs, never blocks
 - [x] `DEVICE_ATTESTATION_ENFORCE` flag; enable after 50+ shadow samples
 
-### E2E Testing [🔲 TODO]
-- [ ] Maestro or Detox flow: IAP sandbox → play 5 hands → cashout → view NFT → redeem
-- [ ] Adversarial test: forged balance payload rejected
-- [ ] Adversarial test: duplicate IAP receipt returns 409
+### E2E Testing [✅ FLOWS WRITTEN — execution needs device]
+- [x] Maestro flows in `mobile/e2e/flows/`:
+  - `01_wallet_connect.yaml` — wallet connect → SIWE sign → age gate → lobby
+  - `02_iap_purchase.yaml` — IAP sandbox purchase + cancellation adversarial path
+  - `03_game_play_cashout.yaml` — 5 hands → provably fair modal → cashout → NFT tab
+  - `04_adversarial_balance.yaml` — forged `balanceSig` payload rejected by client
+  - `05_duplicate_iap_rejected.yaml` — replay returns 409, balance not double-credited
+- [x] Suite config: `mobile/e2e/.maestro.yaml`
+- [ ] Run on real device (deferred — needs EAS dev build deployed to device)
 
-### Accessibility Audit [🔲 TODO — pre-beta]
-- [ ] Screen reader pass (VoiceOver + TalkBack)
-- [ ] All interactive elements have `accessibilityRole` + `accessibilityLabel`
-- [ ] Error states have `accessibilityRole="alert"`
+### Accessibility Audit [✅ CODE PASS COMPLETE — device pass pending]
+- [x] All interactive `Pressable`s in user-facing tree have `accessibilityRole` + `accessibilityLabel` (audit run 2026-05-25, 3 gaps closed)
+- [x] Error / alert containers have `accessibilityRole="alert"` (NetworkBanner, WinOverlay, IAPSheet status banner, error banners)
+- [x] Modals have `accessibilityViewIsModal`
+- [x] Toggleable elements (bet chips) have `accessibilityState.selected`
+- [ ] Manual VoiceOver pass on iOS device (deferred — needs device)
+- [ ] Manual TalkBack pass on Android emulator (deferred — needs running emulator build)
 
 ---
 
@@ -134,9 +142,9 @@
 - [ ] Jurisdiction block list
 - [ ] Final security audit sign-off (internal checklist + external review prep)
 - [ ] Beta testing via TestFlight / Google Internal Testing
-- [ ] **[SECURITY - MANDATORY]** `prisma db push` on deployed DB for: `UserAnalytics`, `User.ageConfirmed`, `IAPReceipt.onChainTxHash`
-- [ ] **[SECURITY - MANDATORY]** Populate EAS secrets: `CERT_PIN_PRIMARY`, `CERT_PIN_BACKUP`, `EXPO_PUBLIC_BALANCE_VERIFY_KEY`
-- [ ] **[SECURITY - MANDATORY]** All Phase 3.6 hardening tasks confirmed before beta invite
+- [x] **[SECURITY - MANDATORY]** Schema applied to Supabase (UserAnalytics + User.ageConfirmed + IAPReceipt.onChainTxHash) — project `yzodntgnaydfkqvibmff`, all 6 tables live
+- [ ] **[SECURITY - MANDATORY]** Populate EAS secrets: `CERT_PIN_PRIMARY`, `CERT_PIN_BACKUP`, `EXPO_PUBLIC_BALANCE_VERIFY_KEY` (locally derived BALANCE_VERIFY_KEY is in mobile/.env; certs need real production hash values)
+- [x] **[SECURITY - MANDATORY]** All Phase 3.6 hardening tasks confirmed (HMAC tokens, on-chain commits, attestation shadow, analytics, age gate, cert pinning config)
 - [ ] **[SECURITY - MANDATORY]** Penetration testing prep: export threat model tables from `docs/SECURITY_ARCHITECTURE.md` for external auditor
 
 ---
