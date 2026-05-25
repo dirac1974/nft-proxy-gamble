@@ -36,7 +36,12 @@ export function PaytableModal({ visible, betAmount, onClose }: PaytableModalProp
       onRequestClose={onClose}
       accessibilityViewIsModal
     >
-      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close paytable" />
+      <Pressable
+        style={styles.backdrop}
+        onPress={onClose}
+        accessibilityRole="button"
+        accessibilityLabel="Close paytable"
+      />
       <View style={styles.sheet}>
         <View style={styles.header}>
           <Text style={styles.title}>PAYTABLE</Text>

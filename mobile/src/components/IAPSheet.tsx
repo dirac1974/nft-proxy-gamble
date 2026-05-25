@@ -40,7 +40,12 @@ export function IAPSheet({ visible, onClose }: IAPSheetProps) {
       onRequestClose={onClose}
       accessibilityViewIsModal
     >
-      <Pressable style={styles.backdrop} onPress={isBusy ? undefined : onClose} />
+      <Pressable
+        style={styles.backdrop}
+        onPress={isBusy ? undefined : onClose}
+        accessibilityRole="button"
+        accessibilityLabel="Dismiss purchase sheet"
+      />
       <View style={styles.sheet}>
         <View style={styles.header}>
           <Text style={styles.title}>BUY COINS</Text>

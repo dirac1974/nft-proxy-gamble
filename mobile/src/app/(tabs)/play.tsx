@@ -125,6 +125,9 @@ export default function VideoPokerScreen() {
               style={[styles.betChip, betAmount === n && styles.betChipActive]}
               onPress={() => setBetAmount(n)}
               disabled={phase !== "idle" && phase !== "drawn"}
+              accessibilityRole="button"
+              accessibilityLabel={`Bet ${n} coin${n > 1 ? "s" : ""} per hand`}
+              accessibilityState={{ selected: betAmount === n }}
             >
               <Text style={[styles.betChipText, betAmount === n && styles.betChipTextActive]}>
                 {n}
