@@ -9,6 +9,12 @@ import { config } from "../config/index.js";
 
 const MINT_ABI = [
   "function mint(address to, uint256 coinAmount, bytes32 gameType, bytes32 sessionId) external returns (uint256)",
+  // VoucherMinted is the contract-specific event that carries the canonical tokenId.
+  // We parse it instead of relying on log ordering, because the ERC1155 TransferSingle
+  // event from OpenZeppelin's _mint() is emitted FIRST (logs[0]) and its topics[3] is
+  // the recipient address — parsing that as a uint256 produced a giant garbage "tokenId"
+  // before this fix. Use parseLog() against the event signature to be safe.
+  "event VoucherMinted(uint256 indexed tokenId, address indexed to, uint256 coinAmount, bytes32 indexed gameType, bytes32 sessionId)",
 ];
 
 // commitPurchase added in Phase 3.6 — emits PurchaseCommitted event for audit trail
@@ -64,8 +70,23 @@ export async function mintVoucher(
   const tx = await contract.mint(toAddress, coinAmount, gameTypeBytes, sessionIdBytes);
   const receipt = await tx.wait(1);
 
-  const log = receipt.logs?.[0];
-  const tokenId = log ? BigInt(log.topics?.[3] ?? "0").toString() : "0";
+  // Find the VoucherMinted log by parsing each log with our ABI.
+  // ethers v6: contract.interface.parseLog returns null for logs the interface doesn't know.
+  let tokenId = "0";
+  for (const log of receipt.logs ?? []) {
+    try {
+      const parsed = contract.interface.parseLog({
+        topics: [...(log.topics as string[])],
+        data: log.data as string,
+      });
+      if (parsed?.name === "VoucherMinted") {
+        tokenId = (parsed.args.tokenId as bigint).toString();
+        break;
+      }
+    } catch {
+      // Not a log our ABI recognises (e.g. ERC1155 TransferSingle) — skip.
+    }
+  }
 
   return { txHash: tx.hash as string, tokenId };
 }
