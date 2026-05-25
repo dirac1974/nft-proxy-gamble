@@ -23,6 +23,9 @@ typechain-types/
 .idea/
 .vscode/
 
+# Claude Code (worktree metadata, agent state)
+.claude/
+
 # Logs
 *.log
 npm-debug.log*
