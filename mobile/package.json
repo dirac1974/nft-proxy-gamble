@@ -20,6 +20,7 @@
     "@walletconnect/react-native-compat": "^2.23.9",
     "expo": "^54.0.34",
     "expo-av": "~16.0.8",
+    "expo-build-properties": "~1.0.10",
     "expo-constants": "~18.0.13",
     "expo-linking": "~8.0.12",
     "expo-router": "~6.0.23",
