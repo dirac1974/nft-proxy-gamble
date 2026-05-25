@@ -10,9 +10,21 @@ This is NOT a substitute for an external pentest. It is a structured self-review
 
 ## TL;DR
 
-- **2 critical bugs found and fixed** (`fix(backend): parse tokenId from VoucherMinted event` — `a10f36e`, `fix(backend): close balance-decrement TOCTOU` — `099b9a5`).
+- **3 critical/medium bugs found and fixed**:
+  - B-1 HIGH: balance-decrement TOCTOU on /game/deal + /game/cashout (`099b9a5`)
+  - B-2 HIGH: tokenId parsed from wrong event log (`a10f36e`)
+  - B-3 MEDIUM: double-payout race on /game/draw (`89ec15a` — same shape as B-1, found in follow-up pass)
+- **2 UX bugs found and fixed**:
+  - 401 not auto-disconnecting on mobile (`fe5c565`) — user stays in stale "authenticated" state when JWT expires
+  - 3 a11y Pressables missing role/label (`e24ca12`)
+- **2 perf wins**:
+  - Compound indexes on Transaction `(userId, type, createdAt)` and NFTVoucher `(userId, createdAt DESC)` — was full table scan on every game result (`dce3234`)
+  - Mobile NFT polling now conditional on PENDING/MINTING vouchers existing
+- **Documentation deliverables**:
+  - `docs/USER_GUIDE.md` — player-facing manual
+  - `docs/THREAT_MODEL_FOR_PENTEST.md` — self-contained external-auditor brief
 - All other audit template sections **PASS** against current code.
-- Documented follow-ups that are intentional and tracked (e.g., Apple/Google attestation shadow stubs, in-memory nonce store).
+- Documented follow-ups that are intentional and tracked (e.g., Apple/Google attestation shadow stubs, in-memory nonce store, admin routes unreachable without server access).
 
 ---
 
@@ -180,7 +192,10 @@ Cashout daily limit:
 1. **Device attestation real verification** — Apple App Attest + Google Play Integrity bodies are stubs that pass shadow mode; full crypto verification is gated on `APPLE_APP_ATTEST_TEAM_ID` and `GOOGLE_PLAY_INTEGRITY_PACKAGE` being set. Must enable before mainnet.
 2. **Cert pinning real values** — placeholders in EAS env; need real SPKI SHA256 hashes once production certs exist.
 3. **In-memory nonce store** — move to Redis/DB before horizontal scaling.
-4. **External pentest** — this audit is internal; an outside review is still required before mainnet.
+4. **External pentest** — this audit is internal; an outside review is still required before mainnet. Brief at `docs/THREAT_MODEL_FOR_PENTEST.md`.
+5. **Admin routes unreachable.** `signToken` in `routes/auth.ts:55` never sets `isAdmin: true`. The `requireAdmin` middleware in `routes/admin.ts:14` correctly checks the claim, but no code path produces a JWT with that claim set. Effect: admin endpoints (flagged-users list, manual risk override) cannot be used by anyone without server access (which can mint an admin JWT directly via `signToken`). Safe by impossibility but a usability gap — when admin functionality is needed in production, add a CLI script `npm run grant-admin -- --wallet=0x...` that issues a privileged JWT.
+6. **`userId` (cuid) appears in some server log lines** (`analyticsService.ts:105`, `deviceAttestationService.ts:82,96,104`). Operationally needed for risk-event correlation, but for stricter GDPR posture consider replacing with opaque correlation IDs that the user can request deletion of independently of their data.
+7. **Cashout daily-limit count is non-atomic.** `transaction.count` filter at `routes/game.ts:219` is read pre-transaction. Parallel-session attacker could squeeze 1 extra cashout past the 5/day cap. B-1 fix prevents balance overdraft, so practical loss is bounded to one extra small cashout. Low risk, acceptable for testnet; tighten before mainnet.
 
 ---
 
