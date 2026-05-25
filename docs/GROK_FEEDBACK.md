@@ -78,6 +78,37 @@ Complete the items in the Final Pre-Beta Checklist, especially the security item
 
 ## Feedback History (Append-Only — Oldest First)
 
+### Claude Update — 2026-05-25 PDT (autonomous shift #4)
+
+Continuing the audit. Smaller findings now — the high-severity stuff is fixed; this shift is hardening and polish.
+
+**Additions since shift #3**:
+
+1. **B-4 LOW: IAP_PRODUCTS prototype-pollution lookup** (`064d5ba`). `IAP_PRODUCTS[productId] ?? 0` was vulnerable to productIds like `"constructor"` / `"__proto__"` / `"toString"` resolving to truthy function references from Object.prototype. Not exploitable (the downstream `coinsGranted > 0` check rejects NaN), but the `IAPVerifyResult` could carry a function value into logging and downstream code. Fixed with `Object.prototype.hasOwnProperty.call` + explicit `typeof value === "number"` guard. 4 regression tests added (`it.each` over the four likely-injected keys).
+
+2. **Auth consistency refactor** (`0ccdf82`). `/auth/confirm-age` was doing inline JWT verification with dynamic `await import()` calls — separate copy of what `requireAuth` middleware does. Now uses the middleware. No external behavior change, just one less place to keep in sync.
+
+3. **User-read narrowing in game routes** (`d96cace`). Three `prisma.user.findUnique({ where: { id: userId } })` calls were pulling the full User row even though each caller only inspects 1-3 fields. Added `select` clauses to /start-session (coinBalance only), /deal (coinBalance only), /cashout (ageConfirmed + coinBalance + walletAddress). Future-proofs against adding new PII columns to User that would otherwise leak into money-path reads by default.
+
+4. **`docs/ROLLBACK_PLAYBOOK.md`** (`7d08f3f`). For each of the day's commits, documents: symptom that would trigger a rollback, exact `git revert` command (with `-m 1` for the SDK 54 squash merge), rebuild + verify steps, and crucially **side effects that don't auto-revert** — like the garbage tokenIds from the B-2 bug that would be re-introduced, or `User.coinBalance < 0` rows if B-1 is reverted with exploit traffic in flight. Final section is a verification matrix so over-reverting is detectable.
+
+**Audit coverage this shift**:
+- IAP verifier (`iapVerifier.ts`) — found B-4
+- Auth routes — found the inline-verify inconsistency
+- All `prisma.user.findUnique` call sites
+- TransferModal address validation — clean (regex shape check, viem types)
+- nftRedemptionService — clean
+- All `Record<string, ...>` types — only IAP_PRODUCTS, already fixed
+
+**Tests on main HEAD `2fcbc0c`**:
+- Contracts: 40/40
+- Backend: 81/81 unit (was 73 at start of shift #2)
+- Mobile: 81/81
+
+**Cumulative for today**: 4 logic bugs (B-1 HIGH, B-2 HIGH, B-3 MEDIUM, B-4 LOW) + 2 UX (a11y, 401 disconnect) + 3 perf wins (indexes, conditional polling, narrowed reads) + 1 refactor + 3 new docs (USER_GUIDE, THREAT_MODEL_FOR_PENTEST, ROLLBACK_PLAYBOOK).
+
+---
+
 ### Claude Update — 2026-05-25 PDT (autonomous shift #3)
 
 **Continuing the autonomous audit pass after shift #2.**
