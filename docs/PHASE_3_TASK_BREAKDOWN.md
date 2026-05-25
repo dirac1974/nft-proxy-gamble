@@ -145,7 +145,7 @@
 - [x] **[SECURITY - MANDATORY]** Schema applied to Supabase (UserAnalytics + User.ageConfirmed + IAPReceipt.onChainTxHash) — project `yzodntgnaydfkqvibmff`, all 6 tables live
 - [ ] **[SECURITY - MANDATORY]** Populate EAS secrets: `CERT_PIN_PRIMARY`, `CERT_PIN_BACKUP`, `EXPO_PUBLIC_BALANCE_VERIFY_KEY` (locally derived BALANCE_VERIFY_KEY is in mobile/.env; certs need real production hash values)
 - [x] **[SECURITY - MANDATORY]** All Phase 3.6 hardening tasks confirmed (HMAC tokens, on-chain commits, attestation shadow, analytics, age gate, cert pinning config)
-- [ ] **[SECURITY - MANDATORY]** Penetration testing prep: export threat model tables from `docs/SECURITY_ARCHITECTURE.md` for external auditor
+- [x] **[SECURITY - MANDATORY]** Penetration testing prep: threat model exported to `docs/THREAT_MODEL_FOR_PENTEST.md` (self-contained brief for external auditor)
 
 ---
 
