@@ -19,6 +19,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
 
   if (!res.ok) {
+    // 401 = token rejected by backend (expired, invalidated, or backend's JWT_SECRET rotated).
+    // Force-disconnect so the user lands back at the connect screen instead of seeing
+    // a cryptic error and a stale "authenticated" state that can't make any API calls.
+    // Skip during the auth flow itself (nonce + verify) — those have their own 401 semantics
+    // ("nonce expired" doesn't mean the user's session is dead, just that they need a new nonce).
+    if (res.status === 401 && !path.startsWith("/auth/")) {
+      // Fire-and-forget: don't block the throw on the disconnect promise.
+      void useWalletStore.getState().disconnect();
+      throw new Error("Session expired. Please reconnect your wallet.");
+    }
     const body = await res.json().catch(() => ({}));
     const msg = (body as { error?: string }).error ?? `HTTP ${res.status}`;
     throw new Error(msg);
