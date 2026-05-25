@@ -148,6 +148,7 @@ export default function VideoPokerScreen() {
                 held={dealt?.holds[i] ?? false}
                 onToggleHold={() => phase === "dealt" && toggleHold(i)}
                 disabled={phase !== "dealt"}
+                testID={`card-${i}`}
               />
             ))
           : Array.from({ length: 5 }).map((_, i) => (
