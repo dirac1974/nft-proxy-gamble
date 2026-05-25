@@ -32,7 +32,10 @@ router.post("/start-session", requireAuth, async (req, res, next) => {
     const { betAmount, clientSeed: clientSeedOverride } = startSchema.parse(req.body);
     const userId = req.user!.userId;
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { coinBalance: true },
+    });
     if (!user) throw new AppError(404, "User not found");
     if (user.coinBalance < betAmount) throw new AppError(402, "Insufficient coin balance");
 
@@ -65,7 +68,10 @@ router.post("/deal", requireAuth, async (req, res, next) => {
     if (!session || session.userId !== userId) throw new AppError(404, "Session not found");
     if (session.state !== "ACTIVE") throw new AppError(409, "Session is not in ACTIVE state");
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { coinBalance: true },
+    });
     if (!user) throw new AppError(404, "User not found");
     if (user.coinBalance < session.betAmount) throw new AppError(402, "Insufficient coin balance");
 
@@ -219,9 +225,18 @@ router.post("/cashout", requireAuth, async (req, res, next) => {
     if (!session || session.userId !== userId) throw new AppError(404, "Session not found");
     if (session.state !== "ACTIVE") throw new AppError(409, "Session must be ACTIVE to cashout");
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    // Only fetch the three fields we actually use here — avoid pulling the full
+    // User row (which includes timestamps + future PII) into a money-path read.
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { ageConfirmed: true, coinBalance: true, walletAddress: true },
+    });
     if (!user) throw new AppError(404, "User not found");
     if (!user.ageConfirmed) throw new AppError(403, "Age confirmation required before cashout.");
+    // Pre-check is a UX early-out — the real guard is the atomic conditional
+    // decrement in the transaction below (B-1 fix). Without this early-out a
+    // user with insufficient balance pays for two findUnique + risk lookup
+    // before getting their 402.
     if (user.coinBalance < coinsToCashout) throw new AppError(402, "Insufficient coin balance");
 
     // Block BLOCKED-risk users from cashing out
