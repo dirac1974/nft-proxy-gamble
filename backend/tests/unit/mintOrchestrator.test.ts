@@ -36,7 +36,7 @@ jest.mock("../../src/config/index.js", () => ({
 }));
 
 import { id as keccak256Id, AbiCoder, getAddress } from "ethers";
-import { mintVoucher } from "../../src/services/mintOrchestrator.js";
+import { mintVoucher, getCommitContract } from "../../src/services/mintOrchestrator.js";
 
 const VOUCHER_MINTED_SIG = keccak256Id(
   "VoucherMinted(uint256,address,uint256,bytes32,bytes32)",
@@ -133,5 +133,19 @@ describe("mintVoucher tokenId extraction", () => {
 
     const result = await mintVoucher(to, 100, "Game1", "session-1");
     expect(result.tokenId).toBe("0");
+  });
+});
+
+describe("getCommitContract", () => {
+  it("returns a contract instance with the commitPurchase ABI", () => {
+    const contract = getCommitContract();
+    // The function is loaded from the ABI via Interface.parseLog/Function lookup.
+    // We don't call commitPurchase here (would need a separate mock); just
+    // verify the contract object surfaces the function in its interface.
+    expect(contract.interface.getFunction("commitPurchase")).not.toBeNull();
+  });
+
+  it("caches the contract across calls", () => {
+    expect(getCommitContract()).toBe(getCommitContract());
   });
 });

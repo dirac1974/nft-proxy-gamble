@@ -6,6 +6,7 @@ import {
   applyHolds,
   resolveHand,
   generateServerSeed,
+  generateClientSeed,
   hashServerSeed,
   createHandRecord,
 } from "../../src/services/videoPoker";
@@ -200,6 +201,16 @@ describe("generateServerSeed / hashServerSeed", () => {
 
   it("different seeds produce different hashes", () => {
     expect(hashServerSeed("a")).not.toBe(hashServerSeed("b"));
+  });
+
+  it("generateClientSeed returns 32-char hex (16 random bytes)", () => {
+    const seed = generateClientSeed();
+    expect(seed).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it("generateClientSeed returns different values each call (RNG sanity)", () => {
+    const seeds = new Set(Array.from({ length: 50 }, () => generateClientSeed()));
+    expect(seeds.size).toBe(50);
   });
 });
 
