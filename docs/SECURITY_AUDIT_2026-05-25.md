@@ -10,19 +10,24 @@ This is NOT a substitute for an external pentest. It is a structured self-review
 
 ## TL;DR
 
-- **3 critical/medium bugs found and fixed**:
+- **4 logic bugs found and fixed**:
   - B-1 HIGH: balance-decrement TOCTOU on /game/deal + /game/cashout (`099b9a5`)
   - B-2 HIGH: tokenId parsed from wrong event log (`a10f36e`)
-  - B-3 MEDIUM: double-payout race on /game/draw (`89ec15a` — same shape as B-1, found in follow-up pass)
+  - B-3 MEDIUM: double-payout race on /game/draw (`89ec15a`)
+  - B-4 LOW: IAP_PRODUCTS prototype-pollution lookup (`064d5ba`) — no exploit, but `IAPVerifyResult` could carry a function value in `coinsGranted` for productIds like "constructor"
 - **2 UX bugs found and fixed**:
   - 401 not auto-disconnecting on mobile (`fe5c565`) — user stays in stale "authenticated" state when JWT expires
   - 3 a11y Pressables missing role/label (`e24ca12`)
-- **2 perf wins**:
-  - Compound indexes on Transaction `(userId, type, createdAt)` and NFTVoucher `(userId, createdAt DESC)` — was full table scan on every game result (`dce3234`)
+- **3 perf / quality wins**:
+  - Compound indexes on Transaction `(userId, type, createdAt)` and NFTVoucher `(userId, createdAt DESC)` (`dce3234`)
   - Mobile NFT polling now conditional on PENDING/MINTING vouchers existing
+  - Narrowed User reads in game routes to `select` only the columns actually used (`d96cace`)
+- **1 consistency refactor**:
+  - `/auth/confirm-age` switched from inline JWT verify to the standard `requireAuth` middleware (`0ccdf82`)
 - **Documentation deliverables**:
   - `docs/USER_GUIDE.md` — player-facing manual
   - `docs/THREAT_MODEL_FOR_PENTEST.md` — self-contained external-auditor brief
+  - `docs/ROLLBACK_PLAYBOOK.md` — fast-revert recipes for every recent change
 - All other audit template sections **PASS** against current code.
 - Documented follow-ups that are intentional and tracked (e.g., Apple/Google attestation shadow stubs, in-memory nonce store, admin routes unreachable without server access).
 
