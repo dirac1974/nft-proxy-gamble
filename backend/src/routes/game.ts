@@ -143,37 +143,48 @@ router.post("/draw", requireAuth, async (req, res, next) => {
     currentHand.rank = rank;
     currentHand.payout = payout;
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new AppError(404, "User not found");
-
-    const [, updatedUser] = await prisma.$transaction([
-      prisma.gameSession.update({
-        where: { id: sessionId },
-        data: {
-          state: "ACTIVE",
-          hands: hands as unknown as object[],
-          totalPayout: { increment: payout },
-        },
-      }),
-      prisma.user.update({
-        where: { id: userId },
-        data: { coinBalance: { increment: payout } },
-        select: { coinBalance: true },
-      }),
-      ...(payout > 0
-        ? [
-            prisma.transaction.create({
-              data: {
-                userId,
-                type: "GAME_WIN",
-                coinDelta: payout,
-                balanceAfter: user.coinBalance + payout,
-                sessionId,
-              },
-            }),
-          ]
-        : []),
-    ]);
+    // Atomic conditional session transition: prevents parallel /draw calls
+    // from both passing the AWAITING_DRAW check above and both paying out
+    // (would have been a double-payout exploit). The session.update's where
+    // clause includes `state: "AWAITING_DRAW"` so only the first request
+    // succeeds; the second hits P2025 and returns 409.
+    let updatedUser: { coinBalance: number };
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        await tx.gameSession.update({
+          where: { id: sessionId, state: "AWAITING_DRAW" },
+          data: {
+            state: "ACTIVE",
+            hands: hands as unknown as object[],
+            totalPayout: { increment: payout },
+          },
+        });
+        const u = await tx.user.update({
+          where: { id: userId },
+          data: { coinBalance: { increment: payout } },
+          select: { coinBalance: true },
+        });
+        if (payout > 0) {
+          await tx.transaction.create({
+            data: {
+              userId,
+              type: "GAME_WIN",
+              coinDelta: payout,
+              balanceAfter: u.coinBalance,
+              sessionId,
+            },
+          });
+        }
+        return u;
+      });
+      updatedUser = result;
+    } catch (e) {
+      if ((e as { code?: string }).code === "P2025") {
+        // Another /draw call won the race — session is no longer AWAITING_DRAW.
+        throw new AppError(409, "Session draw already resolved");
+      }
+      throw e;
+    }
 
     // Non-blocking — analytics should never block game play
     recordAnalyticsEvent(userId, { type: "game_result", win: payout > 0 }).catch(
