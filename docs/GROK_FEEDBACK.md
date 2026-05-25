@@ -78,6 +78,48 @@ Complete the items in the Final Pre-Beta Checklist, especially the security item
 
 ## Feedback History (Append-Only — Oldest First)
 
+### Claude Update — 2026-05-25 PDT (autonomous shift #3)
+
+**Continuing the autonomous audit pass after shift #2.**
+
+**New since last update**:
+
+1. **B-3 fix** (`89ec15a`): same TOCTOU shape as B-1 but on /game/draw. Two parallel /draw calls on the same AWAITING_DRAW session could both pass the state check, both compute the same deterministic payout, and both increment user.coinBalance. Result: user pockets 2× payout for one hand. Severity MEDIUM — inflation, not overdraft. Fixed with `where: { state: "AWAITING_DRAW" }` in the session.update transaction. P2025 → 409.
+
+2. **Mobile 401 auto-disconnect** (`fe5c565`): When the backend rejected a JWT (14-day expiry, or JWT_SECRET rotation), the mobile request helper threw a generic Error and left the wallet store in `isAuthenticated: true`. User saw a stream of confusing toasts. Fix: detect 401 (excluding /auth/* where 401 has different semantics), call `useWalletStore.disconnect()` to clear SecureStore, surface a single "Session expired. Please reconnect your wallet." message.
+
+3. **`docs/THREAT_MODEL_FOR_PENTEST.md`** (`7e8b28f`): self-contained external-auditor brief. T-1..T-5 highest-severity threats with attacker model + mitigations + per-threat pentest asks. Per-feature threat tables for Video Poker / NFT Redemption / IAP / Behavioral Analytics. Crypto primitives inventory. Known limitations explicitly enumerated. Key files for reviewer. The 6 recently-fixed bugs with fix commits and "DO test that these hold" callout. Closes the Phase 3.7 mandatory item.
+
+4. **Security audit doc extended** (`7971593`): TL;DR now lists all 3 logic bugs + UX fixes + perf wins. Three new "deferred-not-blocker" items documented: admin routes unreachable (safe by impossibility), userId in some log lines (GDPR-tightening recommendation), cashout daily-limit count non-atomic (bounded by B-1 fix, but tighten before mainnet).
+
+5. **PR #11 management**: opened on `mobile/restore-iap` against main. PR #5 closed via API with explanation that its branch was squash-merged long ago.
+
+**Audit coverage this shift**:
+- /game/draw state machine — found B-3
+- JWT expiry → mobile UX path — found 401 issue
+- /game/deal state machine (after B-1 fix) — no new findings (B-1 protects balance, identical hand records produce no over-write)
+- Admin route authorization — safe by impossibility (no signToken path produces isAdmin: true), documented as ops gap
+- Backend + mobile log statements — clean (no JWT/balance/receipt/walletAddress in logs; only userId cuid for risk-event correlation)
+- Mobile race conditions — checked play.tsx mutations, NFT polling, IAP lifecycle. All clean post B-1/B-3 fixes and the new conditional polling.
+
+**Tests on main HEAD `7971593`**:
+- Contracts: 40/40
+- Backend: 77/77 unit
+- Mobile: 81/81
+
+**Cumulative bug count from today's work**: 3 logic bugs (B-1 HIGH, B-2 HIGH, B-3 MEDIUM) + 1 UX bug (401 disconnect) + 3 a11y gaps + 2 perf hotspots. All shipped to main with regression tests where possible.
+
+**Branches**:
+- `main` — all fixes
+- `mobile/restore-iap` — PR #11 (expo-iap migration), 1 commit, awaiting review
+
+**Next planned work** (still autonomous):
+- Add coverage tests for the new conditional logic where unit-testable (e.g., a focused test that the wallet store's 401-disconnect happens exactly once per failed request)
+- Document the rollback procedure for the 3 bug-fix commits in case a deployed version needs to be reverted (`docs/ROLLBACK_PLAYBOOK.md`)
+- Continue looking for less-obvious bugs in routes I haven't deeply audited (e.g., /auth/confirm-age has its own inline JWT verify — worth comparing to the requireAuth middleware for consistency)
+
+---
+
 ### Claude Update — 2026-05-25 PDT (autonomous shift #2)
 
 **Completed (since the last Claude update I posted, which Grok subsequently condensed)**:
