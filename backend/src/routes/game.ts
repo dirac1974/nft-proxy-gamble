@@ -74,25 +74,39 @@ router.post("/deal", requireAuth, async (req, res, next) => {
     const hand = createHandRecord(handNumber, session.serverSeed, session.clientSeed);
     const newHands = [...hands, hand] as unknown as object[];
 
-    await prisma.$transaction([
-      prisma.gameSession.update({
-        where: { id: sessionId },
-        data: { state: "AWAITING_DRAW", hands: newHands },
-      }),
-      prisma.user.update({
-        where: { id: userId },
-        data: { coinBalance: { decrement: session.betAmount } },
-      }),
-      prisma.transaction.create({
-        data: {
-          userId,
-          type: "GAME_LOSS",
-          coinDelta: -session.betAmount,
-          balanceAfter: user.coinBalance - session.betAmount,
-          sessionId,
-        },
-      }),
-    ]);
+    // Atomic conditional decrement closes the race window between the read above
+    // and the write here. Without the `coinBalance: { gte: betAmount }` guard,
+    // parallel /game/deal calls could each see sufficient balance and all decrement,
+    // taking the balance negative.
+    try {
+      await prisma.$transaction(async (tx) => {
+        const updated = await tx.user.update({
+          where: { id: userId, coinBalance: { gte: session.betAmount } },
+          data: { coinBalance: { decrement: session.betAmount } },
+          select: { coinBalance: true },
+        });
+        await tx.gameSession.update({
+          where: { id: sessionId },
+          data: { state: "AWAITING_DRAW", hands: newHands },
+        });
+        await tx.transaction.create({
+          data: {
+            userId,
+            type: "GAME_LOSS",
+            coinDelta: -session.betAmount,
+            balanceAfter: updated.coinBalance,
+            sessionId,
+          },
+        });
+      });
+    } catch (e) {
+      if ((e as { code?: string }).code === "P2025") {
+        // The conditional update found no matching row → balance dropped below
+        // betAmount in a parallel call between our read and write.
+        throw new AppError(402, "Insufficient coin balance");
+      }
+      throw e;
+    }
 
     res.json({
       handNumber,
@@ -230,34 +244,54 @@ router.post("/cashout", requireAuth, async (req, res, next) => {
       );
     }
 
-    const [, voucher] = await prisma.$transaction([
-      prisma.gameSession.update({
-        where: { id: sessionId },
-        data: { state: "CASHED_OUT" },
-      }),
-      prisma.nFTVoucher.create({
-        data: {
-          userId,
-          sessionId,
-          coinBalance: coinsToCashout,
-          gameType: session.gameType,
-          mintStatus: "PENDING",
-        },
-      }),
-      prisma.user.update({
-        where: { id: userId },
-        data: { coinBalance: { decrement: coinsToCashout } },
-      }),
-      prisma.transaction.create({
-        data: {
-          userId,
-          type: "CASHOUT_MINT",
-          coinDelta: -coinsToCashout,
-          balanceAfter: user.coinBalance - coinsToCashout,
-          sessionId,
-        },
-      }),
-    ]);
+    // Atomic conditional decrement: protects against parallel cashouts on multiple
+    // ACTIVE sessions racing past the user.coinBalance < coinsToCashout check above.
+    // Without this guard, a user with N ACTIVE sessions could fire N parallel
+    // cashouts each draining `coinsToCashout`, taking the balance negative and
+    // minting more vouchers than the balance covers.
+    let voucher: Awaited<ReturnType<typeof prisma.nFTVoucher.create>>;
+    let postBalance: number;
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const updatedUser = await tx.user.update({
+          where: { id: userId, coinBalance: { gte: coinsToCashout } },
+          data: { coinBalance: { decrement: coinsToCashout } },
+          select: { coinBalance: true },
+        });
+        await tx.gameSession.update({
+          where: { id: sessionId, state: "ACTIVE" },
+          data: { state: "CASHED_OUT" },
+        });
+        const v = await tx.nFTVoucher.create({
+          data: {
+            userId,
+            sessionId,
+            coinBalance: coinsToCashout,
+            gameType: session.gameType,
+            mintStatus: "PENDING",
+          },
+        });
+        await tx.transaction.create({
+          data: {
+            userId,
+            type: "CASHOUT_MINT",
+            coinDelta: -coinsToCashout,
+            balanceAfter: updatedUser.coinBalance,
+            sessionId,
+          },
+        });
+        return { v, balance: updatedUser.coinBalance };
+      });
+      voucher = result.v;
+      postBalance = result.balance;
+    } catch (e) {
+      if ((e as { code?: string }).code === "P2025") {
+        // Either the user balance dropped below coinsToCashout in a parallel
+        // cashout, or another request transitioned this session out of ACTIVE.
+        throw new AppError(409, "Cashout could not be completed atomically — balance or session state changed.");
+      }
+      throw e;
+    }
 
     // Non-blocking analytics event for cashout
     recordAnalyticsEvent(userId, { type: "cashout" }).catch(
@@ -274,7 +308,7 @@ router.post("/cashout", requireAuth, async (req, res, next) => {
       .json({
         voucherId: voucher.id,
         mintStatus: "PENDING",
-        ...signBalance(userId, user.coinBalance - coinsToCashout),
+        ...signBalance(userId, postBalance),
       });
   } catch (err) {
     next(err);
