@@ -204,7 +204,15 @@ export default function NFTsScreen() {
     queryKey: ["nfts"],
     queryFn: nftApi.list,
     enabled: isAuthenticated,
-    refetchInterval: 30_000,
+    // Only poll while there are vouchers in a transient state. Once everything
+    // is MINTED or FAILED, polling adds zero value and just burns battery + data.
+    refetchInterval: (q) => {
+      const vouchers = q.state.data ?? [];
+      const anyPending = vouchers.some(
+        (v) => v.mintStatus === "PENDING" || v.mintStatus === "MINTING",
+      );
+      return anyPending ? 5_000 : false;
+    },
   });
 
   const handleRedeemed = useCallback(() => {

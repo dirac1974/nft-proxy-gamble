@@ -82,6 +82,10 @@ model NFTVoucher {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   transactions Transaction[]
+
+  // /nfts route does `findMany({ where: { userId }, orderBy: { createdAt: 'desc' } })`
+  // on every My-NFTs tab render. Compound index supports both filter and sort.
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 model IAPReceipt {
@@ -130,4 +134,9 @@ model Transaction {
   iapReceiptId String?         @unique
   iapReceipt   IAPReceipt?     @relation(fields: [iapReceiptId], references: [id])
   createdAt    DateTime        @default(now())
+
+  // Compound index for analyticsService rolling-window queries and the cashout
+  // daily-limit count. Every game result and cashout triggers 4 filters on
+  // (userId, type, createdAt) — without this index those are full table scans.
+  @@index([userId, type, createdAt])
 }
