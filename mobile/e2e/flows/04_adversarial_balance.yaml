@@ -12,8 +12,9 @@ tags:
 #   POST /test/inject-bad-balance-sig   (test-only endpoint, disabled in prod)
 #
 # The mobile client's balanceVerification.ts rejects any balance response
-# where HMAC-SHA256(EXPO_PUBLIC_BALANCE_VERIFY_KEY, "nfpg_balance_v1"|userId|balance|timestamp)
-# does not match the returned balanceSig, or where sigTimestamp is stale (>5 min).
+# where HMAC-SHA256(EXPO_PUBLIC_BALANCE_VERIFY_KEY, `${userId}:${balance}:${sigTimestamp}`)
+# does not match the returned balanceSig, or where sigTimestamp is stale (>60s).
+# Note: payload uses colons as separator, not pipes; TTL is 60 seconds, not 5 minutes.
 
 ---
 - launchApp

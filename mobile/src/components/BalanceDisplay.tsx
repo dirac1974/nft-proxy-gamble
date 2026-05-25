@@ -20,11 +20,11 @@ export function BalanceDisplay({ compact = false }: BalanceDisplayProps) {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="balance-display">
       <Text style={styles.label}>BALANCE</Text>
       <View style={styles.row}>
         <Text style={styles.coinIcon}>🪙</Text>
-        <Text style={styles.amount}>{balance.toLocaleString()}</Text>
+        <Text style={styles.amount} testID="balance-amount">{balance.toLocaleString()}</Text>
         <Text style={styles.unit}>coins</Text>
       </View>
       <Text style={styles.usdHint}>≈ ${(balance / 100).toFixed(2)} USDC</Text>
