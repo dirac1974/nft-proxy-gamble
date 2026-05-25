@@ -65,7 +65,7 @@ module.exports = {
       [
         "react-native-iap",
         {
-          paymentProvider: "both",
+          paymentProvider: "Play Store",
         },
       ],
       ...(PINNING_ENABLED ? ["./plugins/withAndroidCertPinning"] : []),
