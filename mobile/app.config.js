@@ -62,18 +62,7 @@ module.exports = {
     plugins: [
       "expo-router",
       "expo-secure-store",
-      [
-        "expo-build-properties",
-        {
-          android: {
-            // NDK 27 (RN 0.81 default) on Windows fails to link libc++_shared.so
-            // for native modules that rely on implicit STL linking (worklets,
-            // expo-modules-core, react-native-screens). NDK 26.x has the older
-            // implicit linking and works on Windows.
-            ndkVersion: "26.1.10909125",
-          },
-        },
-      ],
+      "./plugins/withNdkVersion",
       ...(PINNING_ENABLED ? ["./plugins/withAndroidCertPinning"] : []),
     ],
     extra: {
