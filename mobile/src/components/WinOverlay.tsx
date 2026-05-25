@@ -74,6 +74,7 @@ export function WinOverlay({ visible, rank, payout, tier, onDismiss }: WinOverla
           style={[styles.card, { shadowColor: glowColor, borderColor: glowColor }, containerStyle, glowStyle]}
           accessibilityRole="alert"
           accessibilityLabel={`${rank} wins ${payout} coins`}
+          accessible
         >
           <Text style={styles.emoji}>{emoji}</Text>
           <Text style={[styles.rank, { color: glowColor }]}>{rank}</Text>

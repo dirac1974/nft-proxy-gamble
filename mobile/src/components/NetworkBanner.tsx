@@ -30,7 +30,7 @@ export function NetworkBanner() {
   if (!showNetworkError) return null;
 
   return (
-    <View style={styles.banner} accessibilityRole="alert">
+    <View style={styles.banner} accessibilityRole="alert" accessible>
       <Text style={styles.message}>
         Wrong network — switch to {CHAIN.name}
       </Text>

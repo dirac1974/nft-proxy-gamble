@@ -4,6 +4,19 @@
 
 ---
 
+## Current Deployment Status (2026-05-24)
+
+| Component | State | Detail |
+|---|---|---|
+| Supabase DB | ✅ Live | project `yzodntgnaydfkqvibmff`, 6 tables applied |
+| NFTProxyVoucher (Amoy) | ✅ Deployed + verified | `0x2Ed681d659E67A0ef154875CA4743Ed865B60255` |
+| Backend `.env` | ✅ Wired | DATABASE_URL, JWT_SECRET, MINTER_PRIVATE_KEY, CONTRACT_ADDRESS all set |
+| MINTER_ROLE | ✅ Held by backend wallet | Granted by constructor (deployer = minter wallet) |
+| EAS mobile build | ⏳ Pending | needs Apple/Google credentials |
+| Apple/Google IAP creds | ⏳ Pending | only needed for receipt verification |
+
+---
+
 ## 1. Required Secrets (5 Total)
 
 | Secret | Where to Get It | How to Use It |

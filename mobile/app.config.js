@@ -62,12 +62,7 @@ module.exports = {
     plugins: [
       "expo-router",
       "expo-secure-store",
-      [
-        "react-native-iap",
-        {
-          paymentProvider: "Both",
-        },
-      ],
+      "./plugins/withNdkVersion",
       ...(PINNING_ENABLED ? ["./plugins/withAndroidCertPinning"] : []),
     ],
     extra: {
