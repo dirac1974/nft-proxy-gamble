@@ -10,6 +10,7 @@ import nftRoutes from "./routes/nfts.js";
 import adminRoutes from "./routes/admin.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { config } from "./config/index.js";
+import { getPendingBatchSize } from "./services/purchaseCommitmentService.js";
 
 export function createApp(): express.Application {
   const app = express();
@@ -22,7 +23,15 @@ export function createApp(): express.Application {
   const authLimiter = rateLimit({ windowMs: 60_000, max: 10, skip: skipInTest, standardHeaders: true, legacyHeaders: false });
   const gameLimiter = rateLimit({ windowMs: 60_000, max: 60, skip: skipInTest, standardHeaders: true, legacyHeaders: false });
 
-  app.get("/health", (_req, res) => res.json({ status: "ok", timestamp: new Date().toISOString() }));
+  // /health is the canonical liveness probe. Now also surfaces internal
+  // backlog metrics so monitoring (per docs/MONITORING_ALERTS_SPEC.md) can
+  // alert on a growing commitPurchase batch without needing direct process
+  // access. Keep additions to this endpoint cheap — no DB calls, no network.
+  app.get("/health", (_req, res) => res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    pendingCommitBatch: getPendingBatchSize(),
+  }));
 
   app.use("/auth", authLimiter, authRoutes);
   app.use("/balance", gameLimiter, balanceRoutes);
