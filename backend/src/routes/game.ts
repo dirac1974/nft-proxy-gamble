@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { AppError } from "../middleware/errorHandler.js";
+import { requireAllowedJurisdiction } from "../middleware/jurisdictionBlock.js";
 import {
   generateServerSeed,
   hashServerSeed,
@@ -216,7 +217,7 @@ const cashoutSchema = z.object({
   coinsToCashout: z.number().int().min(MIN_COIN_BALANCE),
 });
 
-router.post("/cashout", requireAuth, async (req, res, next) => {
+router.post("/cashout", requireAuth, requireAllowedJurisdiction, async (req, res, next) => {
   try {
     const { sessionId, coinsToCashout } = cashoutSchema.parse(req.body);
     const userId = req.user!.userId;

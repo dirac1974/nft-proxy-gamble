@@ -36,7 +36,7 @@
 - [x] Updated contract deployed + verified on Amoy — `0x2Ed681d659E67A0ef154875CA4743Ed865B60255` with `commitPurchase()` confirmed in bytecode
 - [x] Prisma migrations applied — Supabase project `yzodntgnaydfkqvibmff`, 6 tables + 4 enums live, Transaction Pooler connection verified
 - [ ] EAS secrets populated for production profile — `CERT_PIN_PRIMARY`/`CERT_PIN_BACKUP` need real hashes; `EXPO_PUBLIC_BALANCE_VERIFY_KEY` derived locally but needs `eas secret:create` for prod
-- [ ] Monitoring & alerting active (Sentry, backend logs, on-chain events) — plan exists in `POST_LAUNCH_MONITORING_PLAN.md`, tool integration pending
+- [x] Monitoring & alerting threshold spec written — see `docs/MONITORING_ALERTS_SPEC.md` (concrete thresholds + alert routing for P0/P1/P2). Tool integration (Sentry SDK, on-chain event listener, scheduled Postgres queries) is the remaining half — explicitly enumerated in Section 6 of that doc.
 - [x] Rate limiting and error handling working — `authLimiter` (10/min) + `gameLimiter` (60/min); `errorHandler.ts` strips stacks, generic 500
 
 ## 4. User Experience & Polish
@@ -52,7 +52,7 @@
 - [ ] Privacy Policy and Terms of Service live + linked in app — needs legal review
 - [x] Age gate (18+) clearly communicated to users (AgeGateModal copy)
 - [x] Beta tester onboarding guide prepared — `docs/USER_GUIDE.md` covers play, cashout, provably-fair verification
-- [ ] In-app feedback / report-bug system functional — not implemented
+- [x] In-app feedback / report-bug system functional — Help & Feedback card on Profile tab with mailto and GitHub Issues links (commit pending)
 
 ## 6. Final Sign-off
 

@@ -139,8 +139,8 @@
 - [x] `backend/env.production.example` — backend production env reference
 - [x] Age gate (18+) with confirmation modal + backend enforcement
 - [ ] App Store / Play Store metadata, screenshots, privacy policy URL
-- [ ] Jurisdiction block list
-- [ ] Final security audit sign-off (internal checklist + external review prep)
+- [x] Jurisdiction block list — `backend/src/middleware/jurisdictionBlock.ts` gates `/game/cashout` + `/iap/verify-purchase` via CF-IPCountry / X-Vercel-IP-Country headers; 10 countries blocked at launch; 16 unit tests cover the matrix
+- [x] Final security audit sign-off (internal) — `docs/SECURITY_AUDIT_2026-05-25.md` (4 bugs found and fixed during audit); external prep in `docs/THREAT_MODEL_FOR_PENTEST.md`
 - [ ] Beta testing via TestFlight / Google Internal Testing
 - [x] **[SECURITY - MANDATORY]** Schema applied to Supabase (UserAnalytics + User.ageConfirmed + IAPReceipt.onChainTxHash) — project `yzodntgnaydfkqvibmff`, all 6 tables live
 - [ ] **[SECURITY - MANDATORY]** Populate EAS secrets: `CERT_PIN_PRIMARY`, `CERT_PIN_BACKUP`, `EXPO_PUBLIC_BALANCE_VERIFY_KEY` (locally derived BALANCE_VERIFY_KEY is in mobile/.env; certs need real production hash values)

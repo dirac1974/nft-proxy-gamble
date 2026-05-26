@@ -1,7 +1,9 @@
 import React from "react";
 import {
   Alert,
+  Linking,
   Pressable,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -33,6 +35,44 @@ export default function ProfileScreen() {
   const shortAddress = address
     ? `${address.slice(0, 10)}…${address.slice(-8)}`
     : "Not connected";
+
+  const handleSendFeedback = async () => {
+    const appVersion = Constants.expoConfig?.version ?? "unknown";
+    const osLine = `${Platform.OS} ${Platform.Version}`;
+    const subject = encodeURIComponent("NFT Proxy Gamble — Beta Feedback");
+    const body = encodeURIComponent(
+      [
+        "Describe the issue or feedback:",
+        "",
+        "",
+        "---",
+        `App: ${appVersion}`,
+        `Platform: ${osLine}`,
+        `Wallet: ${address ?? "(not connected)"}`,
+        `Network: ${CHAIN.name}`,
+      ].join("\n"),
+    );
+    const mailto = `mailto:beta@nftproxygamble.app?subject=${subject}&body=${body}`;
+    const supported = await Linking.canOpenURL(mailto);
+    if (!supported) {
+      Alert.alert(
+        "No mail app available",
+        "Please email beta@nftproxygamble.app from another device with the details.",
+      );
+      return;
+    }
+    void Linking.openURL(mailto);
+  };
+
+  const handleReportBug = async () => {
+    const issuesUrl = "https://github.com/dirac1974/nft-proxy-gamble/issues/new";
+    const supported = await Linking.canOpenURL(issuesUrl);
+    if (!supported) {
+      Alert.alert("Cannot open browser", issuesUrl);
+      return;
+    }
+    void Linking.openURL(issuesUrl);
+  };
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
@@ -101,6 +141,29 @@ export default function ProfileScreen() {
         </View>
       </GlassCard>
 
+      {/* Feedback */}
+      <GlassCard>
+        <Text style={styles.sectionTitle}>HELP & FEEDBACK</Text>
+        <Pressable
+          style={styles.linkRow}
+          onPress={handleSendFeedback}
+          accessibilityRole="link"
+          accessibilityLabel="Send beta feedback by email"
+        >
+          <Text style={styles.linkRowLabel}>Send feedback</Text>
+          <Text style={styles.linkRowChevron}>›</Text>
+        </Pressable>
+        <Pressable
+          style={styles.linkRow}
+          onPress={handleReportBug}
+          accessibilityRole="link"
+          accessibilityLabel="Report a bug on GitHub"
+        >
+          <Text style={styles.linkRowLabel}>Report a bug</Text>
+          <Text style={styles.linkRowChevron}>›</Text>
+        </Pressable>
+      </GlassCard>
+
       {/* Disconnect */}
       {isAuthenticated && (
         <Pressable
@@ -158,4 +221,14 @@ const styles = StyleSheet.create({
   },
   disconnectText: { ...typography.body, color: colors.lose, fontWeight: "700" },
 
+  linkRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  linkRowLabel: { ...typography.body },
+  linkRowChevron: { fontSize: 20, color: colors.textMuted },
 });

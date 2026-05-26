@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { AppError } from "../middleware/errorHandler.js";
+import { requireAllowedJurisdiction } from "../middleware/jurisdictionBlock.js";
 import { verifyAppleReceipt, verifyGoogleReceipt } from "../services/iapVerifier.js";
 import { signBalance } from "../services/balanceSigning.js";
 import { queuePurchaseCommitment } from "../services/purchaseCommitmentService.js";
@@ -24,7 +25,7 @@ const purchaseSchema = z.discriminatedUnion("platform", [
   }),
 ]);
 
-router.post("/verify-purchase", requireAuth, async (req, res, next) => {
+router.post("/verify-purchase", requireAuth, requireAllowedJurisdiction, async (req, res, next) => {
   try {
     const body = purchaseSchema.parse(req.body);
     const userId = req.user!.userId;
