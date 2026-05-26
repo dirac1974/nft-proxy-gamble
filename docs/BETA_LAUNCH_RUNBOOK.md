@@ -2,9 +2,23 @@
 
 **Goal**: Launch the app to closed beta (TestFlight + Google Play Internal Testing) with maximum safety and monitoring.
 
-**Target Audience**: 50–100 trusted testers (friends, family, early supporters)
+**Target Audience**: 5–15 invited testers for initial closed beta (NDA + screening). Scale to 50–100 in week 2 if no P0 alerts fire.
 
 **Estimated Timeline**: 3–5 days from start to first testers
+
+## Current Blockers (as of 2026-05-26)
+
+These are the items between now and being able to execute Phase 1 of this runbook. See `docs/ROADMAP.md` Milestone M0 for the canonical list, summarized here:
+
+| Blocker | Owner | What it unblocks |
+|---|---|---|
+| EAS secrets populated (`CERT_PIN_PRIMARY`/`_BACKUP`, `EXPO_PUBLIC_BALANCE_VERIFY_KEY`) | David | `eas build` produces a valid TestFlight binary |
+| Apple Developer + Google Play Developer accounts | David | App Store Connect + Play Console access |
+| Privacy Policy + Terms of Service live | Legal | App Store / Play Store submission |
+| Sentry SDK wired in backend + mobile | Claude (waiting on SENTRY_DSN) | Crash + error tracking actionable |
+| App icon + splash designs | Design | Currently placeholder PNGs in `mobile/assets/` |
+
+Code is ready. Tests are green. Infrastructure is ready. The blocking work is accounts + design + legal.
 
 ---
 
@@ -72,6 +86,96 @@
   - How to report bugs
   - What to test (focus areas)
   - Known issues / limitations
+
+---
+
+## Closed User Group Setup
+
+The first 5–15 testers go through a tighter screen than the broader 50-100 second-wave group.
+
+### Selecting testers
+
+Pick testers along these axes so you cover the space:
+
+- **At least 2 iOS, 2 Android.** Different OS versions if possible (iOS 17 + iOS 18; Android 13 + Android 14).
+- **Mix of wallet types.** MetaMask Mobile is the primary, but include 1-2 testers on Rainbow, Trust Wallet, and Coinbase Wallet to find WalletConnect compatibility issues.
+- **Mix of crypto literacy.** Include 2 testers who have never bought USDC or used a wallet — they'll surface the onboarding friction we miss internally.
+- **At least 1 tester in a different time zone** so the on-call sees what an off-hours session looks like.
+
+### NDA + ground rules (paste into the invite email)
+
+> You're being invited to a private beta of NFT Proxy Gamble. Before you join:
+>
+> **Confidentiality**: please do not share screenshots, video, the app binary, or anything else from this beta publicly. We'll lift this restriction when we go public; for now everything is under NDA.
+>
+> **What this is**: a testnet build on Polygon Amoy. All coins, vouchers, and "USDC" are testnet — none of this is real money. Do not send any mainnet funds to any address in the app.
+>
+> **Known limitations**: IAP runs in sandbox mode (you won't be charged). Device attestation is in shadow mode — we're collecting samples, not blocking. Some screens still have placeholder art.
+>
+> **How to report issues**: use the "Report a bug" link on the Profile tab (opens our GitHub Issues), or "Send feedback" (email). Include OS version + the action you took before the issue.
+>
+> **What to test, in priority order**:
+> 1. Connect wallet → sign in → confirm age → see lobby
+> 2. Buy a coin bundle in sandbox
+> 3. Play 5+ hands of video poker, including holds
+> 4. Cash out to an NFT voucher
+> 5. View the voucher on the NFTs tab → redeem for testnet USDC
+> 6. Try edge cases: rotate network mid-session, force-quit during draw, etc.
+>
+> **Reply with**:
+> - Your Apple ID email (for TestFlight invite) and/or Google account email (for Internal Testing invite)
+> - The wallet address you'll use to test (Polygon Amoy testnet)
+> - "I accept" — explicit acceptance of the NDA above
+
+### Tester onboarding checklist (per tester)
+
+- [ ] Apple ID added to TestFlight internal testers list
+- [ ] Google account added to the Play Console Internal Testing track
+- [ ] Wallet address added to the backend's `BETA_ALLOWLIST` (a simple env var; backend rejects auth from non-allowed addresses during M0)
+- [ ] Tester sent some Amoy MATIC (for redemption gas) — small amount, ~0.05 from a treasury wallet
+- [ ] Tester acknowledged NDA via reply
+
+### Tester offboarding
+
+After M0 closes, optionally remove testers from the allowlist. Don't remove them from TestFlight / Play (they'll auto-lose access when the M0 build is unpublished).
+
+### Backend `BETA_ALLOWLIST` implementation note
+
+Not yet wired in code. The cleanest spot is in `routes/auth.ts:verify` — after recovering the address, check `if (config.BETA_ALLOWLIST && !config.BETA_ALLOWLIST.includes(address)) throw new AppError(403, "Closed beta only");`. Add `BETA_ALLOWLIST?: z.string().optional()` to the config schema; format is a comma-separated lowercase hex address list. Empty / unset = no restriction (M0 → M1 transition is just deleting the env var).
+
+---
+
+## Monitoring Setup (detailed)
+
+This section is a quick-reference; the full spec is **`docs/MONITORING_ALERTS_SPEC.md`** (concrete thresholds + routing per severity). Read that doc before launch.
+
+**Minimum-viable monitoring for M0** (what must be wired before testers connect):
+
+- [ ] Sentry on both backend and mobile (free tier is fine for 5–15 testers; DSN in EAS secret + backend env)
+- [ ] Backend log aggregation to either:
+  - Vercel/Supabase logs UI (already there, no setup), OR
+  - A Logtail / Better Stack drain if you want better search
+- [ ] Manual daily check (per `MONITORING_ALERTS_SPEC.md` §7 "First-week-of-beta watch checklist"):
+  - Cashout success rate ≥ 95%
+  - No BLOCKED accounts unjustified
+  - No `User.coinBalance < 0` rows
+  - Hot wallet ≥ 1 MATIC
+  - Pending commitPurchase batch empty by end-of-day
+
+**Defer to M1** (acceptable to launch M0 without these, but track them daily by hand):
+
+- On-chain event listener service (poll `VoucherRedeemed`, `PurchaseCommitted`, `Paused`, `EmergencyWithdrawal`)
+- Scheduled Postgres integrity queries (run by hand against Supabase SQL editor)
+- PagerDuty integration — Slack `#nfpg-incidents` channel notification + phone fallback for the on-call person is sufficient
+
+### What "on-call" looks like for M0
+
+One person carries the pager 24×7 for the first 7 days. Rotates daily after that to whoever is awake in the most active tester timezone. They're responsible for:
+
+- Watching `#nfpg-incidents` (Slack) and Sentry
+- Running the daily checklist in `MONITORING_ALERTS_SPEC.md` §7 each morning
+- Acknowledging tester reports within 4 hours
+- Triggering rollbacks per `docs/ROLLBACK_PLAYBOOK.md` if a P0 fires
 
 ---
 

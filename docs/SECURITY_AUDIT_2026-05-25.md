@@ -220,3 +220,41 @@ Cashout daily limit:
 | 10. Mobile Client | ✅ | Claude 2026-05-25 | Assumes restore-iap branch merged |
 
 **Reviewer sign-off**: Claude — all sections reviewed. Two HIGH-severity bugs found and fixed with tests. No unresolved issues for testnet beta. External pentest still required before mainnet.
+
+---
+
+## Grok Review — 2026-05-26 (post-audit, post-PR-#11-merge)
+
+**Verdict (paraphrased from `docs/GROK_FEEDBACK.md` 2026-05-25 16:00 UTC sweep)**: *"Excellent iterative progress. Ready for beta with minor polish."* Recent commits cited as good: SDK 54 squash, the four bug fixes (B-1 through B-4), perf wins, IAP migration via PR #11, ROLLBACK_PLAYBOOK.
+
+**Grok's outstanding asks**:
+1. **Final Slither / MythX run on `NFTProxyVoucher.sol` before beta.** Internal audit was a process review, not static analysis — Slither catches a different class of issues (low-level Solidity patterns, unchecked external calls, missing visibility, etc).
+2. **External audit prep.** `docs/THREAT_MODEL_FOR_PENTEST.md` is the artifact; needs a pentester to actually engage.
+3. **Continue closing checklist items in `FINAL_PRE_BETA_CHECKLIST.md`.** Most code-only items now closed via commits `4c8069c` (jurisdiction gate + feedback + monitoring spec).
+4. **Beta launch prep per runbook.** Picked up under Action 4 below.
+
+**Items Claude added in response (post-Grok-review)**:
+- `docs/MONITORING_ALERTS_SPEC.md` — concrete P0/P1/P2 thresholds (commit `4c8069c`)
+- `docs/TEST_COVERAGE_REPORT.md` — current coverage state per workspace (commit `4c8069c`)
+- Jurisdiction block middleware (commit `4c8069c`) — 10-country block list applied to /game/cashout + /iap/verify-purchase
+- In-app feedback widget (commit `4c8069c`)
+
+**Static analysis status**:
+- **Not yet run**: Slither, MythX, solhint, eth-security-toolbox
+- **Action**: schedule a Slither run as a pre-merge gate in CI before mainnet. Suggested invocation: `slither contracts/src/NFTProxyVoucher.sol --json slither-report.json` against a clean clone.
+- We're not blocking testnet beta on Slither but ARE blocking mainnet.
+
+**Updated sign-off table (Grok co-signatory still pending)**:
+
+| Section | Status | Reviewer | Notes |
+|---|---|---|---|
+| 1. Threat Model | ✅ | Claude 2026-05-25 | Money paths identified |
+| 2. Balance Integrity | ✅ (B-1 + B-3 fixed) | Claude 2026-05-25 + 26 | Atomic conditional updates |
+| 3. IAP Receipt | ✅ (B-4 fixed) | Claude 2026-05-26 | Prototype-pollution defense added |
+| 4. Auth & Sessions | ✅ | Claude 2026-05-25 + 26 | confirm-age refactored to use requireAuth |
+| 5. Smart Contract | ✅ (manual) | Claude 2026-05-25 | **Static analysis (Slither) still pending** |
+| 6. Rate Limiting + Jurisdiction | ✅ | Claude 2026-05-26 | Jurisdiction gate added on money paths |
+| 7. Error Handling | ✅ | Claude 2026-05-25 | |
+| 8. Secrets & Config | ✅ | Claude 2026-05-25 | |
+| 9. On-Chain Security | ✅ (B-2 fixed) | Claude 2026-05-25 | tokenId parse fixed |
+| 10. Mobile Client | ✅ (PR #11 merged) | Claude 2026-05-26 | expo-iap live on main; 401 disconnect; testIDs wired |
