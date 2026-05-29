@@ -258,3 +258,23 @@ Cashout daily limit:
 | 8. Secrets & Config | ✅ | Claude 2026-05-25 | |
 | 9. On-Chain Security | ✅ (B-2 fixed) | Claude 2026-05-25 | tokenId parse fixed |
 | 10. Mobile Client | ✅ (PR #11 merged) | Claude 2026-05-26 | expo-iap live on main; 401 disconnect; testIDs wired |
+
+---
+
+## Addendum — Red Team Adversarial Pass (2026-05-28)
+
+A dedicated adversarial audit was run on 2026-05-28 (full report: `docs/RED_TEAM_AUDIT_2026-05-28.md`). New findings, all fixed in code with regression tests except where noted:
+
+| ID | Severity | Title | Status |
+|----|----------|-------|--------|
+| RT-CRIT-1 | **CRITICAL** | Server seed reused across hands in a session → guaranteed-win RNG prediction. `/game/draw` revealed `serverSeed` but did not rotate it; a raw API client could re-deal on the same session and predict every future deck. Fixed by rotating the seed (and publishing `nextServerSeedHash`) on every draw. | ✅ Fixed |
+| RT-MED-1 | MEDIUM | Cashout > on-chain `MAX_COIN_BALANCE` (100k) debited coins then reverted the mint, permanently losing user coins. Capped `coinsToCashout` at 100,000 in the schema. | ✅ Fixed |
+| RT-MED-2 | MEDIUM | Apple receipt not bound to our `bundle_id`; a cross-app receipt with a matching `product_id` could mint coins for free. Added bundle binding when `APPLE_APP_ATTEST_BUNDLE_ID` is configured. | ✅ Fixed |
+| RT-LOW-1 | LOW | JWT algorithm not pinned (alg-confusion / `none` risk). Pinned `HS256` on sign + verify. | ✅ Fixed |
+| RT-LOW-2 | LOW | Zod validation errors returned HTTP 500. Now mapped to 400. | ✅ Fixed |
+| RT-INFO-1 | INFO | "Public" balance-verify key is actually the symmetric HMAC key; display-only control. Recommend asymmetric (Ed25519). | Documented |
+| RT-INFO-2 | INFO | Jurisdiction gate fail-open without edge geo header. | Accepted |
+| RT-INFO-3 | INFO | In-memory auth nonce store; not multi-instance safe. | Accepted |
+| RT-INFO-4 | INFO | Contract admin is a single EOA. | Phase 5 (Safe + timelock) |
+
+**Residual follow-up:** IAP replay dedup is keyed on `sha256(receiptData)`; add `original_transaction_id` dedup in Phase 4 to defend against Apple re-encoding the same transaction.

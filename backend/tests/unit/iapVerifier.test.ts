@@ -1,6 +1,7 @@
-import { hashReceipt, verifyGoogleReceipt } from "../../src/services/iapVerifier";
+import { hashReceipt, verifyGoogleReceipt, verifyAppleReceipt } from "../../src/services/iapVerifier";
 
-// Apple verifier calls external HTTP — tested via integration; unit tests cover helpers.
+// Apple verifier calls external HTTP — we mock global.fetch to exercise the
+// status + bundle_id binding logic without hitting Apple.
 
 describe("hashReceipt", () => {
   it("returns a 64-char hex string", () => {
@@ -54,4 +55,44 @@ describe("verifyGoogleReceipt (dev/test mode)", () => {
       expect(result.coinsGranted).toBe(0);
     },
   );
+});
+
+// RT-MED-2 regression: Apple returns status 0 for ANY valid receipt from ANY
+// app. Without binding the receipt to our bundle id, an attacker could redeem a
+// receipt minted by a different (free) app that happens to use a matching
+// productId. APPLE_APP_ATTEST_BUNDLE_ID is set to "com.nftproxygamble.app" in
+// tests/setup.ts.
+describe("verifyAppleReceipt — bundle_id binding", () => {
+  const realFetch = global.fetch;
+  const mockApple = (body: unknown) => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => body,
+    }) as unknown as typeof fetch;
+  };
+
+  afterEach(() => {
+    global.fetch = realFetch;
+  });
+
+  it("rejects a status-0 receipt from a foreign bundle_id", async () => {
+    mockApple({
+      status: 0,
+      receipt: { bundle_id: "com.evil.cloneapp", in_app: [{ product_id: "coins_500" }] },
+    });
+    const result = await verifyAppleReceipt("forged-but-apple-valid");
+    expect(result.valid).toBe(false);
+    expect(result.coinsGranted).toBe(0);
+  });
+
+  it("accepts a status-0 receipt from our own bundle_id", async () => {
+    mockApple({
+      status: 0,
+      receipt: { bundle_id: "com.nftproxygamble.app", in_app: [{ product_id: "coins_500" }] },
+    });
+    const result = await verifyAppleReceipt("legit-receipt");
+    expect(result.valid).toBe(true);
+    expect(result.coinsGranted).toBe(500);
+  });
 });

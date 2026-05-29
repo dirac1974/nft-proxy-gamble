@@ -32,7 +32,8 @@ export interface DrawResult {
   rank: HandRank;
   payout: number;
   newBalance: number;
-  serverSeed: string;     // revealed so player can verify
+  serverSeed: string;        // revealed seed for the hand just played
+  nextServerSeedHash: string; // commitment for the next hand if re-dealt (RT-CRIT-1)
 }
 
 export interface JwtPayload {

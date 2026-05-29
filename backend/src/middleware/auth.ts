@@ -20,7 +20,12 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 
   const token = header.slice(7);
   try {
-    const payload = jwt.verify(token, config.JWT_SECRET) as JwtPayload;
+    // SECURITY (RT-LOW-1): pin the algorithm to HS256. Without an explicit
+    // allowlist, jsonwebtoken will accept any algorithm the token header
+    // declares, opening the door to algorithm-confusion attacks (e.g. a token
+    // forged with "none", or RS256 verified against our symmetric secret as a
+    // public key). We only ever issue HS256 tokens, so reject everything else.
+    const payload = jwt.verify(token, config.JWT_SECRET, { algorithms: ["HS256"] }) as JwtPayload;
     req.user = payload;
     next();
   } catch {
@@ -29,5 +34,8 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 }
 
 export function signToken(payload: JwtPayload): string {
-  return jwt.sign(payload, config.JWT_SECRET, { expiresIn: config.JWT_EXPIRY } as jwt.SignOptions);
+  return jwt.sign(payload, config.JWT_SECRET, {
+    algorithm: "HS256",
+    expiresIn: config.JWT_EXPIRY,
+  } as jwt.SignOptions);
 }
