@@ -16,6 +16,18 @@
         "simulator": true
       }
     },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api-staging.nftproxygamble.com",
+        "EXPO_PUBLIC_CONTRACT_ADDRESS": "0x0000000000000000000000000000000000000000",
+        "EXPO_PUBLIC_WC_PROJECT_ID": "demo_project_id"
+      }
+    },
     "testnet": {
       "distribution": "internal",
       "channel": "testnet",
