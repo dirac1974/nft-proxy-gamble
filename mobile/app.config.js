@@ -64,7 +64,10 @@ module.exports = {
       "expo-router",
       "expo-secure-store",
       "expo-iap",
-      "./plugins/withNdkVersion",
+      // NDK 26 pin is a Windows-only local-build workaround (RN 0.81's default
+      // NDK 27 fails to link libc++_shared.so on Windows). EAS builds on Linux
+      // where NDK 27 works, and forcing 26.1 breaks if it isn't on the image.
+      ...(process.env.EAS_BUILD === "true" ? [] : ["./plugins/withNdkVersion"]),
       ...(PINNING_ENABLED ? ["./plugins/withAndroidCertPinning"] : []),
     ],
     extra: {
