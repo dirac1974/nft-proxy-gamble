@@ -22,10 +22,19 @@
       "android": {
         "buildType": "apk"
       },
+      "ios": {
+        "simulator": false
+      },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api-staging.nftproxygamble.com",
         "EXPO_PUBLIC_CONTRACT_ADDRESS": "0x0000000000000000000000000000000000000000",
         "EXPO_PUBLIC_WC_PROJECT_ID": "demo_project_id"
+      }
+    },
+    "preview-sim": {
+      "extends": "preview",
+      "ios": {
+        "simulator": true
       }
     },
     "testnet": {
