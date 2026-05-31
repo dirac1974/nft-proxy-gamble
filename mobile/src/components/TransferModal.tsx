@@ -9,7 +9,10 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { colors, radius, spacing, typography } from "@/theme";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { NeonButton } from "@/components/ui";
+import { colors, radius, shadows, spacing, typography } from "@/theme";
 
 interface TransferModalProps {
   visible: boolean;
@@ -47,6 +50,8 @@ export function TransferModal({ visible, coinAmount, onClose, onConfirm }: Trans
     onClose();
   };
 
+  const showValidationError = toAddress.length > 0 && !isValidAddress;
+
   return (
     <Modal
       visible={visible}
@@ -56,58 +61,115 @@ export function TransferModal({ visible, coinAmount, onClose, onConfirm }: Trans
       accessibilityViewIsModal
     >
       <View style={styles.overlay}>
-        <View style={styles.sheet}>
-          <Text style={styles.title}>Transfer NFT Voucher</Text>
-          <Text style={styles.subtitle}>
-            Transfer {coinAmount.toLocaleString()} coin voucher to another wallet
-          </Text>
+        <LinearGradient
+          colors={["rgba(40, 8, 78, 0.98)", "rgba(11, 0, 20, 0.99)"]}
+          style={styles.sheet}
+        >
+          {/* Drag handle */}
+          <View style={styles.handle} />
 
-          <Text style={styles.label}>Recipient Address</Text>
-          <TextInput
-            style={[styles.input, !isValidAddress && toAddress.length > 0 && styles.inputError]}
-            placeholder="0x..."
-            placeholderTextColor={colors.textMuted}
-            value={toAddress}
-            onChangeText={setToAddress}
-            autoCapitalize="none"
-            autoCorrect={false}
-            editable={!isPending}
-            accessibilityLabel="Recipient wallet address"
-          />
-          {toAddress.length > 0 && !isValidAddress && (
-            <Text style={styles.validationHint}>Enter a valid Ethereum address (0x…)</Text>
-          )}
-
-          <View style={styles.warning}>
-            <Text style={styles.warningText}>
-              ⚠ Transfers are irreversible. Verify the address carefully.
-            </Text>
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.headerIconWrap}>
+              <MaterialCommunityIcons name="send-circle" size={20} color={colors.purpleGlow} />
+            </View>
+            <View style={styles.headerText}>
+              <Text style={styles.title}>Transfer NFT Voucher</Text>
+              <Text style={styles.subtitle}>
+                Transfer {coinAmount.toLocaleString()} coin voucher to another wallet
+              </Text>
+            </View>
+            {!isPending && (
+              <Pressable
+                onPress={handleClose}
+                style={styles.closeButton}
+                accessibilityRole="button"
+                accessibilityLabel="Close transfer modal"
+              >
+                <Ionicons name="close" size={18} color={colors.textSecondary} />
+              </Pressable>
+            )}
           </View>
 
-          {error && (
-            <Text style={styles.error} accessibilityRole="alert">{error}</Text>
-          )}
-
-          <View style={styles.buttonRow}>
-            <Pressable style={styles.cancelButton} onPress={handleClose} disabled={isPending}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.confirmButton, (!isValidAddress || isPending) && styles.buttonDisabled]}
-              onPress={handleConfirm}
-              disabled={!isValidAddress || isPending}
-              accessibilityRole="button"
-              accessibilityLabel="Confirm transfer"
-              accessibilityState={{ disabled: !isValidAddress || isPending }}
-            >
-              {isPending ? (
-                <ActivityIndicator color={colors.textPrimary} />
-              ) : (
-                <Text style={styles.confirmText}>Transfer</Text>
+          {/* Body */}
+          <View style={styles.body}>
+            {/* Address input */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>
+                <Ionicons name="wallet-outline" size={11} color={colors.textMuted} />
+                {"  RECIPIENT ADDRESS"}
+              </Text>
+              <View style={[
+                styles.inputWrap,
+                showValidationError && styles.inputWrapError,
+                isValidAddress && styles.inputWrapValid,
+              ]}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="0x..."
+                  placeholderTextColor={colors.textMuted}
+                  value={toAddress}
+                  onChangeText={setToAddress}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!isPending}
+                  accessibilityLabel="Recipient wallet address"
+                />
+                {isValidAddress && (
+                  <Ionicons name="checkmark-circle" size={18} color={colors.win} style={styles.inputIcon} />
+                )}
+                {showValidationError && (
+                  <Ionicons name="alert-circle" size={18} color={colors.lose} style={styles.inputIcon} />
+                )}
+              </View>
+              {showValidationError && (
+                <Text style={styles.validationHint}>Enter a valid Ethereum address (0x…)</Text>
               )}
-            </Pressable>
+            </View>
+
+            {/* Warning */}
+            <View style={styles.warning}>
+              <Ionicons name="warning" size={16} color={colors.warning} />
+              <Text style={styles.warningText}>
+                Transfers are irreversible. Verify the address carefully.
+              </Text>
+            </View>
+
+            {/* Error */}
+            {error && (
+              <View style={styles.errorBanner} accessibilityRole="alert">
+                <Ionicons name="close-circle" size={15} color={colors.lose} />
+                <Text style={styles.error}>{error}</Text>
+              </View>
+            )}
           </View>
-        </View>
+
+          {/* Actions */}
+          <View style={styles.footer}>
+            <View style={styles.buttonRow}>
+              <NeonButton
+                label="Cancel"
+                onPress={handleClose}
+                variant="ghost"
+                size="md"
+                style={styles.cancelBtn}
+                disabled={isPending}
+                accessibilityLabel="Cancel transfer"
+              />
+              <NeonButton
+                label={isPending ? "" : "Transfer"}
+                onPress={handleConfirm}
+                variant="primary"
+                size="md"
+                style={styles.confirmBtn}
+                disabled={!isValidAddress || isPending}
+                loading={isPending}
+                accessibilityLabel="Confirm transfer"
+                icon={!isPending ? <MaterialCommunityIcons name="send" size={16} color={colors.textPrimary} /> : undefined}
+              />
+            </View>
+          </View>
+        </LinearGradient>
       </View>
     </Modal>
   );
@@ -116,56 +178,128 @@ export function TransferModal({ visible, coinAmount, onClose, onConfirm }: Trans
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
+    backgroundColor: "rgba(0,0,0,0.78)",
     justifyContent: "flex-end",
   },
   sheet: {
-    backgroundColor: colors.surface,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
-    padding: spacing.xl,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+
+  handle: {
+    alignSelf: "center",
+    width: 36,
+    height: 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.borderStrong,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+
+  header: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    padding: spacing.lg,
+    paddingTop: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+    gap: spacing.sm,
+  },
+  headerIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    backgroundColor: `${colors.purpleGlow}15`,
+    borderWidth: 1,
+    borderColor: `${colors.purpleGlow}30`,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+  },
+  headerText: { flex: 1, gap: 2 },
+  title: { ...typography.heading3 },
+  subtitle: { ...typography.bodySmall },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.full,
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  body: {
+    padding: spacing.lg,
     gap: spacing.md,
   },
-  title: { ...typography.heading3, textAlign: "center" },
-  subtitle: { ...typography.bodySmall, textAlign: "center" },
-  label: { ...typography.caption, letterSpacing: 1 },
-  input: {
+
+  inputGroup: { gap: spacing.xs },
+  inputLabel: {
+    ...typography.overline,
+    color: colors.textMuted,
+  },
+  inputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.md,
+    backgroundColor: colors.backgroundDeep,
+  },
+  inputWrapError: { borderColor: colors.lose },
+  inputWrapValid: { borderColor: `${colors.win}55` },
+  input: {
+    flex: 1,
     padding: spacing.md,
     color: colors.textPrimary,
     fontFamily: "monospace",
     fontSize: 13,
   },
-  inputError: { borderColor: colors.lose },
+  inputIcon: { paddingRight: spacing.md },
   validationHint: { ...typography.caption, color: colors.lose },
+
   warning: {
-    backgroundColor: `${colors.warning}22`,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    backgroundColor: `${colors.warning}12`,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: `${colors.warning}30`,
+  },
+  warningText: { ...typography.bodySmall, color: colors.warning, flex: 1 },
+
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: `${colors.lose}12`,
     borderRadius: radius.md,
     padding: spacing.sm,
     borderWidth: 1,
-    borderColor: `${colors.warning}44`,
+    borderColor: `${colors.lose}28`,
   },
-  warningText: { ...typography.bodySmall, color: colors.warning },
-  error: { ...typography.bodySmall, color: colors.lose, textAlign: "center" },
-  buttonRow: { flexDirection: "row", gap: spacing.sm },
-  cancelButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.full,
-    paddingVertical: spacing.md,
-    alignItems: "center",
+  error: { ...typography.bodySmall, color: colors.lose, flex: 1 },
+
+  footer: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xl,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSubtle,
   },
-  cancelText: { ...typography.body, color: colors.textSecondary },
-  confirmButton: {
-    flex: 1,
-    backgroundColor: colors.purple,
-    borderRadius: radius.full,
-    paddingVertical: spacing.md,
-    alignItems: "center",
+  buttonRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingTop: spacing.sm,
   },
-  confirmText: { ...typography.body, fontWeight: "700" },
-  buttonDisabled: { opacity: 0.4 },
+  cancelBtn: { flex: 1 },
+  confirmBtn: { flex: 1 },
 });
