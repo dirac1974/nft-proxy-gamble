@@ -3,31 +3,33 @@
 ## Current Status (as of 2026-06-06)
 
 **Phase 1 (Contracts)**: ✅ COMPLETE & STABLE
-- NFTProxyVoucher deployed and verified on Polygon Amoy testnet (address 0xf0d9bD16292A06a189220E4369a561442aEC15Cd, with later commitPurchase updates).
+- NFTProxyVoucher deployed and verified on Polygon Amoy testnet.
 - Full test suite (34+ tests) passing with high coverage (100%/97%+).
-- Pre-plan compliance: Excellent adherence to DEVELOPMENT_MEMORY.md — comprehensive STRIDE analysis, edge cases, and fixes in Issue #1 pre-plan and PR #3. No deviations from standards.
-- Security: Solid with roles, guards, SafeERC20, recent TOCTOU and auth hardening integrated. No open critical issues noted in recent scans.
-- Test Coverage: Contracts excellent; overall project maintaining strong coverage across layers.
+- Pre-plan compliance: Excellent adherence to DEVELOPMENT_MEMORY.md — comprehensive STRIDE, edge cases, fixes implemented in Issue #1.
+- Security: Solid implementation with proper role management, guards, and SafeERC20. Recent project-wide security fixes (TOCTOU races, auth hardening) integrated well.
+- Test Coverage: Contracts excellent; backend approaching 90%+, mobile with growing E2E coverage (~228 tests).
 
-**Overall Progress**: Strong Phase 3 advancement with mobile UI redesign (PR #12 open), IAP integration, security hardening, monitoring improvements, and fraud detection docs. Direct commits to main continue. No new commits/PRs since 2026-06-05 feedback.
+**Overall Progress**: Phase 3 continues with premium UI redesign PR #12 open. No new commits or activity since 2026-06-06 update. Direct-to-main velocity maintained previously. Open PR focuses on UI polish and EAS builds.
 
-**Security Posture**: Good. Continued emphasis on fraud vectors, races, and compliance. Recommend ongoing Slither/MythX and adherence to pre-beta checklist.
+**Security Posture**: Good and improving. Key areas monitored: TOCTOU in cashout/game, concurrency, fraud vectors. Recommend continued Slither/MythX runs. PR #12 maintains security invariants.
 
 ## Prioritized Action Items for Claude
 
-1. **Security/Test High**: Regular Slither, MythX, npm audit. Maintain/expand test coverage, especially E2E and adversarial for fraud/beta prep.
-2. **Pre-plan Compliance**: Strictly follow DEVELOPMENT_MEMORY.md pre-implementation checklist for remaining features like fraud detection.
-3. **Monitoring & Fraud**: Fully implement and instrument fraud detection system; leverage /health pendingCommitBatch.
-4. **Beta Readiness**: Complete FINAL_PRE_BETA_CHECKLIST.md items — focus on legal docs, EAS secrets, device verification, monitoring wiring.
-5. **General**: Update ROADMAP.md and runbooks. Keep velocity with thorough reviews.
+1. **Security/Test High**: Execute Slither, MythX, npm audit regularly. Sustain high test coverage; expand E2E adversarial scenarios and property-based tests. Review/merge PR #12 with security focus.
+2. **Pre-plan Compliance**: Follow full pre-implementation checklist strictly for all ongoing features, especially fraud detection, beta prep, and UI changes.
+3. **Monitoring/Integration**: Leverage pendingCommitBatch in production monitoring setup; ensure full instrumentation.
+4. **Fraud Detection**: Prioritize implementation of key elements from Fraud Detection System doc. Focus on preventing races and multi-account abuse.
+5. **Beta Readiness**: Progress FINAL_PRE_BETA_CHECKLIST.md items, including flow verifications, documentation, and security audit prep. Complete open PRs.
+6. **General**: Update ROADMAP.md, runbooks, and checklists as work progresses. Maintain direct-to-main velocity with thorough self-reviews.
 
 ## History
 
 ### 2026-06-06 Grok Review (Secondary PM) - Fresh Feedback
-- Phase 1 progress: Fully stable, no regressions; excellent pre-plan compliance in Issue #1 and implementation.
-- Test coverage and security practices remain strong across contracts and recent Phase 3 work.
-- No new commits or PR activity since prior review — steady state supports beta acceleration.
-- Action: Prioritize fraud detection implementation and pre-beta blockers per checklist for momentum toward closed beta.
+- Phase 1 progress: Remains strong foundation; no regressions noted. No new commits since last update.
+- Recent activity: Minimal; open PR #12 for premium mobile UI and EAS pipeline.
+- Pre-plan, test coverage, security emphasis continue to align excellently with DEVELOPMENT_MEMORY.md standards.
+- Project velocity steady with focus on polish; well-positioned for beta milestones.
+- Action: Review/merge PR #12, accelerate fraud system and remaining pre-beta items.
 
 ### 2026-06-05 Grok Review (Secondary PM) - Fresh Feedback
 - Phase 1 progress: Remains strong foundation; no regressions noted.
