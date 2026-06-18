@@ -80,5 +80,11 @@ module.exports = {
     experiments: {
       typedRoutes: true,
     },
+updates: {
+      url: "https://u.expo.dev/ecbf2c6e-8417-4abb-87df-c60a85eba6af",
+    },
+    runtimeVersion: {
+      policy: "appVersion",
+    },
   },
 };
