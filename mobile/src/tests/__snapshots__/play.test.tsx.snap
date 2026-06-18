@@ -1,0 +1,2032 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`VideoPokerScreen — classic cabinet matches snapshot in idle phase 1`] = `
+<RCTScrollView
+  contentContainerStyle={
+    {
+      "gap": 16,
+      "padding": 16,
+      "paddingBottom": 48,
+    }
+  }
+  style={
+    {
+      "backgroundColor": "#0f001a",
+      "flex": 1,
+    }
+  }
+>
+  <View>
+    <View
+      style={
+        {
+          "backgroundColor": "#240047",
+          "borderColor": "#3d0078",
+          "borderRadius": 12,
+          "borderWidth": 1,
+          "paddingHorizontal": 8,
+          "paddingVertical": 8,
+        }
+      }
+    >
+      <View
+        style={
+          {
+            "alignItems": "center",
+            "borderBottomColor": "#3d0078",
+            "borderBottomWidth": 1,
+            "flexDirection": "row",
+            "marginBottom": 2,
+            "paddingBottom": 4,
+          }
+        }
+      >
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "flex": 1,
+                "fontSize": 12,
+                "fontWeight": "700",
+              },
+              {
+                "color": "#6b5a7a",
+                "fontSize": 11,
+                "fontWeight": "700",
+              },
+            ]
+          }
+        >
+          HAND
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              {
+                "color": "#6b5a7a",
+                "fontSize": 11,
+                "fontWeight": "700",
+              },
+              {
+                "backgroundColor": "#ffbb0022",
+                "color": "#ffffff",
+              },
+            ]
+          }
+          testID="paycol-1"
+        >
+          1
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              {
+                "color": "#6b5a7a",
+                "fontSize": 11,
+                "fontWeight": "700",
+              },
+              false,
+            ]
+          }
+          testID="paycol-2"
+        >
+          2
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              {
+                "color": "#6b5a7a",
+                "fontSize": 11,
+                "fontWeight": "700",
+              },
+              false,
+            ]
+          }
+          testID="paycol-3"
+        >
+          3
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              {
+                "color": "#6b5a7a",
+                "fontSize": 11,
+                "fontWeight": "700",
+              },
+              false,
+            ]
+          }
+          testID="paycol-4"
+        >
+          4
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              {
+                "color": "#6b5a7a",
+                "fontSize": 11,
+                "fontWeight": "700",
+              },
+              false,
+            ]
+          }
+          testID="paycol-5"
+        >
+          5
+        </Text>
+      </View>
+      <View
+        style={
+          [
+            {
+              "alignItems": "center",
+              "borderRadius": 4,
+              "flexDirection": "row",
+              "paddingVertical": 3,
+            },
+            false,
+          ]
+        }
+        testID="payrow-ROYAL_FLUSH"
+      >
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "flex": 1,
+                "fontSize": 12,
+                "fontWeight": "700",
+              },
+              false,
+            ]
+          }
+        >
+          Royal Flush
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              {
+                "backgroundColor": "#ffbb0022",
+                "color": "#ffffff",
+              },
+              false,
+            ]
+          }
+        >
+          250
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          500
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          750
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          1000
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          4000
+        </Text>
+      </View>
+      <View
+        style={
+          [
+            {
+              "alignItems": "center",
+              "borderRadius": 4,
+              "flexDirection": "row",
+              "paddingVertical": 3,
+            },
+            false,
+          ]
+        }
+        testID="payrow-STRAIGHT_FLUSH"
+      >
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "flex": 1,
+                "fontSize": 12,
+                "fontWeight": "700",
+              },
+              false,
+            ]
+          }
+        >
+          Straight Flush
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              {
+                "backgroundColor": "#ffbb0022",
+                "color": "#ffffff",
+              },
+              false,
+            ]
+          }
+        >
+          50
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          100
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          150
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          200
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          250
+        </Text>
+      </View>
+      <View
+        style={
+          [
+            {
+              "alignItems": "center",
+              "borderRadius": 4,
+              "flexDirection": "row",
+              "paddingVertical": 3,
+            },
+            false,
+          ]
+        }
+        testID="payrow-FOUR_OF_A_KIND"
+      >
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "flex": 1,
+                "fontSize": 12,
+                "fontWeight": "700",
+              },
+              false,
+            ]
+          }
+        >
+          Four of a Kind
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              {
+                "backgroundColor": "#ffbb0022",
+                "color": "#ffffff",
+              },
+              false,
+            ]
+          }
+        >
+          25
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          50
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          75
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          100
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          125
+        </Text>
+      </View>
+      <View
+        style={
+          [
+            {
+              "alignItems": "center",
+              "borderRadius": 4,
+              "flexDirection": "row",
+              "paddingVertical": 3,
+            },
+            false,
+          ]
+        }
+        testID="payrow-FULL_HOUSE"
+      >
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "flex": 1,
+                "fontSize": 12,
+                "fontWeight": "700",
+              },
+              false,
+            ]
+          }
+        >
+          Full House
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              {
+                "backgroundColor": "#ffbb0022",
+                "color": "#ffffff",
+              },
+              false,
+            ]
+          }
+        >
+          9
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          18
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          27
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          36
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          45
+        </Text>
+      </View>
+      <View
+        style={
+          [
+            {
+              "alignItems": "center",
+              "borderRadius": 4,
+              "flexDirection": "row",
+              "paddingVertical": 3,
+            },
+            false,
+          ]
+        }
+        testID="payrow-FLUSH"
+      >
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "flex": 1,
+                "fontSize": 12,
+                "fontWeight": "700",
+              },
+              false,
+            ]
+          }
+        >
+          Flush
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              {
+                "backgroundColor": "#ffbb0022",
+                "color": "#ffffff",
+              },
+              false,
+            ]
+          }
+        >
+          6
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          12
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          18
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          24
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          30
+        </Text>
+      </View>
+      <View
+        style={
+          [
+            {
+              "alignItems": "center",
+              "borderRadius": 4,
+              "flexDirection": "row",
+              "paddingVertical": 3,
+            },
+            false,
+          ]
+        }
+        testID="payrow-STRAIGHT"
+      >
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "flex": 1,
+                "fontSize": 12,
+                "fontWeight": "700",
+              },
+              false,
+            ]
+          }
+        >
+          Straight
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              {
+                "backgroundColor": "#ffbb0022",
+                "color": "#ffffff",
+              },
+              false,
+            ]
+          }
+        >
+          4
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          8
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          12
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          16
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          20
+        </Text>
+      </View>
+      <View
+        style={
+          [
+            {
+              "alignItems": "center",
+              "borderRadius": 4,
+              "flexDirection": "row",
+              "paddingVertical": 3,
+            },
+            false,
+          ]
+        }
+        testID="payrow-THREE_OF_A_KIND"
+      >
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "flex": 1,
+                "fontSize": 12,
+                "fontWeight": "700",
+              },
+              false,
+            ]
+          }
+        >
+          Three of a Kind
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              {
+                "backgroundColor": "#ffbb0022",
+                "color": "#ffffff",
+              },
+              false,
+            ]
+          }
+        >
+          3
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          6
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          9
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          12
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          15
+        </Text>
+      </View>
+      <View
+        style={
+          [
+            {
+              "alignItems": "center",
+              "borderRadius": 4,
+              "flexDirection": "row",
+              "paddingVertical": 3,
+            },
+            false,
+          ]
+        }
+        testID="payrow-TWO_PAIR"
+      >
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "flex": 1,
+                "fontSize": 12,
+                "fontWeight": "700",
+              },
+              false,
+            ]
+          }
+        >
+          Two Pair
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              {
+                "backgroundColor": "#ffbb0022",
+                "color": "#ffffff",
+              },
+              false,
+            ]
+          }
+        >
+          2
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          4
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          6
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          8
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          10
+        </Text>
+      </View>
+      <View
+        style={
+          [
+            {
+              "alignItems": "center",
+              "borderRadius": 4,
+              "flexDirection": "row",
+              "paddingVertical": 3,
+            },
+            false,
+          ]
+        }
+        testID="payrow-JACKS_OR_BETTER"
+      >
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "flex": 1,
+                "fontSize": 12,
+                "fontWeight": "700",
+              },
+              false,
+            ]
+          }
+        >
+          Jacks or Better
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              {
+                "backgroundColor": "#ffbb0022",
+                "color": "#ffffff",
+              },
+              false,
+            ]
+          }
+        >
+          1
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          2
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          3
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          4
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#ffbb00",
+                "fontFamily": "monospace",
+                "fontSize": 11,
+                "textAlign": "right",
+                "width": 40,
+              },
+              false,
+              false,
+            ]
+          }
+        >
+          5
+        </Text>
+      </View>
+    </View>
+    <View
+      style={
+        {
+          "alignItems": "stretch",
+          "backgroundColor": "#1a0033",
+          "borderColor": "#3d0078",
+          "borderRadius": 6,
+          "borderWidth": 1,
+          "flexDirection": "row",
+          "paddingHorizontal": 8,
+          "paddingVertical": 4,
+        }
+      }
+    >
+      <View
+        style={
+          {
+            "alignItems": "flex-end",
+            "flex": 1,
+            "paddingHorizontal": 8,
+          }
+        }
+      >
+        <Text
+          style={
+            {
+              "color": "#6b5a7a",
+              "fontSize": 11,
+              "fontWeight": "400",
+              "letterSpacing": 1,
+              "marginBottom": 2,
+            }
+          }
+        >
+          CREDITS
+        </Text>
+        <Text
+          accessibilityLabel="CREDITS 100"
+          style={
+            {
+              "color": "#ffbb00",
+              "fontFamily": "monospace",
+              "fontSize": 22,
+              "fontWeight": "700",
+              "textShadowColor": "#ffbb00",
+              "textShadowOffset": {
+                "height": 0,
+                "width": 0,
+              },
+              "textShadowRadius": 6,
+            }
+          }
+          testID="meter-credits"
+        >
+          100
+        </Text>
+      </View>
+      <View
+        style={
+          {
+            "backgroundColor": "#3d0078",
+            "marginVertical": 4,
+            "width": 1,
+          }
+        }
+      />
+      <View
+        style={
+          {
+            "alignItems": "flex-end",
+            "flex": 1,
+            "paddingHorizontal": 8,
+          }
+        }
+      >
+        <Text
+          style={
+            {
+              "color": "#6b5a7a",
+              "fontSize": 11,
+              "fontWeight": "400",
+              "letterSpacing": 1,
+              "marginBottom": 2,
+            }
+          }
+        >
+          BET
+        </Text>
+        <Text
+          accessibilityLabel="BET 1"
+          style={
+            {
+              "color": "#ffbb00",
+              "fontFamily": "monospace",
+              "fontSize": 22,
+              "fontWeight": "700",
+              "textShadowColor": "#ffbb00",
+              "textShadowOffset": {
+                "height": 0,
+                "width": 0,
+              },
+              "textShadowRadius": 6,
+            }
+          }
+          testID="meter-bet"
+        >
+          1
+        </Text>
+      </View>
+      <View
+        style={
+          {
+            "backgroundColor": "#3d0078",
+            "marginVertical": 4,
+            "width": 1,
+          }
+        }
+      />
+      <View
+        style={
+          {
+            "alignItems": "flex-end",
+            "flex": 1,
+            "paddingHorizontal": 8,
+          }
+        }
+      >
+        <Text
+          style={
+            {
+              "color": "#6b5a7a",
+              "fontSize": 11,
+              "fontWeight": "400",
+              "letterSpacing": 1,
+              "marginBottom": 2,
+            }
+          }
+        >
+          WIN
+        </Text>
+        <Text
+          accessibilityLabel="WIN 0"
+          style={
+            {
+              "color": "#ffbb00",
+              "fontFamily": "monospace",
+              "fontSize": 22,
+              "fontWeight": "700",
+              "textShadowColor": "#ffbb00",
+              "textShadowOffset": {
+                "height": 0,
+                "width": 0,
+              },
+              "textShadowRadius": 6,
+            }
+          }
+          testID="meter-win"
+        >
+          0
+        </Text>
+      </View>
+    </View>
+    <View
+      style={
+        {
+          "alignItems": "center",
+          "flexDirection": "row",
+          "justifyContent": "space-between",
+          "minHeight": 100,
+          "paddingHorizontal": 4,
+        }
+      }
+    >
+      <View
+        style={
+          {
+            "alignItems": "center",
+            "backgroundColor": "#1a0033",
+            "borderColor": "#5b21b6",
+            "borderRadius": 12,
+            "borderWidth": 2,
+            "height": 84,
+            "justifyContent": "center",
+            "padding": 4,
+            "width": 58,
+          }
+        }
+        testID="card-back-0"
+      >
+        <View
+          style={
+            {
+              "alignSelf": "stretch",
+              "backgroundColor": "#6B21A844",
+              "borderColor": "#6B21A8",
+              "borderRadius": 6,
+              "borderWidth": 1,
+              "flex": 1,
+            }
+          }
+        />
+      </View>
+      <View
+        style={
+          {
+            "alignItems": "center",
+            "backgroundColor": "#1a0033",
+            "borderColor": "#5b21b6",
+            "borderRadius": 12,
+            "borderWidth": 2,
+            "height": 84,
+            "justifyContent": "center",
+            "padding": 4,
+            "width": 58,
+          }
+        }
+        testID="card-back-1"
+      >
+        <View
+          style={
+            {
+              "alignSelf": "stretch",
+              "backgroundColor": "#6B21A844",
+              "borderColor": "#6B21A8",
+              "borderRadius": 6,
+              "borderWidth": 1,
+              "flex": 1,
+            }
+          }
+        />
+      </View>
+      <View
+        style={
+          {
+            "alignItems": "center",
+            "backgroundColor": "#1a0033",
+            "borderColor": "#5b21b6",
+            "borderRadius": 12,
+            "borderWidth": 2,
+            "height": 84,
+            "justifyContent": "center",
+            "padding": 4,
+            "width": 58,
+          }
+        }
+        testID="card-back-2"
+      >
+        <View
+          style={
+            {
+              "alignSelf": "stretch",
+              "backgroundColor": "#6B21A844",
+              "borderColor": "#6B21A8",
+              "borderRadius": 6,
+              "borderWidth": 1,
+              "flex": 1,
+            }
+          }
+        />
+      </View>
+      <View
+        style={
+          {
+            "alignItems": "center",
+            "backgroundColor": "#1a0033",
+            "borderColor": "#5b21b6",
+            "borderRadius": 12,
+            "borderWidth": 2,
+            "height": 84,
+            "justifyContent": "center",
+            "padding": 4,
+            "width": 58,
+          }
+        }
+        testID="card-back-3"
+      >
+        <View
+          style={
+            {
+              "alignSelf": "stretch",
+              "backgroundColor": "#6B21A844",
+              "borderColor": "#6B21A8",
+              "borderRadius": 6,
+              "borderWidth": 1,
+              "flex": 1,
+            }
+          }
+        />
+      </View>
+      <View
+        style={
+          {
+            "alignItems": "center",
+            "backgroundColor": "#1a0033",
+            "borderColor": "#5b21b6",
+            "borderRadius": 12,
+            "borderWidth": 2,
+            "height": 84,
+            "justifyContent": "center",
+            "padding": 4,
+            "width": 58,
+          }
+        }
+        testID="card-back-4"
+      >
+        <View
+          style={
+            {
+              "alignSelf": "stretch",
+              "backgroundColor": "#6B21A844",
+              "borderColor": "#6B21A8",
+              "borderRadius": 6,
+              "borderWidth": 1,
+              "flex": 1,
+            }
+          }
+        />
+      </View>
+    </View>
+    <View
+      style={
+        {
+          "gap": 8,
+        }
+      }
+    >
+      <View
+        style={
+          {
+            "alignItems": "center",
+            "flexDirection": "row",
+            "flexWrap": "wrap",
+            "gap": 4,
+            "justifyContent": "center",
+          }
+        }
+      >
+        <View
+          accessibilityLabel="Bet 1 coin"
+          accessibilityRole="button"
+          accessibilityState={
+            {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": true,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            [
+              {
+                "alignItems": "center",
+                "borderColor": "#3d0078",
+                "borderRadius": 9999,
+                "borderWidth": 2,
+                "height": 40,
+                "justifyContent": "center",
+                "width": 40,
+              },
+              {
+                "backgroundColor": "#ffbb0022",
+                "borderColor": "#ffbb00",
+              },
+            ]
+          }
+          testID="bet-1"
+        >
+          <Text
+            style={
+              [
+                {
+                  "color": "#6b5a7a",
+                  "fontSize": 15,
+                  "fontWeight": "700",
+                },
+                {
+                  "color": "#ffbb00",
+                },
+              ]
+            }
+          >
+            1
+          </Text>
+        </View>
+        <View
+          accessibilityLabel="Bet 2 coins"
+          accessibilityRole="button"
+          accessibilityState={
+            {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": false,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            [
+              {
+                "alignItems": "center",
+                "borderColor": "#3d0078",
+                "borderRadius": 9999,
+                "borderWidth": 2,
+                "height": 40,
+                "justifyContent": "center",
+                "width": 40,
+              },
+              false,
+            ]
+          }
+          testID="bet-2"
+        >
+          <Text
+            style={
+              [
+                {
+                  "color": "#6b5a7a",
+                  "fontSize": 15,
+                  "fontWeight": "700",
+                },
+                false,
+              ]
+            }
+          >
+            2
+          </Text>
+        </View>
+        <View
+          accessibilityLabel="Bet 3 coins"
+          accessibilityRole="button"
+          accessibilityState={
+            {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": false,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            [
+              {
+                "alignItems": "center",
+                "borderColor": "#3d0078",
+                "borderRadius": 9999,
+                "borderWidth": 2,
+                "height": 40,
+                "justifyContent": "center",
+                "width": 40,
+              },
+              false,
+            ]
+          }
+          testID="bet-3"
+        >
+          <Text
+            style={
+              [
+                {
+                  "color": "#6b5a7a",
+                  "fontSize": 15,
+                  "fontWeight": "700",
+                },
+                false,
+              ]
+            }
+          >
+            3
+          </Text>
+        </View>
+        <View
+          accessibilityLabel="Bet 4 coins"
+          accessibilityRole="button"
+          accessibilityState={
+            {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": false,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            [
+              {
+                "alignItems": "center",
+                "borderColor": "#3d0078",
+                "borderRadius": 9999,
+                "borderWidth": 2,
+                "height": 40,
+                "justifyContent": "center",
+                "width": 40,
+              },
+              false,
+            ]
+          }
+          testID="bet-4"
+        >
+          <Text
+            style={
+              [
+                {
+                  "color": "#6b5a7a",
+                  "fontSize": 15,
+                  "fontWeight": "700",
+                },
+                false,
+              ]
+            }
+          >
+            4
+          </Text>
+        </View>
+        <View
+          accessibilityLabel="Bet 5 coins"
+          accessibilityRole="button"
+          accessibilityState={
+            {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": false,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            [
+              {
+                "alignItems": "center",
+                "borderColor": "#3d0078",
+                "borderRadius": 9999,
+                "borderWidth": 2,
+                "height": 40,
+                "justifyContent": "center",
+                "width": 40,
+              },
+              false,
+            ]
+          }
+          testID="bet-5"
+        >
+          <Text
+            style={
+              [
+                {
+                  "color": "#6b5a7a",
+                  "fontSize": 15,
+                  "fontWeight": "700",
+                },
+                false,
+              ]
+            }
+          >
+            5
+          </Text>
+        </View>
+        <View
+          accessibilityLabel="Bet max, 5 coins"
+          accessibilityRole="button"
+          accessibilityState={
+            {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            [
+              {
+                "alignItems": "center",
+                "borderColor": "#3d0078",
+                "borderRadius": 9999,
+                "borderWidth": 2,
+                "height": 40,
+                "justifyContent": "center",
+                "paddingHorizontal": 16,
+              },
+              false,
+            ]
+          }
+          testID="bet-max"
+        >
+          <Text
+            style={
+              [
+                {
+                  "color": "#6b5a7a",
+                  "fontSize": 11,
+                  "fontWeight": "800",
+                  "letterSpacing": 1,
+                },
+                false,
+              ]
+            }
+          >
+            BET MAX
+          </Text>
+        </View>
+      </View>
+      <View
+        accessibilityLabel="NEW GAME"
+        accessibilityRole="button"
+        accessibilityState={
+          {
+            "busy": false,
+            "checked": undefined,
+            "disabled": false,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onBlur={[Function]}
+        onClick={[Function]}
+        onFocus={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          [
+            {
+              "alignItems": "center",
+              "backgroundColor": "#6B21A8",
+              "borderRadius": 9999,
+              "elevation": 6,
+              "paddingVertical": 24,
+              "shadowColor": "#6B21A8",
+              "shadowOffset": {
+                "height": 2,
+                "width": 0,
+              },
+              "shadowOpacity": 0.4,
+              "shadowRadius": 12,
+            },
+            false,
+            false,
+          ]
+        }
+        testID="primary-button"
+      >
+        <Text
+          style={
+            {
+              "color": "#ffffff",
+              "fontSize": 18,
+              "fontWeight": "600",
+              "letterSpacing": 2,
+            }
+          }
+        >
+          NEW GAME
+        </Text>
+      </View>
+    </View>
+  </View>
+</RCTScrollView>
+`;

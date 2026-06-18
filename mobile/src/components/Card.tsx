@@ -18,11 +18,13 @@ interface CardProps {
   disabled?: boolean;
   /** Position index 0-4. When provided, card deals in with a staggered spring. */
   dealIndex?: number;
+  /** Test identifier for E2E / unit flows (e.g. "card-0"). */
+  testID?: string;
 }
 
-const DEAL_STAGGER_MS = 80;
+const DEAL_STAGGER_MS = 90;
 
-export function Card({ cardIndex, held, onToggleHold, disabled = false, dealIndex }: CardProps) {
+export function Card({ cardIndex, held, onToggleHold, disabled = false, dealIndex, testID }: CardProps) {
   const card = decodeCard(cardIndex);
   const suitColor = card.isRed ? colors.hearts : colors.spades;
   const flip = useSharedValue(0);
@@ -64,6 +66,7 @@ export function Card({ cardIndex, held, onToggleHold, disabled = false, dealInde
       accessibilityRole="button"
       accessibilityLabel={a11yLabel}
       accessibilityState={{ selected: held, disabled }}
+      testID={testID}
     >
       <Animated.View style={[styles.card, holdStyle, dealStyle]}>
         {/* Top-left rank + suit */}
@@ -121,15 +124,21 @@ const styles = StyleSheet.create({
     fontSize: 26,
     textAlign: "center",
   },
+  // Classic cabinet "HELD" banner overlaid across the middle of the card.
   heldBadge: {
+    position: "absolute",
+    top: 32,
+    alignSelf: "center",
     backgroundColor: colors.neonGreen,
     borderRadius: radius.sm,
     paddingHorizontal: 6,
     paddingVertical: 2,
+    zIndex: 2,
   },
   heldText: {
     ...typography.caption,
     color: colors.background,
-    fontWeight: "700",
+    fontWeight: "800",
+    letterSpacing: 1,
   },
 });
