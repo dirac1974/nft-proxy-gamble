@@ -1,0 +1,166 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`MeterBar matches snapshot 1`] = `
+<View
+  style={
+    {
+      "alignItems": "stretch",
+      "backgroundColor": "#1a0033",
+      "borderColor": "#3d0078",
+      "borderRadius": 6,
+      "borderWidth": 1,
+      "flexDirection": "row",
+      "paddingHorizontal": 8,
+      "paddingVertical": 4,
+    }
+  }
+>
+  <View
+    style={
+      {
+        "alignItems": "flex-end",
+        "flex": 1,
+        "paddingHorizontal": 8,
+      }
+    }
+  >
+    <Text
+      style={
+        {
+          "color": "#6b5a7a",
+          "fontSize": 11,
+          "fontWeight": "400",
+          "letterSpacing": 1,
+          "marginBottom": 2,
+        }
+      }
+    >
+      CREDITS
+    </Text>
+    <Text
+      accessibilityLabel="CREDITS 1,234"
+      style={
+        {
+          "color": "#ffbb00",
+          "fontFamily": "monospace",
+          "fontSize": 22,
+          "fontWeight": "700",
+          "textShadowColor": "#ffbb00",
+          "textShadowOffset": {
+            "height": 0,
+            "width": 0,
+          },
+          "textShadowRadius": 6,
+        }
+      }
+      testID="meter-credits"
+    >
+      1,234
+    </Text>
+  </View>
+  <View
+    style={
+      {
+        "backgroundColor": "#3d0078",
+        "marginVertical": 4,
+        "width": 1,
+      }
+    }
+  />
+  <View
+    style={
+      {
+        "alignItems": "flex-end",
+        "flex": 1,
+        "paddingHorizontal": 8,
+      }
+    }
+  >
+    <Text
+      style={
+        {
+          "color": "#6b5a7a",
+          "fontSize": 11,
+          "fontWeight": "400",
+          "letterSpacing": 1,
+          "marginBottom": 2,
+        }
+      }
+    >
+      BET
+    </Text>
+    <Text
+      accessibilityLabel="BET 5"
+      style={
+        {
+          "color": "#ffbb00",
+          "fontFamily": "monospace",
+          "fontSize": 22,
+          "fontWeight": "700",
+          "textShadowColor": "#ffbb00",
+          "textShadowOffset": {
+            "height": 0,
+            "width": 0,
+          },
+          "textShadowRadius": 6,
+        }
+      }
+      testID="meter-bet"
+    >
+      5
+    </Text>
+  </View>
+  <View
+    style={
+      {
+        "backgroundColor": "#3d0078",
+        "marginVertical": 4,
+        "width": 1,
+      }
+    }
+  />
+  <View
+    style={
+      {
+        "alignItems": "flex-end",
+        "flex": 1,
+        "paddingHorizontal": 8,
+      }
+    }
+  >
+    <Text
+      style={
+        {
+          "color": "#6b5a7a",
+          "fontSize": 11,
+          "fontWeight": "400",
+          "letterSpacing": 1,
+          "marginBottom": 2,
+        }
+      }
+    >
+      WIN
+    </Text>
+    <Text
+      accessibilityLabel="WIN 250"
+      style={
+        {
+          "color": "#ffbb00",
+          "fontFamily": "monospace",
+          "fontSize": 22,
+          "fontWeight": "700",
+          "textShadowColor": "#ffbb00",
+          "textShadowOffset": {
+            "height": 0,
+            "width": 0,
+          },
+          "textShadowRadius": 6,
+        }
+      }
+      testID="meter-win"
+    >
+      250
+    </Text>
+  </View>
+</View>
+`;
