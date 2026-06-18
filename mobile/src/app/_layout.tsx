@@ -8,6 +8,7 @@ import { WalletConnectModal } from "@walletconnect/modal-react-native";
 import { colors } from "@/theme";
 import { useWalletStore } from "@/stores/walletStore";
 import { AgeGateModal } from "@/components/AgeGateModal";
+import { initSounds, unloadSounds } from "@/services/soundService";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -45,6 +46,13 @@ export default function RootLayout() {
   useEffect(() => {
     hydrate();
   }, [hydrate]);
+
+  useEffect(() => {
+    initSounds();
+    return () => {
+      unloadSounds();
+    };
+  }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
