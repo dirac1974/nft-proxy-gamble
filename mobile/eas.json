@@ -10,7 +10,7 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "http://localhost:3000",
         "EXPO_PUBLIC_CONTRACT_ADDRESS": "0x2Ed681d659E67A0ef154875CA4743Ed865B60255",
-        "EXPO_PUBLIC_WC_PROJECT_ID": "demo_project_id"
+        "EXPO_PUBLIC_WC_PROJECT_ID": "19c604c156cfc63e0268badfd24e60b0"
       },
       "ios": {
         "simulator": true
@@ -28,13 +28,16 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api-staging.nftproxygamble.com",
         "EXPO_PUBLIC_CONTRACT_ADDRESS": "0x0000000000000000000000000000000000000000",
-        "EXPO_PUBLIC_WC_PROJECT_ID": "demo_project_id"
+        "EXPO_PUBLIC_WC_PROJECT_ID": "19c604c156cfc63e0268badfd24e60b0"
       }
     },
     "preview-sim": {
       "extends": "preview",
       "ios": {
         "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_WC_PROJECT_ID": "19c604c156cfc63e0268badfd24e60b0"
       }
     },
     "testnet": {
@@ -42,7 +45,8 @@
       "channel": "testnet",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api-staging.nftproxygamble.com",
-        "EXPO_PUBLIC_CONTRACT_ADDRESS": "0x0000000000000000000000000000000000000000"
+        "EXPO_PUBLIC_CONTRACT_ADDRESS": "0x0000000000000000000000000000000000000000",
+        "EXPO_PUBLIC_WC_PROJECT_ID": "19c604c156cfc63e0268badfd24e60b0"
       },
       "ios": {
         "enterpriseProvisioning": "adhoc"
@@ -52,7 +56,8 @@
       "distribution": "store",
       "channel": "production",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.nftproxygamble.com"
+        "EXPO_PUBLIC_API_URL": "https://api.nftproxygamble.com",
+        "EXPO_PUBLIC_WC_PROJECT_ID": "19c604c156cfc63e0268badfd24e60b0"
       },
       "ios": {
         "autoIncrement": true

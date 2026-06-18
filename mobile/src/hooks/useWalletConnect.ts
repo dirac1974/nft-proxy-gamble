@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { useWalletConnectModal } from "@walletconnect/modal-react-native";
+import { useAppKit, useAccount, useProvider } from "@reown/appkit-react-native";
 import { useWalletStore } from "@/stores/walletStore";
 import {
   setWalletClient,
@@ -12,33 +12,29 @@ import {
 import type { Address } from "viem";
 
 export interface UseWalletConnectReturn {
-  /** Open the WalletConnect modal to initiate connection */
   openModal: () => void;
-  /** Disconnect the wallet and clear all session state */
   disconnect: () => Promise<void>;
-  /** Manually retry the auth flow (e.g. after fixing network) */
   retryAuth: () => Promise<void>;
-  /** Attempt to switch to the required network via wallet prompt */
   switchNetwork: () => Promise<void>;
-  /** Formatted address: "0xAbcd…1234" */
   shortAddress: string | null;
-  /** Whether a connection + auth operation is in progress */
   isBusy: boolean;
 }
 
 export function useWalletConnect(): UseWalletConnectReturn {
-  const { address, isConnected, provider, open } = useWalletConnectModal();
+  // Reown AppKit replaces the deprecated @walletconnect/modal-react-native.
+  const { open, disconnect: appKitDisconnect } = useAppKit();
+  const { address, isConnected } = useAccount();
+  const { provider } = useProvider();
+
   const {
     isAuthenticated,
     connectionStatus,
-    networkMismatch,
     disconnect: storeDisconnect,
     setStatus,
     setConnectionError,
     setNetworkMismatch,
   } = useWalletStore();
 
-  // Track the address we last ran auth for so we don't fire twice on re-renders
   const lastAuthAddress = useRef<string | null>(null);
 
   const runAuth = useCallback(
@@ -52,18 +48,16 @@ export function useWalletConnect(): UseWalletConnectReturn {
       try {
         setWalletClient(wcProvider);
 
-        // Check network before auth
         const onChain = await isOnRequiredNetwork();
         if (!onChain) {
           setNetworkMismatch(true);
           setStatus("connected");
-          // Don't throw — just surface the banner; user must switch manually
           return;
         }
 
         await signAndAuthenticate(addr as Address);
       } catch (err: unknown) {
-        lastAuthAddress.current = null; // allow retry
+        lastAuthAddress.current = null;
         const message = err instanceof Error ? err.message : "Authentication failed";
         setConnectionError(message);
       }
@@ -71,14 +65,12 @@ export function useWalletConnect(): UseWalletConnectReturn {
     [setConnectionError, setNetworkMismatch, setStatus]
   );
 
-  // Run auth when WalletConnect reports a new connection
   useEffect(() => {
     if (isConnected && provider && address && !isAuthenticated) {
       void runAuth(address, provider);
     }
   }, [isConnected, provider, address, isAuthenticated, runAuth]);
 
-  // Clear wallet client on disconnect
   useEffect(() => {
     if (!isConnected) {
       lastAuthAddress.current = null;
@@ -90,19 +82,23 @@ export function useWalletConnect(): UseWalletConnectReturn {
   const disconnect = useCallback(async () => {
     lastAuthAddress.current = null;
     clearWalletClient();
+    try {
+      await appKitDisconnect();
+    } catch {
+      // ignore — still clear local session below
+    }
     await storeDisconnect();
-  }, [storeDisconnect]);
+  }, [appKitDisconnect, storeDisconnect]);
 
   const retryAuth = useCallback(async () => {
     if (!address || !provider) return;
-    lastAuthAddress.current = null; // force re-run
+    lastAuthAddress.current = null;
     await runAuth(address, provider);
   }, [address, provider, runAuth]);
 
   const switchNetwork = useCallback(async () => {
     try {
       await switchToRequiredNetwork();
-      // After switch, retry auth if connected but not authenticated
       if (address && provider && !isAuthenticated) {
         await retryAuth();
       }
@@ -112,6 +108,10 @@ export function useWalletConnect(): UseWalletConnectReturn {
     }
   }, [address, provider, isAuthenticated, retryAuth, setConnectionError]);
 
+  const openModal = useCallback(() => {
+    open();
+  }, [open]);
+
   const shortAddress = address
     ? `${address.slice(0, 6)}…${address.slice(-4)}`
     : null;
@@ -119,12 +119,5 @@ export function useWalletConnect(): UseWalletConnectReturn {
   const isBusy =
     connectionStatus === "connecting" || connectionStatus === "authenticating";
 
-  return {
-    openModal: open,
-    disconnect,
-    retryAuth,
-    switchNetwork,
-    shortAddress,
-    isBusy,
-  };
+  return { openModal, disconnect, retryAuth, switchNetwork, shortAddress, isBusy };
 }

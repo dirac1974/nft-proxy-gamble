@@ -32,6 +32,16 @@ module.exports = {
       infoPlist: {
         NSCameraUsageDescription: "Used for QR code scanning to connect wallet.",
         ITSAppUsesNonExemptEncryption: false,
+        LSApplicationQueriesSchemes: [
+          "metamask",
+          "trust",
+          "safe",
+          "rainbow",
+          "uniswap",
+          "coinbase",
+          "ledgerlive",
+          "zerion",
+        ],
         ...(PINNING_ENABLED
           ? {
               NSAppTransportSecurity: {
