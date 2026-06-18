@@ -7,6 +7,7 @@ import {
   resolveHand,
   generateServerSeed,
   hashServerSeed,
+  generateClientSeed,
   createHandRecord,
 } from "../../src/services/videoPoker";
 
@@ -215,5 +216,140 @@ describe("property — deck determinism and completeness", () => {
         );
       }),
     );
+  });
+});
+
+describe("generateDeck — additional determinism", () => {
+  const SS = "determinism_server_seed_abc";
+  const CS = "determinism_client_seed_xyz";
+
+  it("is stable across 1000 repeated calls with same inputs", () => {
+    const reference = generateDeck(SS, CS, 7);
+    for (let i = 0; i < 1000; i++) {
+      expect(generateDeck(SS, CS, 7)).toEqual(reference);
+    }
+  });
+
+  it("output is a permutation of 0..51", () => {
+    const deck = generateDeck(SS, CS, 0);
+    const sorted = [...deck].sort((a, b) => a - b);
+    expect(sorted).toEqual(Array.from({ length: 52 }, (_, i) => i));
+  });
+
+  it("different handNumber produces different deck order", () => {
+    const d0 = generateDeck(SS, CS, 0);
+    const d1 = generateDeck(SS, CS, 1);
+    expect(d0).not.toEqual(d1);
+  });
+});
+
+describe("evaluateHand — explicit LOSE cases", () => {
+  const card = (rank: number, suit: number) => suit * 13 + rank;
+
+  it("low pair (2s) = LOSE", () => {
+    // pair of 2s (rank 0), no other pair, no straight, no flush
+    expect(evaluateHand([card(0, 0), card(0, 1), card(2, 2), card(4, 3), card(6, 0)])).toBe("LOSE");
+  });
+
+  it("no-pair high-card (A-K-Q-J-9 mixed suits) = LOSE", () => {
+    // ranks 12, 11, 10, 9, 7 — not consecutive enough for straight
+    expect(evaluateHand([card(12, 0), card(11, 1), card(10, 2), card(9, 3), card(7, 0)])).toBe("LOSE");
+  });
+});
+
+describe("calcPayout — all ranks and royal branches", () => {
+  const ranks = [
+    "STRAIGHT_FLUSH",
+    "FOUR_OF_A_KIND",
+    "FULL_HOUSE",
+    "FLUSH",
+    "STRAIGHT",
+    "THREE_OF_A_KIND",
+    "TWO_PAIR",
+    "JACKS_OR_BETTER",
+    "LOSE",
+  ] as const;
+
+  it("ROYAL_FLUSH 250x for bet=1", () => {
+    expect(calcPayout("ROYAL_FLUSH", 1)).toBe(250);
+  });
+  it("ROYAL_FLUSH 250x for bet=2 (non-max)", () => {
+    expect(calcPayout("ROYAL_FLUSH", 2)).toBe(500);
+  });
+  it("ROYAL_FLUSH 250x for bet=3 (non-max)", () => {
+    expect(calcPayout("ROYAL_FLUSH", 3)).toBe(750);
+  });
+  it("ROYAL_FLUSH 250x for bet=4 (non-max)", () => {
+    expect(calcPayout("ROYAL_FLUSH", 4)).toBe(1000);
+  });
+  it("ROYAL_FLUSH 800x for bet=5 (max)", () => {
+    expect(calcPayout("ROYAL_FLUSH", 5)).toBe(4000);
+  });
+
+  it.each(ranks)("%s payout scales linearly with bet", (rank) => {
+    const p1 = calcPayout(rank, 1);
+    const p3 = calcPayout(rank, 3);
+    if (rank === "LOSE") {
+      expect(p1).toBe(0);
+      expect(p3).toBe(0);
+    } else {
+      expect(p3).toBe(p1 * 3);
+    }
+  });
+
+  it("STRAIGHT_FLUSH pays 50x for bet=1", () => {
+    expect(calcPayout("STRAIGHT_FLUSH", 1)).toBe(50);
+  });
+  it("FOUR_OF_A_KIND pays 25x for bet=1", () => {
+    expect(calcPayout("FOUR_OF_A_KIND", 1)).toBe(25);
+  });
+  it("STRAIGHT pays 4x for bet=2", () => {
+    expect(calcPayout("STRAIGHT", 2)).toBe(8);
+  });
+  it("THREE_OF_A_KIND pays 3x for bet=5", () => {
+    expect(calcPayout("THREE_OF_A_KIND", 5)).toBe(15);
+  });
+  it("TWO_PAIR pays 2x for bet=1", () => {
+    expect(calcPayout("TWO_PAIR", 1)).toBe(2);
+  });
+  it("JACKS_OR_BETTER pays 1x for bet=1", () => {
+    expect(calcPayout("JACKS_OR_BETTER", 1)).toBe(1);
+  });
+});
+
+describe("applyHolds — throws on wrong length", () => {
+  it("throws if holds.length < 5", () => {
+    expect(() => applyHolds([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], [true, true, true])).toThrow(
+      "holds must have exactly 5 elements",
+    );
+  });
+
+  it("throws if holds.length > 5", () => {
+    expect(() =>
+      applyHolds([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], [true, true, true, true, true, true]),
+    ).toThrow("holds must have exactly 5 elements");
+  });
+});
+
+describe("resolveHand — LOSE path", () => {
+  it("resolves a losing hand with payout 0", () => {
+    // pair of 2s (ranks 0,0) plus three unrelated cards — LOSE
+    const deck = [0, 13, 1, 3, 5, 99, 99, 99, 99, 99]; // 99 won't be used (hold all)
+    const { rank, payout } = resolveHand({ deck }, [true, true, true, true, true], 3);
+    expect(rank).toBe("LOSE");
+    expect(payout).toBe(0);
+  });
+});
+
+describe("generateClientSeed", () => {
+  it("returns a 32-char hex string", () => {
+    const seed = generateClientSeed();
+    expect(seed).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it("returns different values on successive calls", () => {
+    const a = generateClientSeed();
+    const b = generateClientSeed();
+    expect(a).not.toBe(b);
   });
 });

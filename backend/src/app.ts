@@ -8,6 +8,7 @@ import iapRoutes from "./routes/iap.js";
 import gameRoutes from "./routes/game.js";
 import nftRoutes from "./routes/nfts.js";
 import adminRoutes from "./routes/admin.js";
+import devRouter from "./routes/dev.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { config } from "./config/index.js";
 
@@ -30,6 +31,10 @@ export function createApp(): express.Application {
   app.use("/game", gameLimiter, gameRoutes);
   app.use("/nfts", gameLimiter, nftRoutes);
   app.use("/admin", gameLimiter, adminRoutes);
+
+  if (process.env.NODE_ENV !== "production") {
+    app.use("/dev", devRouter);
+  }
 
   app.use(errorHandler);
 
