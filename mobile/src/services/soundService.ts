@@ -8,14 +8,13 @@ type SoundMap = Partial<Record<SoundKey, Audio.Sound>>;
 let sounds: SoundMap = {};
 let initialized = false;
 
-// Asset map — add .mp3 files to mobile/src/assets/sounds/ to activate
 const SOUND_ASSETS: Record<SoundKey, number | null> = {
-  deal: null,      // require("@/assets/sounds/deal.mp3")
-  hold: null,      // require("@/assets/sounds/hold.mp3")
-  win: null,       // require("@/assets/sounds/win.mp3")
-  bigWin: null,    // require("@/assets/sounds/bigwin.mp3")
-  lose: null,      // require("@/assets/sounds/lose.mp3")
-  coinDrop: null,  // require("@/assets/sounds/coindrop.mp3")
+  deal:     require("@/assets/sounds/deal.wav"),
+  hold:     require("@/assets/sounds/hold.wav"),
+  win:      require("@/assets/sounds/win.wav"),
+  bigWin:   require("@/assets/sounds/bigWin.wav"),
+  lose:     require("@/assets/sounds/lose.wav"),
+  coinDrop: require("@/assets/sounds/coin.wav"),
 };
 
 export async function initSounds(): Promise<void> {
