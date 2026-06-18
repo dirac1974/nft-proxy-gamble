@@ -16,6 +16,18 @@
         "simulator": true
       }
     },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.nftproxygamble.com",
+        "EXPO_PUBLIC_CONTRACT_ADDRESS": "0x2Ed681d659E67A0ef154875CA4743Ed865B60255",
+        "EXPO_PUBLIC_WC_PROJECT_ID": "demo_project_id"
+      },
+      "ios": {
+        "enterpriseProvisioning": "adhoc",
+        "simulator": false
+      }
+    },
     "testnet": {
       "distribution": "internal",
       "channel": "testnet",
