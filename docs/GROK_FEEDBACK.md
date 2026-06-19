@@ -10,29 +10,29 @@
 - Security: Solid with roles, guards, SafeERC20, recent TOCTOU and auth hardening integrated. No open critical issues noted in recent scans.
 - Test Coverage: Contracts excellent; overall project maintaining strong coverage across layers.
 
-**Overall Progress**: Phase 3 advancing strongly. PR #14 (classic video poker UI with sounds, meters, tests) recently updated/merged with fresh commits (e.g., iOS Reanimated fix today). Backend integration tests progressing. **No new activity, commits, PRs, or comments on closed Issue #1**.
+**Overall Progress**: Phase 3 advancing strongly with recent mobile UI improvements (classic video poker). Recent commits include iOS fixes for Reanimated/WalletConnect. **No new activity, commits, PRs, or comments on closed Issue #1 since last review.**
 
-**Security Posture**: Strong. Recent mobile/UI PRs preserve server-authoritative model and invariants; continue scans and coverage.
+**Security Posture**: Strong. Recent PRs and commits maintain invariants; continue scans.
 
 ## Prioritized Action Items for Claude
 
-1. **Finalize/Merge PR #14 (High)**: Verify classic UI, sounds, meters, tests (92/92 mobile, backend 100%), dev faucet. Address any iOS launch issues. Ensure no regressions in game logic or wallet integration.
-2. **PR #12 if still open**: Premium UI + EAS.
-3. **Security/Test**: Run Slither on any contract changes, expand E2E tests, maintain >90% coverage.
-4. **Pre-plan compliance**: Strictly follow DEVELOPMENT_MEMORY.md for all new work.
-5. **Beta readiness**: Advance fraud detection, checklists, backend integration.
-6. **General**: Update docs/ROADMAP.md, self-review PRs before merge.
+1. **Review & Merge open PRs/Issues (High)**: Focus on classic UI enhancements, tests, integration.
+2. **Backend/Mobile Integration**: Resolve any local test blocks, advance IAP and mint orchestration.
+3. **Security/Test**: Run full Slither, expand E2E, maintain >90% coverage.
+4. **Pre-plan Compliance**: Strictly follow docs for any new work.
+5. **Beta Prep**: Advance checklists, fraud detection, final hardening.
+6. **General**: Update ROADMAP.md, docs, self-review.
 
 ## History
 
 ### 2026-06-19 Grok Review (Secondary PM) - Fresh Feedback
 
-- **Phase 1 progress**: No changes; remains fully stable and deployed. Zero activity on Issue #1.
-- **Pre-plan compliance**: Exemplary, no issues noted.
-- **Test coverage**: Excellent; PR #14 significantly boosts mobile and backend test suites.
-- **Security**: Solid; new UI and sound features align with server-authoritative design. Recent iOS fixes improve stability.
-- **No new activity on #1**: Confirmed - closed and stable.
-- **Action items**: Prioritize merging video poker UI enhancements, resolve any platform-specific issues, push toward full Phase 3 completion and beta.
+- **Phase 1 progress**: No changes; remains fully stable. Zero activity on Issue #1 (confirmed via repo review).
+- **Pre-plan compliance**: Exemplary, no issues.
+- **Test coverage**: Excellent; mobile/backend improvements ongoing.
+- **Security**: Solid; iOS compatibility fixes preserve security model.
+- **No new activity on #1**: Confirmed, no commits/PRs/comments.
+- **Action items**: Prioritize merging UI enhancements, full integration testing, security hygiene, progress toward beta.
 
 ### 2026-06-18 Grok Review (Secondary PM) - Fresh Feedback
 
