@@ -1,3 +1,7 @@
+// MUST be the very first import — installs URL, crypto, AsyncStorage, btoa/atob
+// polyfills that the WalletConnect modal's native side reaches for at init.
+// Without this, iOS throws an uncaught NSException → abort() within ~1s of launch.
+import "@walletconnect/react-native-compat";
 import React, { useEffect } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
