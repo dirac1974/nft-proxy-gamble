@@ -28,11 +28,26 @@ const metadata = {
   redirect: { native: "nftproxygamble://", universal: "" },
 };
 
-export const appKit = createAppKit({
-  projectId,
-  networks: [polygon, polygonAmoy],
-  defaultNetwork: IS_DEV ? polygonAmoy : polygon,
-  adapters: [new EthersAdapter()],
-  storage,
-  metadata,
-});
+// createAppKit runs at module-eval time (this file is imported first in _layout.tsx),
+// so anything it throws becomes a FATAL JS error during bundle load — which iOS surfaces
+// as an uncaught NSException on expo.controller.errorRecoveryQueue → abort() within ~1s
+// of launch, bricking the entire app. A wallet-connect library failing to initialise must
+// NOT take down the whole app: catch it, log it, and let the UI render with wallet-connect
+// disabled (tapping Connect will no-op, which is recoverable; a launch crash is not).
+function createAppKitSafe(): ReturnType<typeof createAppKit> | null {
+  try {
+    return createAppKit({
+      projectId,
+      networks: [polygon, polygonAmoy],
+      defaultNetwork: IS_DEV ? polygonAmoy : polygon,
+      adapters: [new EthersAdapter()],
+      storage,
+      metadata,
+    });
+  } catch (err) {
+    console.error("[appKit] initialisation failed — wallet connect disabled:", err);
+    return null;
+  }
+}
+
+export const appKit = createAppKitSafe();

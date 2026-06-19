@@ -23,6 +23,14 @@ const queryClient = new QueryClient({
   },
 });
 
+// appKit is null when createAppKit() failed (see config/appKit.ts). In that case render
+// children without the provider so the app still launches — wallet-connect is simply
+// unavailable rather than the whole app crashing at startup.
+function MaybeAppKitProvider({ children }: { children: React.ReactNode }) {
+  if (!appKit) return <>{children}</>;
+  return <AppKitProvider instance={appKit}>{children}</AppKitProvider>;
+}
+
 export default function RootLayout() {
   const hydrate = useWalletStore((s) => s.hydrate);
   const isAuthenticated = useWalletStore((s) => s.isAuthenticated);
@@ -42,7 +50,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AppKitProvider instance={appKit}>
+        <MaybeAppKitProvider>
           <QueryClientProvider client={queryClient}>
             <StatusBar style="light" backgroundColor={colors.background} />
             <Stack
@@ -56,16 +64,19 @@ export default function RootLayout() {
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             </Stack>
             {/* Absolutely-positioned wrapper is the documented Expo Router workaround so
-                the AppKit modal renders on Android. box-none lets touches through when closed. */}
-            <View
-              style={{ position: "absolute", height: "100%", width: "100%" }}
-              pointerEvents="box-none"
-            >
-              <AppKit />
-            </View>
+                the AppKit modal renders on Android. box-none lets touches through when closed.
+                Only mount <AppKit /> when the provider is present — it throws without it. */}
+            {appKit && (
+              <View
+                style={{ position: "absolute", height: "100%", width: "100%" }}
+                pointerEvents="box-none"
+              >
+                <AppKit />
+              </View>
+            )}
             <AgeGateModal visible={isAuthenticated && !ageConfirmed} />
           </QueryClientProvider>
-        </AppKitProvider>
+        </MaybeAppKitProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
