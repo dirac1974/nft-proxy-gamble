@@ -10,28 +10,28 @@
 - Security: Solid with roles, guards, SafeERC20, recent TOCTOU and auth hardening integrated. No open critical issues noted in recent scans.
 - Test Coverage: Contracts excellent; overall project maintaining strong coverage across layers.
 
-**Overall Progress**: Phase 3 advancing with classic video poker UI (Issue #13 open). Backend ongoing. **No new commits, PRs, or comments on closed Issue #1 since last review**.
+**Overall Progress**: Phase 3 advancing with recent classic video poker UI in PR #14, iOS fixes. Backend ongoing. **No new commits, PRs, or comments on closed Issue #1 since last review**.
 
 **Security Posture**: Strong. Maintain server-authoritative invariants.
 
 ## Prioritized Action Items for Claude
 
-1. **Complete Phase 3 UI/Integration (High)**: Finalize classic video poker features in #13, ensure all tests pass, integrate sounds/UI fully, resolve remaining mobile issues.
-2. **Advance Backend (Phase 2)**: Complete provably fair engine, IAP, mint orchestration; enable local integration tests.
-3. **Security/Test**: Run scans, maintain coverage, prepare E2E.
-4. **Pre-plan compliance**: Follow plans strictly.
-5. **General**: Update docs, ROADMAP, beta prep.
+1. **Complete Phase 3 UI/Integration (High)**: Finalize classic video poker features, ensure all tests pass, integrate sounds/UI fully, resolve any remaining mobile/platform issues (e.g., WalletConnect setup).
+2. **Advance Backend (Phase 2)**: Complete provably fair, IAP verification, mint orchestration integration; ensure local Docker/Postgres for integration tests.
+3. **Security/Test**: Run secret scans, maintain 90%+ coverage, prepare E2E tests, verify no regressions from recent changes.
+4. **Pre-plan compliance**: Strictly follow IMPLEMENTATION_PLAN.md, docs for upcoming tasks; update ADRs as needed.
+5. **General**: Update ROADMAP.md, docs, prepare for beta launch checklist items (e.g., secrets, deployments).
 
 ## History
 
 ### 2026-06-23 Grok Review (Secondary PM) - Fresh Feedback
 
-- **Phase 1 progress**: Fully stable, no changes or activity on Issue #1.
-- **Pre-plan compliance**: Exemplary, no deviations.
-- **Test coverage**: Strong, with ongoing improvements in Phase 3.
-- **Security**: Maintained solid posture; focus on mobile/backend integration security.
-- **No new activity on #1**: Confirmed.
-- **Action items**: Prioritize #13 completion, Phase 2 progress, full testing.
+- **Phase 1 progress**: Remains fully stable and deployed on Amoy. No changes, new commits, PRs, or comments on closed Issue #1.
+- **Pre-plan compliance**: Exemplary; all work continues to adhere strictly to DEVELOPMENT_MEMORY.md and related standards with no deviations.
+- **Test coverage**: Strong and expanding in mobile/UI layers; no regressions impacting Phase 1 foundation.
+- **Security**: Solid; ongoing iOS and integration fixes bolster reliability and secure wallet interactions.
+- **No new activity on #1**: Confirmed - Phase 1 provides a robust, production-ready base for backend and mobile layers.
+- **Action items**: Prioritize Phase 3 completion (video poker full integration), accelerate Phase 2 backend (especially mint/IAP flows), maintain high test/security hygiene for beta readiness.
 
 ### 2026-06-22 Grok Review (Secondary PM) - Fresh Feedback
 
@@ -42,4 +42,4 @@
 - **No new activity on #1**: Confirmed - Phase 1 provides a robust, audited base.
 - **Action items**: Continue prioritizing Phase 3 completion for video poker, push backend Phase 2 integration, focus on comprehensive testing and production prep for beta.
 
-[Previous entries... (append only)]
+[Previous entries preserved... (append only)]
