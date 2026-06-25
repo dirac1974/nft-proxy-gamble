@@ -9,11 +9,12 @@ describe("Card component", () => {
   const noop = () => {};
 
   it("renders rank and suit for card 0 (2♣)", () => {
-    const { getAllByText } = render(
+    const { getAllByText, getByLabelText } = render(
       <Card cardIndex={0} held={false} onToggleHold={noop} />
     );
     expect(getAllByText("2").length).toBeGreaterThan(0);
-    expect(getAllByText("♣").length).toBeGreaterThan(0);
+    // Suit pips render as SVG; the suit is conveyed via the accessibility label.
+    expect(getByLabelText(/2♣/)).toBeTruthy();
   });
 
   it("renders rank and suit for card 12 (A♣)", () => {
@@ -24,11 +25,11 @@ describe("Card component", () => {
   });
 
   it("renders rank and suit for card 14 (3♦ — red suit)", () => {
-    const { getAllByText } = render(
+    const { getAllByText, getByLabelText } = render(
       <Card cardIndex={14} held={false} onToggleHold={noop} />
     );
     expect(getAllByText("3").length).toBeGreaterThan(0);
-    expect(getAllByText("♦").length).toBeGreaterThan(0);
+    expect(getByLabelText(/3♦/)).toBeTruthy();
   });
 
   it("shows HELD badge when held=true", () => {

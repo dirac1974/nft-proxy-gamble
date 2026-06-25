@@ -14,6 +14,7 @@ module.exports = {
   expo: {
     name: "NFT Proxy Gamble",
     slug: "nft-proxy-gamble",
+    owner: "dirac74",
     version: "0.1.0",
     orientation: "portrait",
     icon: "./assets/icon.png",
@@ -63,12 +64,18 @@ module.exports = {
       "expo-router",
       "expo-secure-store",
       "expo-iap",
-      "./plugins/withNdkVersion",
+      // NDK 26 pin is a Windows-only local-build workaround (RN 0.81's default
+      // NDK 27 fails to link libc++_shared.so on Windows). EAS builds on Linux
+      // where NDK 27 works, and forcing 26.1 breaks if it isn't on the image.
+      ...(process.env.EAS_BUILD === "true" ? [] : ["./plugins/withNdkVersion"]),
       ...(PINNING_ENABLED ? ["./plugins/withAndroidCertPinning"] : []),
     ],
     extra: {
       apiUrl: process.env.EXPO_PUBLIC_API_URL,
       contractAddress: process.env.EXPO_PUBLIC_CONTRACT_ADDRESS,
+      eas: {
+        projectId: "ecbf2c6e-8417-4abb-87df-c60a85eba6af",
+      },
     },
     experiments: {
       typedRoutes: true,

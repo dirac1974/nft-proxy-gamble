@@ -7,7 +7,9 @@ import {
   Text,
   View,
 } from "react-native";
-import { colors, radius, spacing, typography } from "@/theme";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { colors, gradients, radius, spacing, typography } from "@/theme";
 
 interface PaytableModalProps {
   visible: boolean;
@@ -42,21 +44,33 @@ export function PaytableModal({ visible, betAmount, onClose }: PaytableModalProp
         accessibilityRole="button"
         accessibilityLabel="Close paytable"
       />
-      <View style={styles.sheet}>
+      <LinearGradient
+        colors={["rgba(40, 8, 78, 0.98)", "rgba(11, 0, 20, 0.99)"]}
+        style={styles.sheet}
+      >
+        {/* Drag handle */}
+        <View style={styles.handle} />
+
+        {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>PAYTABLE</Text>
-          <Text style={styles.subtitle}>9/6 Jacks or Better · Bet {betAmount}</Text>
+          <View style={styles.headerIconWrap}>
+            <MaterialCommunityIcons name="cards-playing-outline" size={20} color={colors.gold} />
+          </View>
+          <View style={styles.headerText}>
+            <Text style={styles.title}>PAYTABLE</Text>
+            <Text style={styles.subtitle}>9/6 Jacks or Better · Bet {betAmount}</Text>
+          </View>
           <Pressable
             onPress={onClose}
             style={styles.closeButton}
             accessibilityRole="button"
             accessibilityLabel="Close paytable modal"
           >
-            <Text style={styles.closeText}>✕</Text>
+            <Ionicons name="close" size={18} color={colors.textSecondary} />
           </Pressable>
         </View>
 
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* Column headers */}
           <View style={styles.tableRow}>
             <Text style={[styles.cellHand, styles.headerCell]}>HAND</Text>
@@ -73,7 +87,7 @@ export function PaytableModal({ visible, betAmount, onClose }: PaytableModalProp
           <View style={styles.divider} />
 
           {PAYTABLE.map(({ rank, base, desc }) => (
-            <View key={rank}>
+            <View key={rank} style={styles.rowGroup}>
               <View style={styles.tableRow}>
                 <Text style={styles.cellHand}>{rank}</Text>
                 {[1, 2, 3, 4, 5].map((b) => {
@@ -100,7 +114,10 @@ export function PaytableModal({ visible, betAmount, onClose }: PaytableModalProp
 
           {/* Max bet bonus note */}
           <View style={styles.bonusNote}>
-            <Text style={styles.bonusTitle}>★ Max Bet Bonus</Text>
+            <View style={styles.bonusTitleRow}>
+              <MaterialCommunityIcons name="star-circle" size={14} color={colors.gold} />
+              <Text style={styles.bonusTitle}>Max Bet Bonus</Text>
+            </View>
             <Text style={styles.bonusBody}>
               Royal Flush pays 4,000 coins at 5-coin bet (vs 1,250 otherwise).
               Always play max bet for the best RTP of 99.54%.
@@ -109,13 +126,19 @@ export function PaytableModal({ visible, betAmount, onClose }: PaytableModalProp
 
           {/* Strategy tips */}
           <View style={styles.tipSection}>
-            <Text style={styles.tipTitle}>BASIC STRATEGY</Text>
+            <View style={styles.tipTitleRow}>
+              <Ionicons name="bulb-outline" size={12} color={colors.textMuted} />
+              <Text style={styles.tipTitle}>BASIC STRATEGY</Text>
+            </View>
             {STRATEGY_TIPS.map((tip, i) => (
-              <Text key={i} style={styles.tipRow}>• {tip}</Text>
+              <View key={i} style={styles.tipRowWrap}>
+                <View style={styles.tipBullet} />
+                <Text style={styles.tipRow}>{tip}</Text>
+              </View>
             ))}
           </View>
         </ScrollView>
-      </View>
+      </LinearGradient>
     </Modal>
   );
 }
@@ -132,44 +155,75 @@ const STRATEGY_TIPS = [
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
+    backgroundColor: "rgba(0,0,0,0.75)",
   },
   sheet: {
-    backgroundColor: colors.surface,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     borderWidth: 1,
+    borderBottomWidth: 0,
     borderColor: colors.border,
     maxHeight: "85%",
+    overflow: "hidden",
   },
+
+  handle: {
+    alignSelf: "center",
+    width: 36,
+    height: 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.borderStrong,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+
   header: {
+    flexDirection: "row",
+    alignItems: "flex-start",
     padding: spacing.lg,
+    paddingTop: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.borderSubtle,
+    gap: spacing.sm,
   },
-  title: { ...typography.heading2, color: colors.neonGreen },
+  headerIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    backgroundColor: `${colors.gold}15`,
+    borderWidth: 1,
+    borderColor: `${colors.gold}30`,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+  },
+  headerText: { flex: 1, gap: 2 },
+  title: {
+    ...typography.heading3,
+    color: colors.gold,
+    letterSpacing: 1.5,
+  },
   subtitle: { ...typography.bodySmall, marginTop: 2 },
   closeButton: {
-    position: "absolute",
-    right: spacing.lg,
-    top: spacing.lg,
     width: 32,
     height: 32,
     borderRadius: radius.full,
     backgroundColor: colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
     justifyContent: "center",
     alignItems: "center",
   },
-  closeText: { ...typography.body, color: colors.textSecondary },
 
   scroll: { flexGrow: 0 },
-  scrollContent: { padding: spacing.lg, gap: spacing.sm },
+  scrollContent: { padding: spacing.lg, gap: spacing.xs },
 
   tableRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 4,
+    paddingVertical: 5,
   },
+  rowGroup: { gap: 1 },
   cellHand: {
     flex: 3,
     ...typography.bodySmall,
@@ -181,13 +235,11 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   headerCell: {
-    ...typography.caption,
-    fontWeight: "700",
-    letterSpacing: 1,
+    ...typography.overline,
     color: colors.textMuted,
   },
-  activeBetCol: { color: colors.neonGreen },
-  activePayout: { color: colors.neonGreen, fontWeight: "700" },
+  activeBetCol: { color: colors.neonGreen, fontWeight: "800" },
+  activePayout: { color: colors.neonGreen, fontWeight: "800" },
   handDesc: {
     ...typography.caption,
     color: colors.textMuted,
@@ -196,23 +248,46 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: colors.border,
+    backgroundColor: colors.borderSubtle,
     marginVertical: spacing.xs,
   },
 
   bonusNote: {
-    backgroundColor: `${colors.neonGreen}11`,
+    backgroundColor: `${colors.gold}0e`,
     borderRadius: radius.md,
     padding: spacing.md,
     borderWidth: 1,
-    borderColor: `${colors.neonGreen}33`,
-    gap: 4,
+    borderColor: `${colors.gold}28`,
+    gap: 6,
     marginTop: spacing.sm,
   },
-  bonusTitle: { ...typography.bodySmall, color: colors.neonGreen, fontWeight: "700" },
+  bonusTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  bonusTitle: { ...typography.bodySmall, color: colors.gold, fontWeight: "700" },
   bonusBody: { ...typography.caption, color: colors.textSecondary, lineHeight: 18 },
 
   tipSection: { gap: spacing.xs, marginTop: spacing.sm },
-  tipTitle: { ...typography.caption, letterSpacing: 2, color: colors.textMuted, marginBottom: 4 },
-  tipRow: { ...typography.caption, color: colors.textSecondary, lineHeight: 18 },
+  tipTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    marginBottom: 4,
+  },
+  tipTitle: { ...typography.overline, color: colors.textMuted },
+  tipRowWrap: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+  },
+  tipBullet: {
+    width: 4,
+    height: 4,
+    borderRadius: radius.full,
+    backgroundColor: colors.purpleGlow,
+    marginTop: 7,
+  },
+  tipRow: { ...typography.caption, color: colors.textSecondary, lineHeight: 18, flex: 1 },
 });

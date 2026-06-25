@@ -42,6 +42,16 @@ export async function verifyAppleReceipt(receiptData: string): Promise<IAPVerify
     return { valid: false, productId: "", coinsGranted: 0, receiptHash: hashReceipt(receiptData) };
   }
 
+  // SECURITY (RT-MED-2): bind the receipt to OUR app. Apple returns status 0
+  // for any valid receipt from any app. Without a bundle_id check, an attacker
+  // could buy a product with the same productId string in a different (cheap or
+  // free) app and redeem it here. Only enforce when the expected bundle id is
+  // configured so dev/sandbox without the env var still works.
+  const expectedBundleId = config.APPLE_APP_ATTEST_BUNDLE_ID;
+  if (expectedBundleId && json.receipt?.bundle_id && json.receipt.bundle_id !== expectedBundleId) {
+    return { valid: false, productId: "", coinsGranted: 0, receiptHash: hashReceipt(receiptData) };
+  }
+
   const latestReceipt = json.latest_receipt_info?.[0] ?? json.receipt?.in_app?.[0];
   if (!latestReceipt) {
     return { valid: false, productId: "", coinsGranted: 0, receiptHash: hashReceipt(receiptData) };
@@ -88,6 +98,6 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 5
 
 interface AppleReceiptResponse {
   status: number;
-  receipt?: { in_app?: Array<{ product_id: string }> };
+  receipt?: { bundle_id?: string; in_app?: Array<{ product_id: string }> };
   latest_receipt_info?: Array<{ product_id: string }>;
 }

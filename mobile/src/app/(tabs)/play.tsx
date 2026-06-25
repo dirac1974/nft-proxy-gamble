@@ -1,12 +1,5 @@
 import React, { useCallback, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -14,22 +7,31 @@ import Animated, {
   withTiming,
   withSpring,
 } from "react-native-reanimated";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { colors, radius, spacing, typography, shadows } from "@/theme";
+import { colors, gradients, motion, radius, spacing, typography, shadows } from "@/theme";
 import { Card } from "@/components/Card";
 import { GlassCard } from "@/components/GlassCard";
 import { ProvablyFairModal } from "@/components/ProvablyFairModal";
+import { GradientBackground, NeonButton, haptic } from "@/components/ui";
+import { WinOverlay, classifyWin, type WinTier } from "@/components/WinOverlay";
+import { playSound } from "@/services/soundService";
 import { useGameStore } from "@/stores/gameStore";
 import { useWalletStore } from "@/stores/walletStore";
 import { gameApi } from "@/services/api";
 
-const RANKS = ["Royal Flush", "Straight Flush", "Four of a Kind", "Full House",
-  "Flush", "Straight", "Three of a Kind", "Two Pair", "Jacks or Better", "Lose"];
+interface WinOverlayState {
+  rank: string;
+  payout: number;
+  tier: WinTier;
+}
 
 export default function VideoPokerScreen() {
   const qc = useQueryClient();
   const { isAuthenticated } = useWalletStore();
   const [verifyVisible, setVerifyVisible] = useState(false);
+  const [winOverlay, setWinOverlay] = useState<WinOverlayState | null>(null);
   const {
     phase, session, dealt, result, betAmount,
     setBetAmount, setSession, setDealt, toggleHold, setResult, reset,
@@ -54,7 +56,11 @@ export default function VideoPokerScreen() {
 
   const dealMutation = useMutation({
     mutationFn: () => gameApi.deal(session!.sessionId),
-    onSuccess: (data) => setDealt(data.dealtCards),
+    onSuccess: (data) => {
+      setDealt(data.dealtCards);
+      void playSound("deal");
+      haptic("light");
+    },
   });
 
   const drawMutation = useMutation({
@@ -64,7 +70,17 @@ export default function VideoPokerScreen() {
         { drawnCards: data.drawnCards, rank: data.rank, payout: data.payout, serverSeed: data.serverSeed },
         data.newBalance
       );
-      if (data.payout > 0) triggerPayoutAnim();
+      if (data.payout > 0) {
+        triggerPayoutAnim();
+        const tier = classifyWin(data.payout, betAmount);
+        if (tier) {
+          setWinOverlay({ rank: data.rank, payout: data.payout, tier });
+          void playSound(tier === "big" ? "bigWin" : "win");
+          haptic(tier === "big" ? "heavy" : "success");
+        }
+      } else {
+        void playSound("lose");
+      }
       qc.invalidateQueries({ queryKey: ["balance"] });
     },
   });
@@ -92,6 +108,19 @@ export default function VideoPokerScreen() {
     }
   };
 
+  const onSelectBet = (n: number) => {
+    if (n === betAmount) return;
+    haptic("select");
+    setBetAmount(n);
+  };
+
+  const onToggleHoldCard = (i: number) => {
+    if (phase !== "dealt") return;
+    void playSound("hold");
+    haptic("select");
+    toggleHold(i);
+  };
+
   const primaryLabel =
     phase === "idle" ? "NEW GAME"
     : phase === "session_started" ? "DEAL"
@@ -99,169 +128,258 @@ export default function VideoPokerScreen() {
     : phase === "drawn" ? "PLAY AGAIN"
     : "NEW GAME";
 
+  const betDisabled = phase !== "idle" && phase !== "drawn";
+
   const displayCards = phase === "drawn" && result
     ? result.drawnCards
     : dealt?.dealtCards ?? null;
 
   if (!isAuthenticated) {
     return (
-      <View style={styles.centred}>
-        <Text style={styles.lockIcon}>🔒</Text>
-        <Text style={styles.lockText}>Connect your wallet on the Lobby tab to play.</Text>
-      </View>
+      <GradientBackground>
+        <View style={styles.centred}>
+          <View style={styles.lockBadge}>
+            <Ionicons name="lock-closed" size={36} color={colors.purpleGlow} />
+          </View>
+          <Text style={styles.lockText}>Connect your wallet on the Lobby tab to play.</Text>
+        </View>
+      </GradientBackground>
     );
   }
 
   return (
-    <>
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-      {/* Bet selector */}
-      <GlassCard style={styles.betCard}>
-        <Text style={styles.betLabel}>BET PER HAND</Text>
-        <View style={styles.betRow}>
-          {[1, 2, 3, 4, 5].map((n) => (
-            <Pressable
-              key={n}
-              style={[styles.betChip, betAmount === n && styles.betChipActive]}
-              onPress={() => setBetAmount(n)}
-              disabled={phase !== "idle" && phase !== "drawn"}
-              accessibilityRole="button"
-              accessibilityLabel={`Bet ${n} coin${n > 1 ? "s" : ""} per hand`}
-              accessibilityState={{ selected: betAmount === n }}
-            >
-              <Text style={[styles.betChipText, betAmount === n && styles.betChipTextActive]}>
-                {n}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-        <Text style={styles.betHint}>Cost: {betAmount} coin{betAmount > 1 ? "s" : ""}</Text>
-      </GlassCard>
-
-      {/* Card display */}
-      <View style={styles.cardRow}>
-        {displayCards
-          ? displayCards.map((cardIndex, i) => (
-              <Card
-                key={i}
-                cardIndex={cardIndex}
-                held={dealt?.holds[i] ?? false}
-                onToggleHold={() => phase === "dealt" && toggleHold(i)}
-                disabled={phase !== "dealt"}
-                testID={`card-${i}`}
+    <GradientBackground>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+        {/* Bet selector */}
+        <GlassCard style={styles.betCard}>
+          <View style={styles.betHeader}>
+            <MaterialCommunityIcons name="poker-chip" size={16} color={colors.gold} />
+            <Text style={styles.betLabel}>BET PER HAND</Text>
+          </View>
+          <View style={styles.betRow}>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <BetChip
+                key={n}
+                value={n}
+                selected={betAmount === n}
+                disabled={betDisabled}
+                onPress={() => onSelectBet(n)}
               />
-            ))
-          : Array.from({ length: 5 }).map((_, i) => (
-              <View key={i} style={styles.cardPlaceholder}>
-                <Text style={styles.cardPlaceholderText}>?</Text>
-              </View>
             ))}
-      </View>
-
-      {/* Tap-to-hold hint */}
-      {phase === "dealt" && (
-        <Text style={styles.holdHint}>Tap cards to hold</Text>
-      )}
-
-      {/* Result */}
-      {phase === "drawn" && result && (
-        <Animated.View style={[styles.resultContainer, payoutAnimStyle]}>
-          <GlassCard neonBorder={result.payout > 0}>
-            <Text style={styles.resultRank}>{result.rank}</Text>
-            {result.payout > 0 ? (
-              <Text style={styles.resultPayout}>+{result.payout} coins 🎉</Text>
-            ) : (
-              <Text style={styles.resultLose}>No payout</Text>
-            )}
-            <Text style={styles.resultSeed} numberOfLines={1} ellipsizeMode="middle">
-              Seed: {result.serverSeed}
+          </View>
+          <View style={styles.betCostRow}>
+            <MaterialCommunityIcons name="circle-multiple" size={13} color={colors.gold} />
+            <Text style={styles.betHint}>
+              Cost: <Text style={styles.betHintStrong}>{betAmount}</Text> coin{betAmount > 1 ? "s" : ""}
             </Text>
-            <Pressable
-              onPress={() => setVerifyVisible(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Verify this hand was dealt fairly"
-            >
-              <Text style={styles.verifyLink}>Verify provably fair ›</Text>
-            </Pressable>
-          </GlassCard>
-        </Animated.View>
-      )}
+          </View>
+        </GlassCard>
 
-      {/* Primary action button */}
-      <Pressable
-        style={({ pressed }) => [
-          styles.primaryButton,
-          betAmount === 5 && styles.primaryButtonMax,
-          (pressed || isLoading) && styles.primaryButtonPressed,
-        ]}
-        onPress={onPrimaryPress}
-        disabled={isLoading || cashoutMutation.isPending}
-        accessibilityRole="button"
-        accessibilityLabel={primaryLabel}
-        accessibilityState={{ busy: isLoading }}
-      >
-        {isLoading ? (
-          <ActivityIndicator color={colors.background} />
-        ) : (
-          <Text style={styles.primaryButtonText}>{primaryLabel}</Text>
-        )}
-      </Pressable>
-
-      {/* Cashout */}
-      {phase === "drawn" && coinBalance >= 100 && (
-        <Pressable
-          style={[styles.cashoutButton, cashoutMutation.isPending && styles.primaryButtonPressed]}
-          onPress={() => cashoutMutation.mutate()}
-          disabled={cashoutMutation.isPending}
-          accessibilityRole="button"
-          accessibilityLabel={`Cash out ${coinBalance} coins to NFT voucher`}
-          accessibilityState={{ busy: cashoutMutation.isPending }}
-        >
-          {cashoutMutation.isPending
-            ? <ActivityIndicator color={colors.neonGreen} />
-            : <Text style={styles.cashoutText}>Cash Out {coinBalance} coins → NFT</Text>
-          }
-        </Pressable>
-      )}
-
-      {/* Paytable */}
-      <GlassCard style={styles.paytable}>
-        <Text style={styles.paytableTitle}>PAYTABLE (BET {betAmount})</Text>
-        {PAYTABLE.map(({ rank, mult }) => {
-          const payout = rank === "Royal Flush" && betAmount === 5 ? 800 : mult;
-          return (
-            <View key={rank} style={styles.paytableRow}>
-              <Text style={styles.paytableHand}>{rank}</Text>
-              <Text style={[
-                styles.paytablePayout,
-                result?.rank === rank && styles.paytableActive,
-              ]}>
-                {payout * betAmount}
-              </Text>
+        {/* Card table — felt */}
+        <View style={styles.feltOuter}>
+          <LinearGradient
+            colors={gradients.screenWarm}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.felt}
+          >
+            <View style={styles.feltInner}>
+              <View style={styles.cardRow}>
+                {displayCards
+                  ? displayCards.map((cardIndex, i) => (
+                      <Card
+                        key={i}
+                        cardIndex={cardIndex}
+                        held={dealt?.holds[i] ?? false}
+                        onToggleHold={() => onToggleHoldCard(i)}
+                        disabled={phase !== "dealt"}
+                        dealIndex={i}
+                        testID={`card-${i}`}
+                      />
+                    ))
+                  : Array.from({ length: 5 }).map((_, i) => (
+                      <LinearGradient
+                        key={i}
+                        colors={gradients.cardBack}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.cardBack}
+                      >
+                        <View style={styles.cardBackInner}>
+                          <MaterialCommunityIcons name="diamond-stone" size={20} color={colors.purpleGlow} />
+                        </View>
+                      </LinearGradient>
+                    ))}
+              </View>
             </View>
-          );
-        })}
-      </GlassCard>
+          </LinearGradient>
+        </View>
 
-      {/* Error display */}
-      {(startMutation.error || dealMutation.error || drawMutation.error) && (
-        <Text style={styles.error}>
-          {((startMutation.error ?? dealMutation.error ?? drawMutation.error) as Error).message}
-        </Text>
+        {/* Tap-to-hold hint */}
+        {phase === "dealt" && (
+          <View style={styles.holdHintRow}>
+            <MaterialCommunityIcons name="gesture-tap" size={15} color={colors.neonGreen} />
+            <Text style={styles.holdHint}>Tap cards to hold</Text>
+          </View>
+        )}
+
+        {/* Result */}
+        {phase === "drawn" && result && (
+          <Animated.View style={[styles.resultContainer, payoutAnimStyle]}>
+            <GlassCard neonBorder={result.payout > 0} style={result.payout > 0 ? styles.resultWin : undefined}>
+              <Text style={[styles.resultRank, result.payout <= 0 && styles.resultRankMuted]}>
+                {result.rank}
+              </Text>
+              {result.payout > 0 ? (
+                <Text style={styles.resultPayout}>+{result.payout} coins 🎉</Text>
+              ) : (
+                <Text style={styles.resultLose}>No payout</Text>
+              )}
+              <View style={styles.seedRow}>
+                <MaterialCommunityIcons name="key-variant" size={11} color={colors.textMuted} />
+                <Text style={styles.resultSeed} numberOfLines={1} ellipsizeMode="middle">
+                  {result.serverSeed}
+                </Text>
+              </View>
+              <Pressable
+                style={styles.verifyRow}
+                onPress={() => setVerifyVisible(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Verify this hand was dealt fairly"
+              >
+                <Ionicons name="shield-checkmark" size={13} color={colors.purpleGlow} />
+                <Text style={styles.verifyLink}>Verify provably fair</Text>
+                <Ionicons name="chevron-forward" size={12} color={colors.purpleGlow} />
+              </Pressable>
+            </GlassCard>
+          </Animated.View>
+        )}
+
+        {/* Primary action button */}
+        <NeonButton
+          label={primaryLabel}
+          onPress={onPrimaryPress}
+          variant={betAmount === 5 ? "gold" : "primary"}
+          size="lg"
+          fullWidth
+          loading={isLoading}
+          disabled={isLoading || cashoutMutation.isPending}
+          accessibilityLabel={primaryLabel}
+        />
+
+        {/* Cashout */}
+        {phase === "drawn" && coinBalance >= 100 && (
+          <NeonButton
+            label={`Cash Out ${coinBalance} coins → NFT`}
+            onPress={() => cashoutMutation.mutate()}
+            variant="gold"
+            size="md"
+            fullWidth
+            loading={cashoutMutation.isPending}
+            disabled={cashoutMutation.isPending}
+            haptics="success"
+            icon={<MaterialCommunityIcons name="diamond-stone" size={18} color="#2a1500" />}
+            accessibilityLabel={`Cash out ${coinBalance} coins to NFT voucher`}
+          />
+        )}
+
+        {/* Paytable */}
+        <GlassCard style={styles.paytable}>
+          <View style={styles.paytableHeader}>
+            <MaterialCommunityIcons name="cards-playing-outline" size={15} color={colors.purpleGlow} />
+            <Text style={styles.paytableTitle}>PAYTABLE · BET {betAmount}</Text>
+          </View>
+          {PAYTABLE.map(({ rank, mult }) => {
+            const isHit = result?.rank === rank;
+            return (
+              <View key={rank} style={[styles.paytableRow, isHit && styles.paytableRowHit]}>
+                <Text style={[styles.paytableHand, isHit && styles.paytableHandHit]}>{rank}</Text>
+                <Text style={[styles.paytablePayout, isHit && styles.paytableActive]}>
+                  {mult * betAmount}
+                </Text>
+              </View>
+            );
+          })}
+        </GlassCard>
+
+        {/* Error display */}
+        {(startMutation.error || dealMutation.error || drawMutation.error) && (
+          <Text style={styles.error}>
+            {((startMutation.error ?? dealMutation.error ?? drawMutation.error) as Error).message}
+          </Text>
+        )}
+      </ScrollView>
+
+      {/* Celebratory win moment */}
+      {winOverlay && (
+        <WinOverlay
+          visible={!!winOverlay}
+          rank={winOverlay.rank}
+          payout={winOverlay.payout}
+          tier={winOverlay.tier}
+          onDismiss={() => setWinOverlay(null)}
+        />
       )}
-    </ScrollView>
 
-    {/* Provably fair verification modal */}
-    {session && dealt && result && (
-      <ProvablyFairModal
-        visible={verifyVisible}
-        onClose={() => setVerifyVisible(false)}
-        session={session}
-        dealt={dealt}
-        result={result}
-      />
-    )}
-    </>
+      {/* Provably fair verification modal */}
+      {session && dealt && result && (
+        <ProvablyFairModal
+          visible={verifyVisible}
+          onClose={() => setVerifyVisible(false)}
+          session={session}
+          dealt={dealt}
+          result={result}
+        />
+      )}
+    </GradientBackground>
+  );
+}
+
+interface BetChipProps {
+  value: number;
+  selected: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}
+
+function BetChip({ value, selected, disabled, onPress }: BetChipProps) {
+  const scale = useSharedValue(selected ? 1 : 1);
+  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
+  const handlePress = () => {
+    if (disabled) return;
+    scale.value = withSequence(
+      withTiming(1.18, { duration: motion.fast }),
+      withSpring(1, motion.springBouncy)
+    );
+    onPress();
+  };
+
+  return (
+    <Pressable
+      onPress={handlePress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={`Bet ${value} coin${value > 1 ? "s" : ""} per hand`}
+      accessibilityState={{ selected, disabled }}
+    >
+      <Animated.View style={[styles.chipWrap, animStyle, disabled && styles.chipDisabled]}>
+        {selected ? (
+          <LinearGradient
+            colors={gradients.gold}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.chip, styles.chipSelected]}
+          >
+            <Text style={styles.chipTextSelected}>{value}</Text>
+          </LinearGradient>
+        ) : (
+          <View style={styles.chip}>
+            <Text style={styles.chipText}>{value}</Text>
+          </View>
+        )}
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -277,70 +395,104 @@ const PAYTABLE = [
   { rank: "Jacks or Better",  mult: 1 },
 ];
 
+const CARD_W = 58;
+const CARD_H = 84;
+
 const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: colors.background },
+  scroll: { flex: 1 },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.lg },
 
-  centred: { flex: 1, justifyContent: "center", alignItems: "center", gap: spacing.md, padding: spacing.xl },
-  lockIcon: { fontSize: 48 },
-  lockText: { ...typography.body, textAlign: "center", color: colors.textSecondary },
-
-  betCard: { gap: spacing.sm },
-  betLabel: { ...typography.caption, letterSpacing: 2 },
-  betRow: { flexDirection: "row", gap: spacing.sm },
-  betChip: {
-    width: 44, height: 44, borderRadius: radius.full,
-    borderWidth: 2, borderColor: colors.border,
+  centred: { flex: 1, justifyContent: "center", alignItems: "center", gap: spacing.lg, padding: spacing.xl },
+  lockBadge: {
+    width: 76, height: 76, borderRadius: radius.full,
     justifyContent: "center", alignItems: "center",
-  },
-  betChipActive: { borderColor: colors.neonGreen, backgroundColor: `${colors.neonGreen}22` },
-  betChipText: { ...typography.body, color: colors.textMuted, fontWeight: "700" },
-  betChipTextActive: { color: colors.neonGreen },
-  betHint: { ...typography.caption },
-
-  cardRow: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: spacing.xs },
-
-  cardPlaceholder: {
-    width: 58, height: 84, borderRadius: radius.md,
-    borderWidth: 2, borderColor: colors.border, borderStyle: "dashed",
-    justifyContent: "center", alignItems: "center",
-  },
-  cardPlaceholderText: { fontSize: 24, color: colors.textMuted },
-
-  holdHint: { ...typography.caption, textAlign: "center", letterSpacing: 1 },
-
-  resultContainer: { gap: spacing.sm },
-  resultRank: { ...typography.heading2, color: colors.neonGreen, textAlign: "center" },
-  resultPayout: { ...typography.heading3, color: colors.win, textAlign: "center" },
-  resultLose: { ...typography.body, color: colors.textMuted, textAlign: "center" },
-  resultSeed: { ...typography.mono, fontSize: 10, marginTop: spacing.xs },
-  verifyLink: { ...typography.caption, color: colors.purple, textDecorationLine: "underline", marginTop: spacing.xs },
-
-  primaryButton: {
-    backgroundColor: colors.purple,
-    borderRadius: radius.full,
-    paddingVertical: spacing.lg,
-    alignItems: "center",
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: 1, borderColor: colors.borderStrong,
     ...shadows.purple,
   },
-  primaryButtonMax: { backgroundColor: colors.neonGreenDim },
-  primaryButtonPressed: { opacity: 0.7 },
-  primaryButtonText: { ...typography.heading3, color: colors.textPrimary },
+  lockText: { ...typography.body, textAlign: "center", color: colors.textSecondary },
 
-  cashoutButton: {
-    borderWidth: 2, borderColor: colors.neonGreen,
-    borderRadius: radius.full,
-    paddingVertical: spacing.md,
-    alignItems: "center",
+  betCard: { gap: spacing.md },
+  betHeader: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  betLabel: { ...typography.overline },
+  betRow: { flexDirection: "row", justifyContent: "space-between" },
+  betCostRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  betHint: { ...typography.bodySmall },
+  betHintStrong: { color: colors.gold, fontWeight: "800" },
+
+  chipWrap: { borderRadius: radius.full },
+  chipDisabled: { opacity: 0.4 },
+  chip: {
+    width: 48, height: 48, borderRadius: radius.full,
+    borderWidth: 2, borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+    justifyContent: "center", alignItems: "center",
   },
-  cashoutText: { ...typography.body, color: colors.neonGreen, fontWeight: "700" },
+  chipSelected: { borderColor: colors.goldGlow, ...shadows.gold },
+  chipText: { ...typography.heading3, color: colors.textSecondary, fontWeight: "800" },
+  chipTextSelected: { ...typography.heading3, color: "#2a1500", fontWeight: "900" },
 
-  paytable: { gap: 6 },
-  paytableTitle: { ...typography.caption, letterSpacing: 2, marginBottom: spacing.xs },
-  paytableRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 2 },
+  feltOuter: { borderRadius: radius.xl, ...shadows.card },
+  felt: {
+    borderRadius: radius.xl,
+    borderWidth: 1, borderColor: colors.borderStrong,
+    padding: spacing.sm,
+  },
+  feltInner: {
+    borderRadius: radius.lg,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+    backgroundColor: "rgba(0, 255, 159, 0.03)",
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.sm,
+    ...shadows.neonGreen,
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+  },
+  cardRow: { flexDirection: "row", justifyContent: "space-between" },
+
+  cardBack: {
+    width: CARD_W, height: CARD_H, borderRadius: radius.md,
+    borderWidth: 1.5, borderColor: colors.borderStrong,
+    padding: 4,
+    ...shadows.card,
+    shadowOpacity: 0.3,
+  },
+  cardBackInner: {
+    flex: 1, borderRadius: radius.sm,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+    justifyContent: "center", alignItems: "center",
+  },
+
+  holdHintRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  holdHint: { ...typography.caption, letterSpacing: 1, color: colors.neonGreen },
+
+  resultContainer: { gap: spacing.sm },
+  resultWin: { ...shadows.gold },
+  resultRank: { ...typography.heading2, color: colors.neonGreen, textAlign: "center" },
+  resultRankMuted: { color: colors.textSecondary },
+  resultPayout: { ...typography.heading3, color: colors.gold, textAlign: "center", marginTop: spacing.xs, textShadowColor: colors.goldGlow, textShadowRadius: 12 },
+  resultLose: { ...typography.body, color: colors.textMuted, textAlign: "center", marginTop: spacing.xs },
+  seedRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, marginTop: spacing.sm },
+  resultSeed: { ...typography.mono, fontSize: 10, flexShrink: 1 },
+  verifyRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, marginTop: spacing.sm },
+  verifyLink: { ...typography.caption, color: colors.purpleGlow, fontWeight: "700" },
+
+  paytable: { gap: 4 },
+  paytableHeader: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.xs },
+  paytableTitle: { ...typography.overline },
+  paytableRow: {
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    paddingVertical: 4, paddingHorizontal: spacing.sm,
+    borderRadius: radius.sm,
+  },
+  paytableRowHit: {
+    backgroundColor: `${colors.neonGreen}14`,
+    borderWidth: 1, borderColor: colors.neonGreen,
+  },
   paytableHand: { ...typography.bodySmall },
-  paytablePayout: { ...typography.bodySmall, color: colors.textMuted },
-  paytableActive: { color: colors.neonGreen, fontWeight: "700" },
+  paytableHandHit: { color: colors.neonGreen, fontWeight: "700" },
+  paytablePayout: { ...typography.bodySmall, color: colors.textMuted, fontWeight: "600" },
+  paytableActive: { color: colors.neonGreen, fontWeight: "800" },
 
   error: { ...typography.bodySmall, color: colors.lose, textAlign: "center" },
 });

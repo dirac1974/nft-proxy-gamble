@@ -1,7 +1,9 @@
 import request from "supertest";
+import jwt from "jsonwebtoken";
 import { Wallet } from "ethers";
 import { createHmac } from "crypto";
 import { createApp } from "../../src/app.js";
+import { generateDeck } from "../../src/services/videoPoker.js";
 import { prisma, setupTestDb, teardownTestDb } from "./setup.js";
 
 const app = createApp();
@@ -195,5 +197,82 @@ describe("Auth security", () => {
   it("returns 401 for missing auth header", async () => {
     const res = await request(app).post("/game/start-session").send({ betAmount: 1 });
     expect(res.status).toBe(401);
+  });
+
+  // RT-LOW-1 regression: a token signed with the "none" algorithm (no signature)
+  // must be rejected. jwt.verify with algorithms:["HS256"] refuses it.
+  it("rejects an alg=none unsigned token", async () => {
+    const forged = jwt.sign({ userId, walletAddress: testWallet.address.toLowerCase() }, "", {
+      algorithm: "none",
+    });
+    const res = await request(app).get("/balance").set("Authorization", `Bearer ${forged}`);
+    expect(res.status).toBe(401);
+  });
+});
+
+// RT-CRIT-1 regression: the server seed must rotate on every draw. Reusing a
+// revealed seed for a subsequent hand in the same session lets an attacker
+// predict the entire deck and guarantee max payouts.
+describe("POST /game/draw — server seed rotation (RT-CRIT-1)", () => {
+  it("commits a fresh, unrevealed seed for the next hand after a draw", async () => {
+    await prisma.user.update({ where: { id: userId }, data: { coinBalance: 1000 } });
+
+    const startRes = await request(app)
+      .post("/game/start-session")
+      .set("Authorization", `Bearer ${authToken}`)
+      .send({ betAmount: 1 });
+    const sessionId = (startRes.body as { sessionId: string }).sessionId;
+    const firstHash = (startRes.body as { serverSeedHash: string }).serverSeedHash;
+    const clientSeed = (startRes.body as { clientSeed: string }).clientSeed;
+
+    await request(app).post("/game/deal").set("Authorization", `Bearer ${authToken}`).send({ sessionId });
+
+    const drawRes = await request(app)
+      .post("/game/draw")
+      .set("Authorization", `Bearer ${authToken}`)
+      .send({ sessionId, holds: [false, false, false, false, false] });
+
+    const revealedSeed = (drawRes.body as { serverSeed: string }).serverSeed;
+    const nextHash = (drawRes.body as { nextServerSeedHash: string }).nextServerSeedHash;
+
+    // The next-hand commitment must differ from the seed that was just revealed.
+    expect(nextHash).toBeTruthy();
+    expect(nextHash).not.toBe(firstHash);
+
+    // Deal a second hand on the SAME session, then attempt to predict it using
+    // the revealed seed (the attack). With rotation, the prediction must FAIL.
+    const deal2 = await request(app)
+      .post("/game/deal")
+      .set("Authorization", `Bearer ${authToken}`)
+      .send({ sessionId });
+    const actualDealt = (deal2.body as { dealtCards: number[] }).dealtCards;
+
+    // handNumber for the 2nd hand is 1. Attacker uses the revealed (old) seed.
+    const predictedDeck = generateDeck(revealedSeed, clientSeed, 1);
+    const predictedDealt = predictedDeck.slice(0, 5);
+    expect(actualDealt).not.toEqual(predictedDealt);
+  });
+});
+
+// RT-MED-1 regression: cashing out more than the on-chain MAX_COIN_BALANCE
+// would deduct coins then revert the mint, permanently losing the user's coins.
+describe("POST /game/cashout — max coin cap (RT-MED-1)", () => {
+  it("rejects coinsToCashout above 100_000 with 400 and does not deduct", async () => {
+    await prisma.user.update({ where: { id: userId }, data: { coinBalance: 200_000 } });
+    const startRes = await request(app)
+      .post("/game/start-session")
+      .set("Authorization", `Bearer ${authToken}`)
+      .send({ betAmount: 1 });
+    const sessionId = (startRes.body as { sessionId: string }).sessionId;
+
+    const res = await request(app)
+      .post("/game/cashout")
+      .set("Authorization", `Bearer ${authToken}`)
+      .send({ sessionId, coinsToCashout: 100_001 });
+
+    expect(res.status).toBe(400);
+
+    const after = await prisma.user.findUnique({ where: { id: userId }, select: { coinBalance: true } });
+    expect(after?.coinBalance).toBe(200_000); // untouched
   });
 });

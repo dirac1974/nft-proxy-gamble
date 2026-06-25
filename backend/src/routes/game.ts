@@ -18,6 +18,9 @@ import { checkDeviceAttestation } from "../services/deviceAttestationService.js"
 import type { HandRecord, AttestationPlatform } from "../types/index.js";
 
 const MIN_COIN_BALANCE = 100;
+// Mirror of the immutable on-chain NFTProxyVoucher.MAX_COIN_BALANCE constant.
+// This is NOT a tunable risk threshold — it is a hard contract invariant.
+const MAX_COIN_BALANCE = 100_000;
 const MAX_CASHOUTS_PER_DAY = 5;
 
 const router = Router();
@@ -150,6 +153,18 @@ router.post("/draw", requireAuth, async (req, res, next) => {
     currentHand.rank = rank;
     currentHand.payout = payout;
 
+    // SECURITY (RT-CRIT-1): rotate the server seed on every draw.
+    // The draw response reveals session.serverSeed so the player can verify the
+    // just-completed hand. But the session returns to ACTIVE and a subsequent
+    // /game/deal reuses session.serverSeed with handNumber+1 as the only nonce.
+    // Reusing a REVEALED seed lets an attacker who calls the raw API recompute
+    // generateDeck(serverSeed, clientSeed, n) for every future hand and pick
+    // optimal holds for a guaranteed max payout — unlimited coin theft, then
+    // cashed out to USDC. Committing a fresh, unrevealed seed for the next hand
+    // (and publishing its hash) restores the commit-reveal invariant per hand.
+    const nextServerSeed = generateServerSeed();
+    const nextServerSeedHash = hashServerSeed(nextServerSeed);
+
     // Atomic conditional session transition: prevents parallel /draw calls
     // from both passing the AWAITING_DRAW check above and both paying out
     // (would have been a double-payout exploit). The session.update's where
@@ -164,6 +179,8 @@ router.post("/draw", requireAuth, async (req, res, next) => {
             state: "ACTIVE",
             hands: hands as unknown as object[],
             totalPayout: { increment: payout },
+            serverSeed: nextServerSeed,
+            serverSeedHash: nextServerSeedHash,
           },
         });
         const u = await tx.user.update({
@@ -203,7 +220,11 @@ router.post("/draw", requireAuth, async (req, res, next) => {
       holds,
       rank,
       payout,
+      // Reveal the seed used for THIS hand (the in-memory `session` still holds
+      // the pre-rotation value) so the client can verify fairness.
       serverSeed: session.serverSeed,
+      // Commitment for the NEXT hand if the client re-deals on this session.
+      nextServerSeedHash,
       ...signBalance(userId, updatedUser.coinBalance),
     });
   } catch (err) {
@@ -214,7 +235,12 @@ router.post("/draw", requireAuth, async (req, res, next) => {
 // POST /game/cashout
 const cashoutSchema = z.object({
   sessionId: z.string(),
-  coinsToCashout: z.number().int().min(MIN_COIN_BALANCE),
+  // SECURITY (RT-MED-1): cap at the on-chain MAX_COIN_BALANCE. Without this an
+  // amount > 100_000 passes the balance check, deducts coins from the DB and
+  // creates a PENDING voucher, but the mint() call reverts ("Above max coin
+  // balance"). The coins are already gone, leaving the voucher FAILED and the
+  // user permanently short. Reject up-front instead.
+  coinsToCashout: z.number().int().min(MIN_COIN_BALANCE).max(MAX_COIN_BALANCE),
 });
 
 router.post("/cashout", requireAuth, requireAllowedJurisdiction, async (req, res, next) => {
