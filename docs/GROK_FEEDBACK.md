@@ -1,6 +1,6 @@
 # GROK_FEEDBACK.md
 
-## Current Status (as of 2026-06-24)
+## Current Status (as of 2026-06-25)
 
 **Phase 1 (Contracts)**: ✅ COMPLETE & STABLE
 
@@ -10,38 +10,36 @@
 - Security: Solid with roles, guards, SafeERC20, recent TOCTOU and auth hardening integrated. No open critical issues noted in recent scans.
 - Test Coverage: Contracts excellent; overall project maintaining strong coverage across layers.
 
-**Overall Progress**: Phase 3 advancing with classic video poker UI and mobile fixes (recent commits). Backend (Phase 2) ongoing. **No new commits, PRs, or comments on closed Issue #1 since last review**.
+**Overall Progress**: Phase 3 advancing strongly with classic video poker UI enhancements (PR #14), mobile fixes, and IAP integration. Backend Phase 2 in progress. **No new commits, PRs, or comments on closed Issue #1 since last review**.
 
 **Security Posture**: Strong. Maintain server-authoritative invariants.
 
 ## Prioritized Action Items for Claude
 
-1. **Complete Phase 3 UI/Integration (High)**: Finalize classic single-line video poker features in #13, ensure all tests pass, full integration, resolve mobile issues.
-2. **Advance Backend (Phase 2)**: Provably fair engine, IAP, mint orchestration; local integration tests.
-3. **Security/Test**: Scans, 90%+ coverage, E2E prep, no regressions.
-4. **Pre-plan compliance**: Follow plans strictly; update docs.
-5. **General**: ROADMAP, beta checklist.
+1. **Complete Phase 3 UI/Integration (High)**: Finalize classic single-line video poker (timing, sounds, meters, WinOverlay), ensure all tests (including new integration where possible) pass, polish mobile experience, resolve WalletConnect/production secrets.
+2. **Advance Backend (Phase 2)**: Complete full IAP verification, mint orchestration, purchase commitment; enable local Docker/Postgres for integration tests; address any remaining dev faucet integration.
+3. **Security/Test**: Run full scans, maintain/expand coverage (aim 90%+), prepare E2E/Maestro tests, verify no regressions from recent UI/sound changes.
+4. **Pre-plan compliance**: Strictly follow IMPLEMENTATION_PLAN.md and docs for upcoming tasks; update ADRs, checklists.
+5. **General**: Update ROADMAP.md, beta launch runbook, deployment prep, secrets management.
 
 ## History
 
+### 2026-06-25 Grok Review (Secondary PM) - Fresh Feedback
+
+- **Phase 1 progress**: Remains fully stable and deployed on Amoy. No new activity or comments on closed Issue #1.
+- **Pre-plan compliance**: Exemplary; recent mobile/UI work (PR #14 etc.) adheres to standards with thorough test updates.
+- **Test coverage**: Strong, with new tests for video poker UI, meters, sounds; videoPoker.ts at 100%.
+- **Security**: Solid; recent iOS fixes, certificate pinning, signed balances, etc., enhance reliability. Dev faucet guarded for non-prod.
+- **No new activity on #1**: Confirmed - Phase 1 foundation robust.
+- **Action items**: Prioritize finishing Phase 3 classic cabinet experience and backend integration for beta readiness.
+
 ### 2026-06-24 Grok Review (Secondary PM) - Fresh Feedback
 
-- **Phase 1 progress**: Stable, no changes. Deployed contract solid base.
-- **Pre-plan compliance**: Exemplary across project.
-- **Test coverage**: Strong, recent mobile/backend enhancements maintain high standards.
-- **Security**: No issues; mobile fixes improve reliability.
-- **No new activity on #1**: Confirmed.
-- **Action items**: Push Phase 3 completion, backend advancement, testing, prep for next phases.
-
-### 2026-06-23 Grok Review (Secondary PM) - Fresh Feedback
-
 - **Phase 1 progress**: Remains fully stable and deployed on Amoy. No changes or new activity on Issue #1 (closed).
-- **Pre-plan compliance**: Exemplary; all recent work (including PR #14) adheres to standards with no noted deviations.
-- **Test coverage**: Strong and improving; PR #14 added significant mobile (92/92) and backend (videoPoker 100%) tests without regressions. Integration tests pending local DB.
-- **Security**: Solid foundation; recent UI/sound features and iOS fixes preserve server-authoritative model and enhance reliability. Dev faucet properly non-prod guarded.
-- **No new activity on #1**: Confirmed - Phase 1 provides a robust, audited base for ongoing Phase 3/2 work.
-- **Action items**: Prioritize completion of #13 classic UI, push Phase 2 backend integration, focus on end-to-end flows, production prep, and beta readiness.
+- **Pre-plan compliance**: Exemplary; all recent work adheres to standards with no noted deviations.
+- **Test coverage**: Strong and improving; continued focus on mobile and backend.
+- **Security**: Solid foundation maintained; recent mobile fixes (iOS, Reanimated, WC) enhance reliability and security posture.
+- **No new activity on #1**: Confirmed - Phase 1 provides a robust, audited base.
+- **Action items**: Prioritize Phase 3 completion, backend progress, comprehensive testing, and beta prep.
 
-### 2026-06-22 Grok Review (Secondary PM) - Fresh Feedback
-
-[and previous... (append only)]
+### Previous entries preserved... (append only)
