@@ -105,6 +105,19 @@ describe("full game flow: start → deal → draw", () => {
       .send({ sessionId, holds: [false, false, false, false, false] });
     expect(res.status).toBe(409);
   });
+
+  // FABLE-2026-07 C-1 regression: once a hand is drawn the serverSeed is public,
+  // so dealing a second hand on the same session (which the exploit relied on to
+  // predict the deck) must be rejected. Provably-fair invariant per ADR-002:
+  // serverSeed is never usable for a hand the player can influence after reveal.
+  it("second deal on same session (after draw) returns 409 — no seed reuse", async () => {
+    const res = await request(app)
+      .post("/game/deal")
+      .set("Authorization", `Bearer ${authToken}`)
+      .send({ sessionId });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/already played its hand/i);
+  });
 });
 
 describe("POST /game/cashout", () => {

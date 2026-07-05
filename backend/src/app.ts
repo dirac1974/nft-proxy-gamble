@@ -17,7 +17,10 @@ export function createApp(): express.Application {
 
   app.use(helmet());
   app.use(cors());
-  app.use(express.json());
+  // Bound request bodies (FABLE-2026-07 M-4). Apple receipts are the largest
+  // legitimate payload and sit well under this; the cap prevents large-payload
+  // memory-pressure DoS on the unauthenticated-ish JSON parser.
+  app.use(express.json({ limit: "256kb" }));
 
   const skipInTest = () => config.NODE_ENV === "test";
   const authLimiter = rateLimit({ windowMs: 60_000, max: 10, skip: skipInTest, standardHeaders: true, legacyHeaders: false });

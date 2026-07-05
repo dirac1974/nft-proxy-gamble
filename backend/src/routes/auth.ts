@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { randomBytes } from "crypto";
 import { verifyMessage } from "ethers";
 import { z } from "zod";
 import { prisma } from "../db/client.js";
@@ -15,7 +16,10 @@ const NONCE_TTL_MS = 60_000;
 router.get("/nonce", (req, res, next) => {
   try {
     const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/).parse(req.query.address);
-    const nonce = `Sign this message to authenticate with NFT Proxy Gamble: ${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    // Use a CSPRNG for the challenge (FABLE-2026-07 L-1). Math.random() is not
+    // cryptographically secure; a security challenge that gates wallet auth should
+    // be unpredictable.
+    const nonce = `Sign this message to authenticate with NFT Proxy Gamble: ${Date.now()}-${randomBytes(16).toString("hex")}`;
     nonceStore.set(address.toLowerCase(), { nonce, expiresAt: Date.now() + NONCE_TTL_MS });
     res.json({ nonce });
   } catch {

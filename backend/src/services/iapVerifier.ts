@@ -49,11 +49,22 @@ export async function verifyAppleReceipt(receiptData: string): Promise<IAPVerify
 
   const productId = latestReceipt.product_id;
   const coinsGranted = lookupCoinsForProduct(productId);
+
+  // SECURITY (FABLE-2026-07 H-1): dedup on Apple's stable transaction identifier,
+  // NOT the hash of the client-supplied receipt bytes. A StoreKit receipt blob is
+  // re-fetchable and re-encodable, so the same purchase can be presented with
+  // different bytes -> different sha256 -> the @unique(receiptHash) constraint is
+  // bypassed and the same real-money purchase is credited multiple times. The
+  // (original_)transaction_id is Apple's per-purchase primary key and is stable
+  // across re-fetches, so hashing it gives one idempotency key per actual purchase.
+  const txnKey = latestReceipt.transaction_id ?? latestReceipt.original_transaction_id;
+  const receiptHash = txnKey ? hashReceipt(`apple:${txnKey}`) : hashReceipt(receiptData);
+
   return {
     valid: coinsGranted > 0,
     productId,
     coinsGranted,
-    receiptHash: hashReceipt(receiptData),
+    receiptHash,
   };
 }
 
@@ -62,9 +73,15 @@ export async function verifyGoogleReceipt(
   productId: string,
 ): Promise<IAPVerifyResult> {
   // Phase 4 will wire the real Google Play Developer API (requires service account OAuth).
-  // For now, validate format and trust in dev/test; reject in production.
-  if (config.NODE_ENV === "production") {
-    throw new Error("Google Play verification not yet configured for production");
+  // SECURITY (FABLE-2026-07 C-2): the format-only stub below trusts a client-supplied
+  // productId and any >10-char purchaseToken, minting free coins. It must ONLY be
+  // reachable from the automated test harness. Previously this was gated on
+  // `NODE_ENV === "production"`, but the deployed config ships NODE_ENV=development
+  // (backend/.env), so a real deployment fell through to the stub and any client
+  // could mint unlimited coins -> cash out to real USDC. Fail closed everywhere
+  // except the test runner until real Play Integrity verification lands.
+  if (config.NODE_ENV !== "test") {
+    return { valid: false, productId, coinsGranted: 0, receiptHash: hashReceipt(`${productId}:${purchaseToken}`) };
   }
 
   const coinsGranted = lookupCoinsForProduct(productId);
@@ -86,8 +103,14 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 5
   }
 }
 
+interface AppleInAppTxn {
+  product_id: string;
+  transaction_id?: string;
+  original_transaction_id?: string;
+}
+
 interface AppleReceiptResponse {
   status: number;
-  receipt?: { in_app?: Array<{ product_id: string }> };
-  latest_receipt_info?: Array<{ product_id: string }>;
+  receipt?: { in_app?: AppleInAppTxn[] };
+  latest_receipt_info?: AppleInAppTxn[];
 }
