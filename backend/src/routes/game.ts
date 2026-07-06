@@ -4,6 +4,7 @@ import { prisma } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { requireAllowedJurisdiction } from "../middleware/jurisdictionBlock.js";
+import { unattestedRateLimit } from "../middleware/attestationRateLimit.js";
 import {
   generateServerSeed,
   hashServerSeed,
@@ -231,7 +232,7 @@ const cashoutSchema = z.object({
   coinsToCashout: z.number().int().min(MIN_COIN_BALANCE),
 });
 
-router.post("/cashout", requireAuth, requireAllowedJurisdiction, async (req, res, next) => {
+router.post("/cashout", requireAuth, requireAllowedJurisdiction, unattestedRateLimit, async (req, res, next) => {
   try {
     const { sessionId, coinsToCashout } = cashoutSchema.parse(req.body);
     const userId = req.user!.userId;
@@ -263,7 +264,7 @@ router.post("/cashout", requireAuth, requireAllowedJurisdiction, async (req, res
     // Device attestation check (shadow mode until DEVICE_ATTESTATION_ENFORCE=true)
     const attestPlatform = req.headers["x-attestation-platform"] as AttestationPlatform | undefined;
     const attestToken = req.headers["x-attestation-token"] as string | undefined;
-    const { allowed: attestOk } = await checkDeviceAttestation(attestPlatform, attestToken, userId);
+    const { allowed: attestOk } = await checkDeviceAttestation(attestPlatform, attestToken, userId, req.ip);
     if (!attestOk) {
       throw new AppError(403, "Device attestation failed. Please update the app.");
     }
