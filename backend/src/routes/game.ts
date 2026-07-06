@@ -6,12 +6,11 @@ import { AppError } from "../middleware/errorHandler.js";
 import { requireAllowedJurisdiction } from "../middleware/jurisdictionBlock.js";
 import { unattestedRateLimit } from "../middleware/attestationRateLimit.js";
 import {
-  generateServerSeed,
-  hashServerSeed,
   generateClientSeed,
   createHandRecord,
   resolveHand,
 } from "../services/videoPoker.js";
+import { consumeServerSeed, prismaChainStore } from "../services/serverSeedChain.js";
 import { mintVoucher } from "../services/mintOrchestrator.js";
 import { signBalance } from "../services/balanceSigning.js";
 import { recordAnalyticsEvent, getRiskLevel } from "../services/analyticsService.js";
@@ -42,8 +41,13 @@ router.post("/start-session", requireAuth, async (req, res, next) => {
     if (!user) throw new AppError(404, "User not found");
     if (user.coinBalance < betAmount) throw new AppError(402, "Insufficient coin balance");
 
-    const serverSeed = generateServerSeed();
-    const serverSeedHash = hashServerSeed(serverSeed);
+    // Consume the pre-committed server seed from the user's chain (FABLE-2026-07
+    // H-2). serverSeedHash for this session was published as nextServerSeedHash
+    // in the previous session, so it was fixed before this clientSeed exists.
+    const { serverSeed, serverSeedHash, nextServerSeedHash } = await consumeServerSeed(
+      prismaChainStore,
+      userId,
+    );
     const clientSeed = clientSeedOverride ?? generateClientSeed();
 
     const session = await prisma.gameSession.create({
@@ -55,6 +59,8 @@ router.post("/start-session", requireAuth, async (req, res, next) => {
       serverSeedHash,
       clientSeed,
       betAmount,
+      // Commitment for the NEXT session's server seed (H-2 chain continuity).
+      nextServerSeedHash,
     });
   } catch (err) {
     next(err);

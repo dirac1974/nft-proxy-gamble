@@ -5,11 +5,10 @@ import { requireAuth } from "../middleware/auth.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { signBalance } from "../services/balanceSigning.js";
 import { recordAnalyticsEvent } from "../services/analyticsService.js";
-import { hashServerSeed } from "../services/videoPoker.js";
+import { consumeServerSeed, prismaChainStore } from "../services/serverSeedChain.js";
 import {
   ROULETTE_GAME_TYPE,
   MAX_BETS_PER_SPIN,
-  generateServerSeed,
   generateClientSeed,
   spinNumber,
   resolveSpin,
@@ -32,8 +31,11 @@ router.post("/start-session", requireAuth, async (req, res, next) => {
     const { clientSeed: clientSeedOverride } = startSchema.parse(req.body);
     const userId = req.user!.userId;
 
-    const serverSeed = generateServerSeed();
-    const serverSeedHash = hashServerSeed(serverSeed);
+    // Provably-fair server-seed chain (FABLE-2026-07 H-2), shared with video poker.
+    const { serverSeed, serverSeedHash, nextServerSeedHash } = await consumeServerSeed(
+      prismaChainStore,
+      userId,
+    );
     const clientSeed = clientSeedOverride ?? generateClientSeed();
 
     const session = await prisma.gameSession.create({
@@ -52,6 +54,7 @@ router.post("/start-session", requireAuth, async (req, res, next) => {
       gameType: ROULETTE_GAME_TYPE,
       serverSeedHash,
       clientSeed,
+      nextServerSeedHash,
     });
   } catch (err) {
     next(err);

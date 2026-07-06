@@ -43,6 +43,13 @@ model User {
   // this column, NEVER by a self-asserted JWT claim. Defaults false; granted only
   // out-of-band (DB/ops), so a forged or leaked token cannot self-elevate.
   isAdmin       Boolean       @default(false)
+  // Per-user provably-fair server-seed chain (FABLE-2026-07 H-2). nextServerSeed
+  // is the secret pre-image consumed by the NEXT session; nextServerSeedHash is
+  // its published commitment. Committing the seed before the next clientSeed is
+  // known removes the operator's ability to grind the deck. Nullable until the
+  // chain is initialized (account creation or first session).
+  nextServerSeed     String?
+  nextServerSeedHash String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   sessions      GameSession[]

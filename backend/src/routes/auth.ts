@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "../db/client.js";
 import { requireAuth, signToken } from "../middleware/auth.js";
 import { AppError } from "../middleware/errorHandler.js";
+import { freshChainInit } from "../services/serverSeedChain.js";
 
 const router = Router();
 
@@ -50,14 +51,25 @@ router.post("/verify", async (req, res, next) => {
 
     nonceStore.delete(lower);
 
+    // Initialize the provably-fair server-seed chain (FABLE-2026-07 H-2) on
+    // account creation so a new user's very first session already consumes a
+    // pre-committed seed (no bootstrap grinding gap).
     const user = await prisma.user.upsert({
       where: { walletAddress: lower },
-      create: { walletAddress: lower },
+      create: { walletAddress: lower, ...freshChainInit() },
       update: {},
     });
 
     const token = signToken({ userId: user.id, walletAddress: lower });
-    res.json({ token, userId: user.id, ageConfirmed: user.ageConfirmed });
+    res.json({
+      token,
+      userId: user.id,
+      ageConfirmed: user.ageConfirmed,
+      // Commitment for the next server seed, so the client can verify chain
+      // continuity from its first session (null for pre-H-2 accounts until
+      // their next session initializes the chain).
+      serverSeedChainHash: user.nextServerSeedHash,
+    });
   } catch (err) {
     next(err);
   }
