@@ -34,7 +34,8 @@ router.post("/verify-purchase", requireAuth, requireAllowedJurisdiction, unattes
     // Device attestation check (shadow mode until DEVICE_ATTESTATION_ENFORCE=true)
     const attestPlatform = req.headers["x-attestation-platform"] as AttestationPlatform | undefined;
     const attestToken = req.headers["x-attestation-token"] as string | undefined;
-    const { allowed: attestOk } = await checkDeviceAttestation(attestPlatform, attestToken, userId, req.ip);
+    const attestChallenge = req.headers["x-attestation-challenge"] as string | undefined;
+    const { allowed: attestOk } = await checkDeviceAttestation(attestPlatform, attestToken, userId, req.ip, attestChallenge);
     if (!attestOk) {
       throw new AppError(403, "Device attestation failed. Please update the app.");
     }

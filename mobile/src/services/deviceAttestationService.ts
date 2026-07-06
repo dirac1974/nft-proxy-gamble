@@ -6,8 +6,20 @@ import { bytesToHex } from "@noble/hashes/utils";
 
 // Shadow-mode client attestation.
 // Sends a platform tag + HMAC of installationId+timestamp so the backend can
-// track attestation call rates. Real App Attest / Play Integrity tokens are
-// plugged in here once DEVICE_ATTESTATION_ENFORCE=true on the backend.
+// track attestation call rates.
+//
+// The BACKEND now performs REAL App Attest / Play Integrity verification
+// (backend/src/services/deviceAttest/*) and, under enforcement, requires a
+// server-issued challenge echoed in the `x-attestation-challenge` header. To
+// switch this client to real attestation:
+//   1. POST /attestation/challenge → { challenge, nonce }.
+//   2. iOS:     DCAppAttestService.attestKey(keyId, SHA256(nonce)); send token =
+//               base64url(JSON({ keyId, attestation })) + the challenge header.
+//      Android: IntegrityManager token request with nonce; send the token +
+//               the challenge header.
+//   3. Requires a NATIVE module (App Attest / Play Integrity are unavailable in
+//      pure-JS Expo) — add via a dev/EAS build, e.g. an app-attest native module.
+// Until then this stays in shadow mode (backend allows unverified in non-prod).
 
 function getInstallationId(): string {
   return (

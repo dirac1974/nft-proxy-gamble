@@ -68,6 +68,26 @@ high-level sketch above where they differ).
     insufficient balance → 402.
   - Winnings settle to the coin balance; cash out via `/game/cashout` as usual.
 
+### Blackjack (new, multi-step)
+- `POST /blackjack/start-session { clientSeed? }`
+  → `{ sessionId, gameType: "blackjack-6deck-h17-1-0", serverSeedHash, clientSeed,
+       nextServerSeedHash, numDecks, dealerHitsSoft17 }`
+- `POST /blackjack/deal { sessionId, bet }` — place the base bet + opening deal.
+- `POST /blackjack/action { sessionId, action: "hit"|"stand"|"double"|"split" }`
+- `POST /blackjack/insurance { sessionId, take: boolean }` — only when the dealer
+  shows an Ace (phase `insurance`).
+  - All four return a **client-safe round view** + `...signedBalance`:
+    `{ phase, dealer[], dealerValue, dealerHoleHidden, hands[], active, insurance,
+       legalActions[], results?, totalWagered, totalReturn?, netProfit?,
+       serverSeedHash, clientSeed, serverSeed?, numDecks? }`.
+    `serverSeed` + `numDecks` are revealed **only** when `phase === "settled"`;
+    the dealer hole card is hidden until then.
+  - One round per session (second deal → 409); acting after settle → 409; acting on
+    another user's session → 404; illegal action (e.g. double on 3 cards) → 400;
+    insufficient balance for a wager → 409 (atomic debit failed).
+  - Winnings settle to the coin balance; cash out via `/game/cashout` as usual.
+  - Reproduce + verify with `verifyBlackjackDeal` (mobile `services/provablyFair.ts`).
+
 ### Admin — DB-backed authorization (H-3)
 - Admin routes now authorize from the DB (`User.isAdmin`), **never** from a JWT
   claim. A valid non-admin token → 403. Every privileged action writes an

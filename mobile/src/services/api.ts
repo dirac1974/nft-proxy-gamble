@@ -193,6 +193,70 @@ export const rouletteApi = {
   },
 };
 
+// Blackjack
+export type BlackjackActionName = "hit" | "stand" | "double" | "split";
+export type BlackjackPhase = "insurance" | "player" | "dealer" | "settled";
+
+export interface BlackjackHandView {
+  cards: number[];
+  value: number;
+  soft: boolean;
+  bet: number;
+  busted: boolean;
+  done: boolean;
+  isSplitAces: boolean;
+}
+
+export interface BlackjackRound {
+  phase: BlackjackPhase;
+  dealer: number[];
+  dealerValue: number;
+  dealerHoleHidden: boolean;
+  hands: BlackjackHandView[];
+  active: number;
+  insurance: number;
+  legalActions: BlackjackActionName[];
+  results?: { outcome: string; bet: number; ret: number }[];
+  totalWagered: number;
+  totalReturn?: number;
+  netProfit?: number;
+  serverSeedHash: string;
+  clientSeed: string;
+  serverSeed?: string; // revealed only when settled
+  numDecks?: number;
+  newBalance: number;
+}
+
+type RawRound = SignedBalanceResponse & Omit<BlackjackRound, "newBalance">;
+
+function toRound(resp: RawRound): BlackjackRound {
+  const newBalance = extractVerifiedBalance(resp); // verifies the signed balance
+  const { coinBalance: _c, balanceSig: _b, sigTimestamp: _t, ...rest } = resp;
+  return { ...(rest as Omit<BlackjackRound, "newBalance">), newBalance };
+}
+
+export const blackjackApi = {
+  startSession: () =>
+    request<{
+      sessionId: string;
+      gameType: string;
+      serverSeedHash: string;
+      clientSeed: string;
+      nextServerSeedHash?: string;
+      numDecks: number;
+      dealerHitsSoft17: boolean;
+    }>("/blackjack/start-session", { method: "POST", body: JSON.stringify({}) }),
+
+  deal: async (sessionId: string, bet: number): Promise<BlackjackRound> =>
+    toRound(await request<RawRound>("/blackjack/deal", { method: "POST", body: JSON.stringify({ sessionId, bet }) })),
+
+  action: async (sessionId: string, action: BlackjackActionName): Promise<BlackjackRound> =>
+    toRound(await request<RawRound>("/blackjack/action", { method: "POST", body: JSON.stringify({ sessionId, action }) })),
+
+  insurance: async (sessionId: string, take: boolean): Promise<BlackjackRound> =>
+    toRound(await request<RawRound>("/blackjack/insurance", { method: "POST", body: JSON.stringify({ sessionId, take }) })),
+};
+
 // NFTs
 export interface Voucher {
   id: string;
