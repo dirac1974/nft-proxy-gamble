@@ -11,11 +11,15 @@ import {
   resolveHand,
 } from "../services/videoPoker.js";
 import { consumeServerSeed, prismaChainStore } from "../services/serverSeedChain.js";
+import {
+  VARIANT_GAME_TYPE,
+  variantFromGameType,
+  resolveVariantHand,
+} from "../services/pokerVariants.js";
 import { mintVoucher } from "../services/mintOrchestrator.js";
 import { signBalance } from "../services/balanceSigning.js";
 import { recordAnalyticsEvent, getRiskLevel } from "../services/analyticsService.js";
 import { checkDeviceAttestation } from "../services/deviceAttestationService.js";
-import { ROULETTE_GAME_TYPE } from "../services/roulette.js";
 import type { HandRecord, AttestationPlatform } from "../types/index.js";
 
 const MIN_COIN_BALANCE = 100;
@@ -27,12 +31,16 @@ const router = Router();
 const startSchema = z.object({
   betAmount: z.number().int().min(1).max(5),
   clientSeed: z.string().optional(),
+  // Video poker variant (default Jacks or Better). Same deck derivation + seed
+  // chain; only hand evaluation + paytable differ (see services/pokerVariants.ts).
+  variant: z.enum(["jacks-or-better", "bonus-poker", "deuces-wild"]).optional(),
 });
 
 router.post("/start-session", requireAuth, async (req, res, next) => {
   try {
-    const { betAmount, clientSeed: clientSeedOverride } = startSchema.parse(req.body);
+    const { betAmount, clientSeed: clientSeedOverride, variant } = startSchema.parse(req.body);
     const userId = req.user!.userId;
+    const gameType = VARIANT_GAME_TYPE[variant ?? "jacks-or-better"];
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -51,11 +59,12 @@ router.post("/start-session", requireAuth, async (req, res, next) => {
     const clientSeed = clientSeedOverride ?? generateClientSeed();
 
     const session = await prisma.gameSession.create({
-      data: { userId, betAmount, serverSeed, serverSeedHash, clientSeed },
+      data: { userId, betAmount, serverSeed, serverSeedHash, clientSeed, gameType },
     });
 
     res.status(201).json({
       sessionId: session.id,
+      gameType,
       serverSeedHash,
       clientSeed,
       betAmount,
@@ -75,10 +84,10 @@ router.post("/deal", requireAuth, async (req, res, next) => {
 
     const session = await prisma.gameSession.findUnique({ where: { id: sessionId } });
     if (!session || session.userId !== userId) throw new AppError(404, "Session not found");
-    // Cross-game guard: /game/deal is video poker only. A roulette session must
-    // not be dealt as a poker hand (it resolves via /roulette/spin).
-    if (session.gameType === ROULETTE_GAME_TYPE) {
-      throw new AppError(409, "This is a roulette session; use /roulette/spin.");
+    // Cross-game guard: /game/deal is video poker only (any variant). Roulette /
+    // blackjack sessions resolve via their own routes.
+    if (!variantFromGameType(session.gameType)) {
+      throw new AppError(409, "Not a video poker session.");
     }
     if (session.state !== "ACTIVE") throw new AppError(409, "Session is not in ACTIVE state");
 
@@ -165,19 +174,23 @@ router.post("/draw", requireAuth, async (req, res, next) => {
 
     const session = await prisma.gameSession.findUnique({ where: { id: sessionId } });
     if (!session || session.userId !== userId) throw new AppError(404, "Session not found");
-    if (session.gameType === ROULETTE_GAME_TYPE) {
-      throw new AppError(409, "This is a roulette session; use /roulette/spin.");
-    }
+    const variant = variantFromGameType(session.gameType);
+    if (!variant) throw new AppError(409, "Not a video poker session.");
     if (session.state !== "AWAITING_DRAW") throw new AppError(409, "Session is not awaiting draw");
 
     const hands = session.hands as unknown as HandRecord[];
     const currentHand = hands[hands.length - 1];
     if (!currentHand) throw new AppError(500, "No active hand found");
 
-    const { drawnCards, rank, payout } = resolveHand(currentHand, holds, session.betAmount);
+    // Jacks or Better keeps the original code path (unchanged); Bonus Poker and
+    // Deuces Wild dispatch to the variant evaluator (same deck, different rules).
+    const { drawnCards, rank, payout } =
+      variant === "jacks-or-better"
+        ? resolveHand(currentHand, holds, session.betAmount)
+        : resolveVariantHand(currentHand.deck, holds, session.betAmount, variant);
 
     currentHand.holds = holds;
-    currentHand.rank = rank;
+    currentHand.rank = rank as HandRecord["rank"];
     currentHand.payout = payout;
 
     // Atomic conditional session transition: prevents parallel /draw calls

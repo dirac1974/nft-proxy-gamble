@@ -21,7 +21,7 @@ import { GlassCard } from "@/components/GlassCard";
 import { ProvablyFairModal } from "@/components/ProvablyFairModal";
 import { useGameStore } from "@/stores/gameStore";
 import { useWalletStore } from "@/stores/walletStore";
-import { gameApi } from "@/services/api";
+import { gameApi, type PokerVariant } from "@/services/api";
 
 const RANKS = ["Royal Flush", "Straight Flush", "Four of a Kind", "Full House",
   "Flush", "Straight", "Three of a Kind", "Two Pair", "Jacks or Better", "Lose"];
@@ -30,6 +30,7 @@ export default function VideoPokerScreen() {
   const qc = useQueryClient();
   const { isAuthenticated } = useWalletStore();
   const [verifyVisible, setVerifyVisible] = useState(false);
+  const [variant, setVariant] = useState<PokerVariant>("jacks-or-better");
   const {
     phase, session, dealt, result, betAmount,
     setBetAmount, setSession, setDealt, toggleHold, setResult, reset,
@@ -48,7 +49,7 @@ export default function VideoPokerScreen() {
 
   // Mutations
   const startMutation = useMutation({
-    mutationFn: () => gameApi.startSession(betAmount),
+    mutationFn: () => gameApi.startSession(betAmount, variant),
     onSuccess: (data) => setSession({ ...data, betAmount }),
   });
 
@@ -138,6 +139,25 @@ export default function VideoPokerScreen() {
         <Text style={styles.betHint}>Cost: {betAmount} coin{betAmount > 1 ? "s" : ""}</Text>
       </GlassCard>
 
+      {/* Variant selector — locked once a game is in progress */}
+      <GlassCard style={styles.betCard}>
+        <Text style={styles.betLabel}>GAME</Text>
+        <View style={styles.variantRow}>
+          {VARIANTS.map((v) => (
+            <Pressable
+              key={v.id}
+              style={[styles.variantChip, variant === v.id && styles.betChipActive]}
+              onPress={() => setVariant(v.id)}
+              disabled={phase !== "idle" && phase !== "drawn" && phase !== "cashed_out"}
+              accessibilityRole="button"
+              accessibilityState={{ selected: variant === v.id }}
+            >
+              <Text style={[styles.variantChipText, variant === v.id && styles.betChipTextActive]}>{v.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </GlassCard>
+
       {/* Card display */}
       <View style={styles.cardRow}>
         {displayCards
@@ -224,11 +244,14 @@ export default function VideoPokerScreen() {
         </Pressable>
       )}
 
-      {/* Paytable */}
+      {/* Paytable — per variant */}
       <GlassCard style={styles.paytable}>
-        <Text style={styles.paytableTitle}>PAYTABLE (BET {betAmount})</Text>
-        {PAYTABLE.map(({ rank, mult }) => {
-          const payout = rank === "Royal Flush" && betAmount === 5 ? 800 : mult;
+        <Text style={styles.paytableTitle}>
+          {VARIANTS.find((v) => v.id === variant)!.label.toUpperCase()} — PAYTABLE (BET {betAmount})
+        </Text>
+        {PAYTABLES[variant].map(({ rank, mult }) => {
+          const isTopRoyal = rank === "Royal Flush" || rank === "Natural Royal";
+          const payout = isTopRoyal && betAmount === 5 ? 800 : mult;
           return (
             <View key={rank} style={styles.paytableRow}>
               <Text style={styles.paytableHand}>{rank}</Text>
@@ -265,17 +288,52 @@ export default function VideoPokerScreen() {
   );
 }
 
-const PAYTABLE = [
-  { rank: "Royal Flush",      mult: 250 },
-  { rank: "Straight Flush",   mult: 50 },
-  { rank: "Four of a Kind",   mult: 25 },
-  { rank: "Full House",       mult: 9 },
-  { rank: "Flush",            mult: 6 },
-  { rank: "Straight",         mult: 4 },
-  { rank: "Three of a Kind",  mult: 3 },
-  { rank: "Two Pair",         mult: 2 },
-  { rank: "Jacks or Better",  mult: 1 },
+const VARIANTS: { id: PokerVariant; label: string }[] = [
+  { id: "jacks-or-better", label: "Jacks+" },
+  { id: "bonus-poker", label: "Bonus" },
+  { id: "deuces-wild", label: "Deuces" },
 ];
+
+// Per-variant paytables (× bet; royal pays 800× on a 5-coin max bet). These
+// mirror the authoritative backend paytables in services/pokerVariants.ts.
+const PAYTABLES: Record<PokerVariant, { rank: string; mult: number }[]> = {
+  "jacks-or-better": [
+    { rank: "Royal Flush", mult: 250 },
+    { rank: "Straight Flush", mult: 50 },
+    { rank: "Four of a Kind", mult: 25 },
+    { rank: "Full House", mult: 9 },
+    { rank: "Flush", mult: 6 },
+    { rank: "Straight", mult: 4 },
+    { rank: "Three of a Kind", mult: 3 },
+    { rank: "Two Pair", mult: 2 },
+    { rank: "Jacks or Better", mult: 1 },
+  ],
+  "bonus-poker": [
+    { rank: "Royal Flush", mult: 250 },
+    { rank: "Straight Flush", mult: 50 },
+    { rank: "Four Aces", mult: 80 },
+    { rank: "Four 2-4", mult: 40 },
+    { rank: "Four 5-K", mult: 25 },
+    { rank: "Full House", mult: 8 },
+    { rank: "Flush", mult: 5 },
+    { rank: "Straight", mult: 4 },
+    { rank: "Three of a Kind", mult: 3 },
+    { rank: "Two Pair", mult: 2 },
+    { rank: "Jacks or Better", mult: 1 },
+  ],
+  "deuces-wild": [
+    { rank: "Natural Royal", mult: 250 },
+    { rank: "Four Deuces", mult: 200 },
+    { rank: "Wild Royal", mult: 25 },
+    { rank: "Five of a Kind", mult: 16 },
+    { rank: "Straight Flush", mult: 10 },
+    { rank: "Four of a Kind", mult: 4 },
+    { rank: "Full House", mult: 4 },
+    { rank: "Flush", mult: 3 },
+    { rank: "Straight", mult: 2 },
+    { rank: "Three of a Kind", mult: 1 },
+  ],
+};
 
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: colors.background },
@@ -297,6 +355,13 @@ const styles = StyleSheet.create({
   betChipText: { ...typography.body, color: colors.textMuted, fontWeight: "700" },
   betChipTextActive: { color: colors.neonGreen },
   betHint: { ...typography.caption },
+  variantRow: { flexDirection: "row", gap: spacing.sm },
+  variantChip: {
+    flex: 1, height: 40, borderRadius: radius.md,
+    borderWidth: 2, borderColor: colors.border,
+    justifyContent: "center", alignItems: "center",
+  },
+  variantChipText: { ...typography.caption, color: colors.textMuted, fontWeight: "700" },
 
   cardRow: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: spacing.xs },
 
