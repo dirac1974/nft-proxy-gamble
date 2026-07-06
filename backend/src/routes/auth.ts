@@ -1,9 +1,11 @@
 import { Router } from "express";
+import { randomBytes } from "crypto";
 import { verifyMessage } from "ethers";
 import { z } from "zod";
 import { prisma } from "../db/client.js";
 import { requireAuth, signToken } from "../middleware/auth.js";
 import { AppError } from "../middleware/errorHandler.js";
+import { freshChainInit } from "../services/serverSeedChain.js";
 
 const router = Router();
 
@@ -15,7 +17,10 @@ const NONCE_TTL_MS = 60_000;
 router.get("/nonce", (req, res, next) => {
   try {
     const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/).parse(req.query.address);
-    const nonce = `Sign this message to authenticate with NFT Proxy Gamble: ${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    // Use a CSPRNG for the challenge (FABLE-2026-07 L-1). Math.random() is not
+    // cryptographically secure; a security challenge that gates wallet auth should
+    // be unpredictable.
+    const nonce = `Sign this message to authenticate with NFT Proxy Gamble: ${Date.now()}-${randomBytes(16).toString("hex")}`;
     nonceStore.set(address.toLowerCase(), { nonce, expiresAt: Date.now() + NONCE_TTL_MS });
     res.json({ nonce });
   } catch {
@@ -46,14 +51,25 @@ router.post("/verify", async (req, res, next) => {
 
     nonceStore.delete(lower);
 
+    // Initialize the provably-fair server-seed chain (FABLE-2026-07 H-2) on
+    // account creation so a new user's very first session already consumes a
+    // pre-committed seed (no bootstrap grinding gap).
     const user = await prisma.user.upsert({
       where: { walletAddress: lower },
-      create: { walletAddress: lower },
+      create: { walletAddress: lower, ...freshChainInit() },
       update: {},
     });
 
     const token = signToken({ userId: user.id, walletAddress: lower });
-    res.json({ token, userId: user.id, ageConfirmed: user.ageConfirmed });
+    res.json({
+      token,
+      userId: user.id,
+      ageConfirmed: user.ageConfirmed,
+      // Commitment for the next server seed, so the client can verify chain
+      // continuity from its first session (null for pre-H-2 accounts until
+      // their next session initializes the chain).
+      serverSeedChainHash: user.nextServerSeedHash,
+    });
   } catch (err) {
     next(err);
   }

@@ -24,12 +24,28 @@ contract NFTProxyVoucher is ERC1155, AccessControl, Pausable, ReentrancyGuard {
     /// @dev 100 coins = 1 USDC (6 dp) => 10_000 raw USDC units per coin. Exact math, no truncation.
     uint256 public constant USDC_UNITS_PER_COIN = 10_000;
 
+    /// @dev Timelock delay between initiating and executing an emergency USDC
+    ///      withdrawal (FABLE-2026-07 H-4). Gives users a window to redeem/exit
+    ///      before an admin can drain liquidity, and gives monitoring time to
+    ///      react to a compromised admin key.
+    uint256 public constant EMERGENCY_WITHDRAWAL_DELAY = 24 hours;
+
     uint256 private _tokenIdCounter;
     IERC20 public immutable usdcToken;
 
     mapping(uint256 => uint256) public coinBalance;
     mapping(uint256 => bytes32) public gameType;
     mapping(uint256 => uint256) public mintedTimestamp;
+
+    /// @dev At most one emergency withdrawal may be queued at a time. `exists`
+    ///      distinguishes a genuine zero-state from an empty slot.
+    struct PendingWithdrawal {
+        uint256 amount;
+        address to;
+        uint256 unlockTime;
+        bool exists;
+    }
+    PendingWithdrawal public pendingWithdrawal;
 
     event VoucherMinted(
         uint256 indexed tokenId,
@@ -44,6 +60,10 @@ contract NFTProxyVoucher is ERC1155, AccessControl, Pausable, ReentrancyGuard {
         uint256 usdcAmount
     );
     event EmergencyWithdrawal(address indexed to, uint256 amount);
+    // FABLE-2026-07 H-4 timelock lifecycle events (for monitoring/alerting).
+    event EmergencyWithdrawalInitiated(address indexed to, uint256 amount, uint256 unlockTime);
+    event EmergencyWithdrawalCancelled(address indexed to, uint256 amount);
+    event EmergencyWithdrawalExecuted(address indexed to, uint256 amount);
 
     /// @dev Emitted by commitPurchase — creates an immutable on-chain audit record for every IAP.
     event PurchaseCommitted(
@@ -141,15 +161,64 @@ contract NFTProxyVoucher is ERC1155, AccessControl, Pausable, ReentrancyGuard {
         _unpause();
     }
 
-    /// @notice Admin-only emergency drain of USDC. Used for contract migration or regulator response.
-    /// @dev Phase 5 will move admin to a Gnosis Safe and consider adding a timelock.
-    function emergencyWithdrawUSDC(uint256 amount, address to)
+    /// @notice Step 1/2 — queue an emergency USDC withdrawal (admin only).
+    /// @dev FABLE-2026-07 H-4. The withdrawal cannot be executed until
+    ///      EMERGENCY_WITHDRAWAL_DELAY has elapsed, giving users time to redeem
+    ///      and monitoring time to react to a compromised admin key. Only one
+    ///      withdrawal may be queued at a time; cancel the pending one first to
+    ///      change the amount/recipient. This does NOT replace moving admin to a
+    ///      Gnosis Safe + splitting roles — it is the on-chain delay layer beneath
+    ///      that governance change.
+    function initiateEmergencyWithdrawal(uint256 amount, address to)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
         require(to != address(0), "Zero recipient");
-        usdcToken.safeTransfer(to, amount);
-        emit EmergencyWithdrawal(to, amount);
+        require(amount > 0, "Zero amount");
+        require(!pendingWithdrawal.exists, "Withdrawal already pending");
+
+        uint256 unlockTime = block.timestamp + EMERGENCY_WITHDRAWAL_DELAY;
+        pendingWithdrawal = PendingWithdrawal({
+            amount: amount,
+            to: to,
+            unlockTime: unlockTime,
+            exists: true
+        });
+        emit EmergencyWithdrawalInitiated(to, amount, unlockTime);
+    }
+
+    /// @notice Step 2/2 — execute the queued emergency withdrawal after the delay.
+    /// @dev CEI: clears the pending slot before the external USDC transfer. Reverts
+    ///      if nothing is queued or the timelock has not yet elapsed. Emits the
+    ///      legacy EmergencyWithdrawal event (monitoring continuity) plus the
+    ///      explicit Executed event.
+    function executeEmergencyWithdrawal()
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        PendingWithdrawal memory p = pendingWithdrawal;
+        require(p.exists, "No pending withdrawal");
+        require(block.timestamp >= p.unlockTime, "Timelock not elapsed");
+
+        delete pendingWithdrawal;
+
+        usdcToken.safeTransfer(p.to, p.amount);
+        emit EmergencyWithdrawal(p.to, p.amount);
+        emit EmergencyWithdrawalExecuted(p.to, p.amount);
+    }
+
+    /// @notice Cancel a queued emergency withdrawal during the delay window (admin only).
+    /// @dev Anyone with DEFAULT_ADMIN_ROLE (e.g. the Safe once governance moves)
+    ///      can abort a pending drain — the primary defense if an admin key is
+    ///      compromised and a malicious withdrawal is observed on-chain.
+    function cancelEmergencyWithdrawal()
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        PendingWithdrawal memory p = pendingWithdrawal;
+        require(p.exists, "No pending withdrawal");
+        delete pendingWithdrawal;
+        emit EmergencyWithdrawalCancelled(p.to, p.amount);
     }
 
     function uri(uint256 tokenId) public view override returns (string memory) {

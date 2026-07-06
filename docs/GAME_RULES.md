@@ -58,3 +58,67 @@ All games will implement a common `GameEngine` interface:
 - `endSession()` -> returns finalBalanceDelta
 
 Claude: Implement Video Poker first exactly to this spec. Add unit tests for every hand type in paytable.
+---
+
+# Game Rules — European Roulette (single-zero)
+
+## Overview
+European (single-zero) roulette: 37 pockets, `0`–`36`. One spin resolves all
+bets at once — a one-shot game (no multi-step decisions), so it uses the
+standard commit-reveal without a seed chain per decision.
+
+**House Edge / RTP**: 2.70% house edge (97.30% RTP). The single green `0` is the
+sole source of the edge — every bet's expected value is `36/37` of a fair
+payout. Verified in `backend/tests/unit/roulette.test.ts` ("expected return of a
+straight-up bet across all 37 pockets is 36/37").
+
+## Bet types & payouts
+
+Payouts below are stated as **profit : stake** (the usual casino notation). On a
+win the player receives their stake back **plus** the profit, i.e. total
+returned = `stake × (ratio + 1)`.
+
+| Bet         | Covers                                   | Pays  | Total returned per 1 coin |
+|-------------|------------------------------------------|-------|---------------------------|
+| Straight    | 1 number                                 | 35:1  | 36                        |
+| Split       | 2 adjacent numbers                       | 17:1  | 18                        |
+| Street      | 3 numbers (a row), or a 0-trio           | 11:1  | 12                        |
+| Corner      | 4 numbers (a square), or the 0-1-2-3 basket | 8:1 | 9                        |
+| Six-line    | 6 numbers (two adjacent rows)            | 5:1   | 6                         |
+| Column      | 12 numbers (a table column)              | 2:1   | 3                         |
+| Dozen       | 12 numbers (1–12, 13–24, 25–36)          | 2:1   | 3                         |
+| Red / Black | 18 numbers                               | 1:1   | 2                         |
+| Odd / Even  | 18 numbers                               | 1:1   | 2                         |
+| High / Low  | 19–36 / 1–18                             | 1:1   | 2                         |
+
+`0` is green: it loses all even-money, dozen, column and any inside bet that
+does not explicitly cover it. Zero is covered only by a straight on 0, the
+zero-splits (0-1, 0-2, 0-3), the zero-trios (0-1-2, 0-2-3) and the basket
+(0-1-2-3).
+
+**Table layout** (for adjacency): numbers 1–36 sit in 12 rows of 3; row `r`
+holds `3r-2, 3r-1, 3r`. Column 1 = {1,4,…,34}, column 2 = {2,5,…,35}, column 3 =
+{3,6,…,36}. Inside-bet groups are validated server-side against the set of all
+legal groups — an illegal group (e.g. a "split" of 1 and 5) is rejected with
+HTTP 400.
+
+## Limits
+- 1 to **20** bets per spin.
+- Total wager per spin ≤ **1000** coins.
+- Each bet amount is a positive integer ≥ 1.
+
+## Game flow (in app)
+1. **Start session** (commit): the server commits a `serverSeed` (publishes
+   `serverSeedHash`) and fixes the `clientSeed` **before** the player bets.
+2. **Place bets**: chips on any combination of the bet types above.
+3. **Spin** (reveal): the server reveals `serverSeed` and the winning number
+   `n = HMAC_SHA256(serverSeed, clientSeed:nonce) mod 37`. All bets settle
+   atomically; winnings credit to the coin balance.
+4. The app **verifies** on-device that `keccak256(serverSeed) == serverSeedHash`
+   and that the number recomputes from the seeds. A failed check is shown as a
+   red "verification FAILED" banner.
+5. Winnings can be cashed out to an on-chain USDC voucher via the normal
+   `/game/cashout` path (100 coins = 1 USDC).
+
+One spin per session: after the seed is revealed a new session must be started
+for the next spin (prevents outcome prediction — see `docs/PROVABLY_FAIR.md`).

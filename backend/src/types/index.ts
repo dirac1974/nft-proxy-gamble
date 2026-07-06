@@ -38,7 +38,10 @@ export interface DrawResult {
 export interface JwtPayload {
   userId: string;
   walletAddress: string;
-  isAdmin?: boolean;
+  // NOTE (FABLE-2026-07 H-3): admin authority is intentionally NOT carried in the
+  // token. It is decided server-side from User.isAdmin on every admin request.
+  // Do not add an `isAdmin` claim here — a token must never be able to assert its
+  // own privilege level.
 }
 
 export interface IAPVerifyResult {

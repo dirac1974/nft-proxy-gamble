@@ -20,7 +20,10 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 
   const token = header.slice(7);
   try {
-    const payload = jwt.verify(token, config.JWT_SECRET) as JwtPayload;
+    // Pin the algorithm allowlist (FABLE-2026-07 H-3, defense-in-depth): never let a
+    // token dictate its own verification algorithm (e.g. "none", or an RS/HS
+    // confusion if the key handling ever changes). Only HS256 is issued below.
+    const payload = jwt.verify(token, config.JWT_SECRET, { algorithms: ["HS256"] }) as JwtPayload;
     req.user = payload;
     next();
   } catch {
@@ -29,5 +32,8 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 }
 
 export function signToken(payload: JwtPayload): string {
-  return jwt.sign(payload, config.JWT_SECRET, { expiresIn: config.JWT_EXPIRY } as jwt.SignOptions);
+  return jwt.sign(payload, config.JWT_SECRET, {
+    expiresIn: config.JWT_EXPIRY,
+    algorithm: "HS256",
+  } as jwt.SignOptions);
 }

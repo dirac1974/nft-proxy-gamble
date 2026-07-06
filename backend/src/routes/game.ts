@@ -4,17 +4,18 @@ import { prisma } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { requireAllowedJurisdiction } from "../middleware/jurisdictionBlock.js";
+import { unattestedRateLimit } from "../middleware/attestationRateLimit.js";
 import {
-  generateServerSeed,
-  hashServerSeed,
   generateClientSeed,
   createHandRecord,
   resolveHand,
 } from "../services/videoPoker.js";
+import { consumeServerSeed, prismaChainStore } from "../services/serverSeedChain.js";
 import { mintVoucher } from "../services/mintOrchestrator.js";
 import { signBalance } from "../services/balanceSigning.js";
 import { recordAnalyticsEvent, getRiskLevel } from "../services/analyticsService.js";
 import { checkDeviceAttestation } from "../services/deviceAttestationService.js";
+import { ROULETTE_GAME_TYPE } from "../services/roulette.js";
 import type { HandRecord, AttestationPlatform } from "../types/index.js";
 
 const MIN_COIN_BALANCE = 100;
@@ -40,8 +41,13 @@ router.post("/start-session", requireAuth, async (req, res, next) => {
     if (!user) throw new AppError(404, "User not found");
     if (user.coinBalance < betAmount) throw new AppError(402, "Insufficient coin balance");
 
-    const serverSeed = generateServerSeed();
-    const serverSeedHash = hashServerSeed(serverSeed);
+    // Consume the pre-committed server seed from the user's chain (FABLE-2026-07
+    // H-2). serverSeedHash for this session was published as nextServerSeedHash
+    // in the previous session, so it was fixed before this clientSeed exists.
+    const { serverSeed, serverSeedHash, nextServerSeedHash } = await consumeServerSeed(
+      prismaChainStore,
+      userId,
+    );
     const clientSeed = clientSeedOverride ?? generateClientSeed();
 
     const session = await prisma.gameSession.create({
@@ -53,6 +59,8 @@ router.post("/start-session", requireAuth, async (req, res, next) => {
       serverSeedHash,
       clientSeed,
       betAmount,
+      // Commitment for the NEXT session's server seed (H-2 chain continuity).
+      nextServerSeedHash,
     });
   } catch (err) {
     next(err);
@@ -67,7 +75,27 @@ router.post("/deal", requireAuth, async (req, res, next) => {
 
     const session = await prisma.gameSession.findUnique({ where: { id: sessionId } });
     if (!session || session.userId !== userId) throw new AppError(404, "Session not found");
+    // Cross-game guard: /game/deal is video poker only. A roulette session must
+    // not be dealt as a poker hand (it resolves via /roulette/spin).
+    if (session.gameType === ROULETTE_GAME_TYPE) {
+      throw new AppError(409, "This is a roulette session; use /roulette/spin.");
+    }
     if (session.state !== "ACTIVE") throw new AppError(409, "Session is not in ACTIVE state");
+
+    const hands = session.hands as unknown as HandRecord[];
+
+    // SECURITY (FABLE-2026-07 C-1): one hand per session. A session's serverSeed is
+    // revealed to the client in the /draw response (needed for provably-fair
+    // verification). After the seed is public, dealing another hand on the SAME
+    // session would let the player compute the entire upcoming deck
+    // (generateDeck(serverSeed, clientSeed, handNumber)) BEFORE choosing holds —
+    // i.e. guaranteed wins. The official client already starts a fresh session per
+    // hand ("PLAY AGAIN" -> start-session), so this only removes an unused,
+    // exploitable code path. Multi-hand sessions would require per-hand seed
+    // rotation with chained commitments (see docs/FABLE_SECURITY_AUDIT_JULY2026.md).
+    if (hands.length >= 1) {
+      throw new AppError(409, "This session already played its hand. Start a new session for the next hand.");
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -76,7 +104,6 @@ router.post("/deal", requireAuth, async (req, res, next) => {
     if (!user) throw new AppError(404, "User not found");
     if (user.coinBalance < session.betAmount) throw new AppError(402, "Insufficient coin balance");
 
-    const hands = session.hands as unknown as HandRecord[];
     const handNumber = hands.length;
     const hand = createHandRecord(handNumber, session.serverSeed, session.clientSeed);
     const newHands = [...hands, hand] as unknown as object[];
@@ -138,6 +165,9 @@ router.post("/draw", requireAuth, async (req, res, next) => {
 
     const session = await prisma.gameSession.findUnique({ where: { id: sessionId } });
     if (!session || session.userId !== userId) throw new AppError(404, "Session not found");
+    if (session.gameType === ROULETTE_GAME_TYPE) {
+      throw new AppError(409, "This is a roulette session; use /roulette/spin.");
+    }
     if (session.state !== "AWAITING_DRAW") throw new AppError(409, "Session is not awaiting draw");
 
     const hands = session.hands as unknown as HandRecord[];
@@ -217,7 +247,7 @@ const cashoutSchema = z.object({
   coinsToCashout: z.number().int().min(MIN_COIN_BALANCE),
 });
 
-router.post("/cashout", requireAuth, requireAllowedJurisdiction, async (req, res, next) => {
+router.post("/cashout", requireAuth, requireAllowedJurisdiction, unattestedRateLimit, async (req, res, next) => {
   try {
     const { sessionId, coinsToCashout } = cashoutSchema.parse(req.body);
     const userId = req.user!.userId;
@@ -249,7 +279,7 @@ router.post("/cashout", requireAuth, requireAllowedJurisdiction, async (req, res
     // Device attestation check (shadow mode until DEVICE_ATTESTATION_ENFORCE=true)
     const attestPlatform = req.headers["x-attestation-platform"] as AttestationPlatform | undefined;
     const attestToken = req.headers["x-attestation-token"] as string | undefined;
-    const { allowed: attestOk } = await checkDeviceAttestation(attestPlatform, attestToken, userId);
+    const { allowed: attestOk } = await checkDeviceAttestation(attestPlatform, attestToken, userId, req.ip);
     if (!attestOk) {
       throw new AppError(403, "Device attestation failed. Please update the app.");
     }

@@ -6,6 +6,7 @@ import authRoutes from "./routes/auth.js";
 import balanceRoutes from "./routes/balance.js";
 import iapRoutes from "./routes/iap.js";
 import gameRoutes from "./routes/game.js";
+import rouletteRoutes from "./routes/roulette.js";
 import nftRoutes from "./routes/nfts.js";
 import adminRoutes from "./routes/admin.js";
 import { errorHandler } from "./middleware/errorHandler.js";
@@ -17,7 +18,10 @@ export function createApp(): express.Application {
 
   app.use(helmet());
   app.use(cors());
-  app.use(express.json());
+  // Bound request bodies (FABLE-2026-07 M-4). Apple receipts are the largest
+  // legitimate payload and sit well under this; the cap prevents large-payload
+  // memory-pressure DoS on the unauthenticated-ish JSON parser.
+  app.use(express.json({ limit: "256kb" }));
 
   const skipInTest = () => config.NODE_ENV === "test";
   const authLimiter = rateLimit({ windowMs: 60_000, max: 10, skip: skipInTest, standardHeaders: true, legacyHeaders: false });
@@ -37,6 +41,7 @@ export function createApp(): express.Application {
   app.use("/balance", gameLimiter, balanceRoutes);
   app.use("/iap", gameLimiter, iapRoutes);
   app.use("/game", gameLimiter, gameRoutes);
+  app.use("/roulette", gameLimiter, rouletteRoutes);
   app.use("/nfts", gameLimiter, nftRoutes);
   app.use("/admin", gameLimiter, adminRoutes);
 

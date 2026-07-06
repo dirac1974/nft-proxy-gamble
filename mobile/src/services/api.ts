@@ -52,10 +52,13 @@ export const authApi = {
     request<{ nonce: string }>(`/auth/nonce?address=${address}`),
 
   verify: (address: string, signature: string) =>
-    request<{ token: string; userId: string; ageConfirmed: boolean }>("/auth/verify", {
-      method: "POST",
-      body: JSON.stringify({ address, signature }),
-    }),
+    request<{ token: string; userId: string; ageConfirmed: boolean; serverSeedChainHash: string | null }>(
+      "/auth/verify",
+      {
+        method: "POST",
+        body: JSON.stringify({ address, signature }),
+      },
+    ),
 
   confirmAge: () =>
     request<{ ageConfirmed: boolean }>("/auth/confirm-age", { method: "POST" }),
@@ -72,7 +75,12 @@ export const balanceApi = {
 // Game
 export const gameApi = {
   startSession: (betAmount: number) =>
-    request<{ sessionId: string; serverSeedHash: string; clientSeed: string }>(
+    request<{
+      sessionId: string;
+      serverSeedHash: string;
+      clientSeed: string;
+      nextServerSeedHash?: string; // H-2 chain commitment for the next session
+    }>(
       "/game/start-session",
       { method: "POST", body: JSON.stringify({ betAmount }) },
     ),
@@ -114,6 +122,71 @@ export const gameApi = {
     );
     const newBalance = extractVerifiedBalance(resp);
     return { voucherId: resp.voucherId, mintStatus: resp.mintStatus, newBalance };
+  },
+};
+
+// Roulette
+export type RouletteBetType =
+  | "straight" | "split" | "street" | "corner" | "line"
+  | "dozen" | "column" | "red" | "black" | "odd" | "even" | "high" | "low";
+
+export interface RouletteBet {
+  type: RouletteBetType;
+  amount: number;
+  numbers?: number[]; // inside bets
+  value?: number;     // dozen/column selector (1|2|3)
+}
+
+export interface RouletteBetResult extends RouletteBet {
+  won: boolean;
+  payout: number;
+}
+
+export interface RouletteSpinResult {
+  winningNumber: number;
+  color: "red" | "black" | "green";
+  totalWagered: number;
+  totalReturn: number;
+  netProfit: number;
+  results: RouletteBetResult[];
+  serverSeed: string;
+  serverSeedHash: string;
+  clientSeed: string;
+  nonce: number;
+  newBalance: number;
+}
+
+export const rouletteApi = {
+  startSession: () =>
+    request<{
+      sessionId: string;
+      gameType: string;
+      serverSeedHash: string;
+      clientSeed: string;
+      nextServerSeedHash?: string;
+    }>("/roulette/start-session", { method: "POST", body: JSON.stringify({}) }),
+
+  spin: async (sessionId: string, bets: RouletteBet[]): Promise<RouletteSpinResult> => {
+    const resp = await request<
+      SignedBalanceResponse & Omit<RouletteSpinResult, "newBalance">
+    >("/roulette/spin", {
+      method: "POST",
+      body: JSON.stringify({ sessionId, bets }),
+    });
+    const newBalance = extractVerifiedBalance(resp);
+    return {
+      winningNumber: resp.winningNumber,
+      color: resp.color,
+      totalWagered: resp.totalWagered,
+      totalReturn: resp.totalReturn,
+      netProfit: resp.netProfit,
+      results: resp.results,
+      serverSeed: resp.serverSeed,
+      serverSeedHash: resp.serverSeedHash,
+      clientSeed: resp.clientSeed,
+      nonce: resp.nonce,
+      newBalance,
+    };
   },
 };
 

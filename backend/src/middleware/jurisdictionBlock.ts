@@ -37,7 +37,11 @@ function detectCountry(req: Request): string | null {
   const vercel = req.headers["x-vercel-ip-country"];
   if (typeof vercel === "string" && vercel.length === 2) return vercel.toUpperCase();
 
-  if (process.env.NODE_ENV !== "production") {
+  // TEST ONLY. Previously honored whenever NODE_ENV !== "production", but the
+  // deployed config ships NODE_ENV=development (backend/.env), which would let any
+  // client spoof its country and bypass the geo-block on the money paths
+  // (FABLE-2026-07 M-2). Restrict to the automated test runner.
+  if (process.env.NODE_ENV === "test") {
     const override = req.headers["x-country-override"];
     if (typeof override === "string" && override.length === 2) return override.toUpperCase();
   }
