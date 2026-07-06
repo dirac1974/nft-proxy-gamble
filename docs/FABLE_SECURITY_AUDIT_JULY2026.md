@@ -20,11 +20,11 @@ The platform is well-engineered for a beta: OpenZeppelin contracts with 40 passi
 | **C-2** | 🔴 CRITICAL | Google IAP verification bypass in non-prod (deployed `NODE_ENV=development`) → free coins | ✅ **FIXED & PUSHED** |
 | **C-3** | 🔴 CRITICAL | Live minter key + prod DB password in working-tree `.env` | ⚠️ **ACTION REQUIRED (rotate)** |
 | **H-1** | 🟠 HIGH | Apple receipt replay: dedup on raw-bytes hash, not `transaction_id` | ✅ **FIXED & PUSHED** |
-| **H-2** | 🟠 HIGH | Provably-fair is not fair vs. the house (server controls both seeds) | 📋 Documented (design fix) |
-| **H-3** | 🟠 HIGH | Admin authz trusts unverifiable self-asserted `isAdmin` JWT claim | 📋 Documented (needs DB role) |
-| **H-4** | 🟠 HIGH | `emergencyWithdrawUSDC` = single-EOA instant drain of all USDC, no timelock | 📋 Documented (Gnosis Safe) |
+| **H-2** | 🟠 HIGH | Provably-fair is not fair vs. the house (server controls both seeds) | ✅ **FIXED** (§8, seed chain) |
+| **H-3** | 🟠 HIGH | Admin authz trusts unverifiable self-asserted `isAdmin` JWT claim | ✅ **FIXED** (§8, DB role) |
+| **H-4** | 🟠 HIGH | `emergencyWithdrawUSDC` = single-EOA instant drain of all USDC, no timelock | ✅ **FIXED** (§8, timelock) |
 | **H-5** | 🟠 HIGH | `jwt.verify` had no algorithm allowlist | ✅ **FIXED & PUSHED** |
-| **M-1** | 🟡 MED | Device attestation is forgeable/fail-open theater wired to money paths | 📋 Documented |
+| **M-1** | 🟡 MED | Device attestation is forgeable/fail-open theater wired to money paths | 🟨 **PARTIAL** (§8, fail-closed) |
 | **M-2** | 🟡 MED | Jurisdiction override honored in `development` (deployed env) | ✅ **FIXED & PUSHED** |
 | **M-3** | 🟡 MED | On-chain `mint()` not idempotent per `sessionId` (double-mint on retry) | 📋 Documented |
 | **M-4** | 🟡 MED | No request body-size limit (DoS) | ✅ **FIXED & PUSHED** |
@@ -301,3 +301,78 @@ backend/tests/integration/game.test.ts     C-1 regression test
 
 ## Appendix B — Prior-audit accuracy
 The prior `SECURITY_AUDIT_2026-05-25.md` fixes (B-1 balance TOCTOU, B-2 tokenId parsing, B-3 double-payout, B-4 IAP prototype pollution) are **real and verified present**. Its gaps: it missed the seed-reuse critical (C-1) despite documenting the correct rule in ADR-002, missed the env-gated IAP bypass (C-2), treated the smart contract as fully clear despite the admin-drain centralization (H-4), and accepted "signed balance" / device attestation as controls that this review classifies as theater (L-2/M-1).
+
+---
+
+## 8. Post-audit remediation (branch `feat/expansion-roulette-authz`)
+
+Follow-up work implemented on top of the audit branch. Backend unit suite green
+(160), contract suite green (44), mobile type-check + provably-fair tests green.
+New integration tests added for each item (run in CI against Postgres).
+
+**Also fixed here (pre-existing, unrelated to the audit):** the cashout
+integration-test fixtures never set `ageConfirmed`, so `/game/cashout` returned
+403 and main's CI was red on every run. Fixtures corrected.
+
+### H-2 — Provably-fair server-seed chain + committed client entropy ✅
+- `User.nextServerSeed` (secret) + `nextServerSeedHash` (published commitment),
+  initialized at account creation.
+- `start-session` (video poker **and** roulette) consumes the pre-committed seed
+  and rotates a fresh one via a **compare-and-swap** (`updateMany WHERE
+  nextServerSeed = observed`), so concurrent session creation can never share a
+  serverSeed (would re-open C-1). Proven by a concurrency unit test.
+- This session's `serverSeedHash` was published as the previous session's
+  `nextServerSeedHash`, so the operator cannot regrind the seed against the
+  client seed. Clients may supply their own `clientSeed`.
+- Client (`mobile`) now verifies automatically and hard-fails the UI on mismatch.
+- Files: `backend/src/services/serverSeedChain.ts`, `routes/auth.ts`,
+  `routes/game.ts`, `routes/roulette.ts`; `mobile/src/services/provablyFair.ts`.
+- Residual: first session for legacy (pre-chain) accounts self-commits; new
+  accounts are pre-committed from creation.
+
+### H-3 — DB-backed admin role + audit log ✅
+- `User.isAdmin` column; `requireAdmin` authorizes from the DB on every request,
+  never from a JWT claim (the `isAdmin` claim was removed from the token type).
+  Revoking `isAdmin` in the DB blocks an existing token immediately.
+- New `AdminAuditLog` model; every privileged admin action is recorded.
+- Files: `prisma/schema.prisma`, `routes/admin.ts`, `types/index.ts`.
+
+### H-4 — Emergency-withdrawal timelock ✅
+- `emergencyWithdrawUSDC` replaced by `initiateEmergencyWithdrawal` /
+  `executeEmergencyWithdrawal` (after `EMERGENCY_WITHDRAWAL_DELAY = 24h`) /
+  `cancelEmergencyWithdrawal`, with lifecycle events and a single-slot queue.
+  CEI-clears the pending slot before transfer.
+- **Still required:** move `DEFAULT_ADMIN_ROLE` to a Gnosis Safe and split roles.
+  The timelock is the on-chain delay layer beneath that governance change, not a
+  replacement for it.
+- Files: `contracts/src/NFTProxyVoucher.sol`, tests T13/T26/T41–T44.
+
+### M-1 — Device attestation hardening 🟨 (partial)
+- Fail **closed** in production / when enforced (missing or malformed token
+  blocks cashout + IAP). Failures logged with userId + ip + reason. Unattested
+  requests rate-limited to 5/min/IP.
+- **Still theater at the crypto layer:** the platform verifiers remain STUBS
+  (shape checks only, forgeable). Real Apple App Attest / Google Play Integrity
+  server verification is still required before this is a strong control; the code
+  says so explicitly.
+- Files: `backend/src/services/deviceAttestationService.ts`,
+  `middleware/attestationRateLimit.ts`.
+
+### Casino expansion — European roulette (Phase 6, first game) ✅
+- One-shot provably-fair (`HMAC_SHA256(serverSeed, clientSeed:nonce) mod 37`);
+  full European paytable; inside-bet geometry validated against legal-group sets;
+  2.7% single-zero house edge asserted by test. Routes reuse the commit-reveal
+  session model and the existing `/game/cashout` path; cross-game guards prevent
+  mixing poker/roulette sessions.
+- Files: `backend/src/services/roulette.ts`, `routes/roulette.ts`;
+  `mobile` roulette tab + verification.
+
+### Still open (unchanged — needs the team)
+- **C-3:** rotate the exposed minter key + DB password (per rules, `.env`
+  untouched here).
+- **H-4 governance:** Gnosis Safe + role split (timelock landed; Safe has not).
+- **M-1 crypto:** real App Attest / Play Integrity verification.
+- **M-3/M-6:** on-chain `sessionId` mint idempotency + solvency invariant.
+- **M-5/M-7/M-8, L-2/L-4:** CORS allowlist, token revocation, persisted commit
+  queue, asymmetric signed balance, Redis-backed stores.
+- External Slither/MythX + firm audit before mainnet.
