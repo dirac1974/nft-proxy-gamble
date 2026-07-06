@@ -107,6 +107,8 @@ describe("POST /roulette/spin", () => {
     const res = await request(app).post("/game/deal").set("Authorization", `Bearer ${token}`)
       .send({ sessionId: s.sessionId });
     expect(res.status).toBe(409);
-    expect(res.body.error).toMatch(/roulette session/i);
+    // /game/deal now positively gates on "is a video poker variant", so a
+    // roulette session is rejected as not-a-poker-session.
+    expect(res.body.error).toMatch(/not a video poker session/i);
   });
 });
