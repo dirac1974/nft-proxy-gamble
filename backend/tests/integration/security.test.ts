@@ -33,7 +33,9 @@ beforeAll(async () => {
     .send({ address: testWallet.address, signature });
   authToken = (authRes.body as { token: string }).token;
   userId = (authRes.body as { userId: string }).userId;
-  await prisma.user.update({ where: { id: userId }, data: { coinBalance: 10_000 } });
+  // ageConfirmed: cashout money-path is gated on it (see routes/game.ts). A real
+  // user only reaches cashout after /auth/confirm-age.
+  await prisma.user.update({ where: { id: userId }, data: { coinBalance: 10_000, ageConfirmed: true } });
 });
 
 afterAll(() => teardownTestDb());

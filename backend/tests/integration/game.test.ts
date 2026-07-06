@@ -18,8 +18,9 @@ beforeAll(async () => {
   const authRes = await request(app).post("/auth/verify").send({ address: testWallet.address, signature });
   authToken = (authRes.body as { token: string }).token;
   userId = (authRes.body as { userId: string }).userId;
-  // Seed balance
-  await prisma.user.update({ where: { id: userId }, data: { coinBalance: 1000 } });
+  // Seed balance + age confirmation (cashout is gated on ageConfirmed; a real
+  // user reaches these flows only after accepting the 18+ modal → /auth/confirm-age).
+  await prisma.user.update({ where: { id: userId }, data: { coinBalance: 1000, ageConfirmed: true } });
 });
 
 afterAll(() => teardownTestDb());
