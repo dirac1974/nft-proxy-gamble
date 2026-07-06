@@ -6,6 +6,7 @@ import authRoutes from "./routes/auth.js";
 import balanceRoutes from "./routes/balance.js";
 import iapRoutes from "./routes/iap.js";
 import gameRoutes from "./routes/game.js";
+import rouletteRoutes from "./routes/roulette.js";
 import nftRoutes from "./routes/nfts.js";
 import adminRoutes from "./routes/admin.js";
 import { errorHandler } from "./middleware/errorHandler.js";
@@ -40,6 +41,7 @@ export function createApp(): express.Application {
   app.use("/balance", gameLimiter, balanceRoutes);
   app.use("/iap", gameLimiter, iapRoutes);
   app.use("/game", gameLimiter, gameRoutes);
+  app.use("/roulette", gameLimiter, rouletteRoutes);
   app.use("/nfts", gameLimiter, nftRoutes);
   app.use("/admin", gameLimiter, adminRoutes);
 

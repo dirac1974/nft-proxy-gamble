@@ -16,6 +16,7 @@ import { mintVoucher } from "../services/mintOrchestrator.js";
 import { signBalance } from "../services/balanceSigning.js";
 import { recordAnalyticsEvent, getRiskLevel } from "../services/analyticsService.js";
 import { checkDeviceAttestation } from "../services/deviceAttestationService.js";
+import { ROULETTE_GAME_TYPE } from "../services/roulette.js";
 import type { HandRecord, AttestationPlatform } from "../types/index.js";
 
 const MIN_COIN_BALANCE = 100;
@@ -68,6 +69,11 @@ router.post("/deal", requireAuth, async (req, res, next) => {
 
     const session = await prisma.gameSession.findUnique({ where: { id: sessionId } });
     if (!session || session.userId !== userId) throw new AppError(404, "Session not found");
+    // Cross-game guard: /game/deal is video poker only. A roulette session must
+    // not be dealt as a poker hand (it resolves via /roulette/spin).
+    if (session.gameType === ROULETTE_GAME_TYPE) {
+      throw new AppError(409, "This is a roulette session; use /roulette/spin.");
+    }
     if (session.state !== "ACTIVE") throw new AppError(409, "Session is not in ACTIVE state");
 
     const hands = session.hands as unknown as HandRecord[];
@@ -153,6 +159,9 @@ router.post("/draw", requireAuth, async (req, res, next) => {
 
     const session = await prisma.gameSession.findUnique({ where: { id: sessionId } });
     if (!session || session.userId !== userId) throw new AppError(404, "Session not found");
+    if (session.gameType === ROULETTE_GAME_TYPE) {
+      throw new AppError(409, "This is a roulette session; use /roulette/spin.");
+    }
     if (session.state !== "AWAITING_DRAW") throw new AppError(409, "Session is not awaiting draw");
 
     const hands = session.hands as unknown as HandRecord[];
