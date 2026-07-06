@@ -40,6 +40,15 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="roulette"
+        options={{
+          title: "Roulette",
+          tabBarLabel: "Roulette",
+          tabBarIcon: ({ color }) => <TabBarEmoji emoji="🎡" color={color} />,
+          headerTitle: "European Roulette",
+        }}
+      />
+      <Tabs.Screen
         name="nfts"
         options={{
           title: "My NFTs",

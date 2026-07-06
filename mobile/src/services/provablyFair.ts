@@ -1,4 +1,7 @@
 import { keccak256, toBytes, type Hex } from "viem";
+import { hmac } from "@noble/hashes/hmac";
+import { sha256 } from "@noble/hashes/sha256";
+import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils";
 
 const toUtf8Bytes = (s: string) => toBytes(s);
 
@@ -69,4 +72,40 @@ export function verifyHand(
     drawnCards.every((c, i) => c === expectedFinalHand[i]);
 
   return { seedHashMatches, deckMatches, expectedDealt, expectedDraw };
+}
+
+// ---------------------------------------------------------------------------
+// Roulette provably-fair verification.
+// Mirrors backend/src/services/roulette.ts:spinNumber exactly:
+//   winningNumber = HMAC_SHA256(serverSeed, `${clientSeed}:${nonce}`) mod 37
+// ---------------------------------------------------------------------------
+
+export function rouletteSpinNumber(serverSeed: string, clientSeed: string, nonce: number): number {
+  const mac = hmac(sha256, utf8ToBytes(serverSeed), utf8ToBytes(`${clientSeed}:${nonce}`));
+  return Number(BigInt("0x" + bytesToHex(mac)) % 37n);
+}
+
+export interface RouletteVerificationResult {
+  seedHashMatches: boolean;
+  numberMatches: boolean;
+  expectedNumber: number;
+}
+
+// Verify a completed spin:
+// 1. serverSeedHash (committed before the spin) matches keccak256(serverSeed).
+// 2. The winning number recomputes from serverSeed + clientSeed + nonce.
+export function verifyRouletteSpin(
+  serverSeed: string,
+  serverSeedHash: string,
+  clientSeed: string,
+  nonce: number,
+  winningNumber: number,
+): RouletteVerificationResult {
+  const seedHashMatches = hashServerSeed(serverSeed) === serverSeedHash;
+  const expectedNumber = rouletteSpinNumber(serverSeed, clientSeed, nonce);
+  return {
+    seedHashMatches,
+    numberMatches: expectedNumber === winningNumber,
+    expectedNumber,
+  };
 }
