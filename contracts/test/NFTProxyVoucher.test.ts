@@ -1,7 +1,10 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
+import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import * as fc from "fast-check";
+
+const ONE_DAY = 24 * 60 * 60;
 
 const GAME = ethers.encodeBytes32String("jacks-or-better-9-6");
 const SESSION = ethers.encodeBytes32String("sess_abc123");
@@ -142,12 +145,12 @@ describe("NFTProxyVoucher", function () {
     expect(await voucher.coinBalance(0)).to.equal(max);
   });
 
-  it("T13. reverts redeem if contract has insufficient USDC (drain via emergencyWithdrawUSDC)", async function () {
+  it("T13. reverts redeem if contract has insufficient USDC (drain via timelocked emergency withdrawal)", async function () {
     await voucher.connect(minter).mint(user1.address, 10_000, GAME, SESSION);
     const liquidity = await usdc.balanceOf(voucherAddr);
-    await voucher
-      .connect(owner)
-      .emergencyWithdrawUSDC(liquidity, owner.address);
+    await voucher.connect(owner).initiateEmergencyWithdrawal(liquidity, owner.address);
+    await time.increase(ONE_DAY);
+    await voucher.connect(owner).executeEmergencyWithdrawal();
     await expect(voucher.connect(user1).redeem(0)).to.be.revertedWith(
       "Insufficient USDC liquidity"
     );
@@ -297,22 +300,101 @@ describe("NFTProxyVoucher", function () {
     expect(await usdc.balanceOf(user2.address)).to.equal(before + usdcAmt("1"));
   });
 
-  it("T26. emergencyWithdrawUSDC is admin-only and emits EmergencyWithdrawal", async function () {
+  it("T26. initiateEmergencyWithdrawal is admin-only, validates args, and emits Initiated", async function () {
     await expect(
-      voucher.connect(user1).emergencyWithdrawUSDC(usdcAmt("1"), user1.address)
+      voucher.connect(user1).initiateEmergencyWithdrawal(usdcAmt("1"), user1.address)
     ).to.be.revertedWithCustomError(voucher, "AccessControlUnauthorizedAccount");
 
     await expect(
-      voucher.connect(owner).emergencyWithdrawUSDC(0, ethers.ZeroAddress)
+      voucher.connect(owner).initiateEmergencyWithdrawal(usdcAmt("1"), ethers.ZeroAddress)
     ).to.be.revertedWith("Zero recipient");
 
+    await expect(
+      voucher.connect(owner).initiateEmergencyWithdrawal(0, user2.address)
+    ).to.be.revertedWith("Zero amount");
+
+    const amount = usdcAmt("250");
+    await expect(voucher.connect(owner).initiateEmergencyWithdrawal(amount, user2.address))
+      .to.emit(voucher, "EmergencyWithdrawalInitiated");
+    const pending = await voucher.pendingWithdrawal();
+    expect(pending.amount).to.equal(amount);
+    expect(pending.to).to.equal(user2.address);
+    expect(pending.exists).to.equal(true);
+  });
+
+  it("T41. execute reverts before the 24h delay, succeeds after, and transfers + emits", async function () {
     const target = user2.address;
     const amount = usdcAmt("250");
     const before = await usdc.balanceOf(target);
-    await expect(voucher.connect(owner).emergencyWithdrawUSDC(amount, target))
+
+    await voucher.connect(owner).initiateEmergencyWithdrawal(amount, target);
+
+    // Too early — timelock not elapsed.
+    await expect(
+      voucher.connect(owner).executeEmergencyWithdrawal()
+    ).to.be.revertedWith("Timelock not elapsed");
+
+    // Just shy of the delay still reverts.
+    await time.increase(ONE_DAY - 60);
+    await expect(
+      voucher.connect(owner).executeEmergencyWithdrawal()
+    ).to.be.revertedWith("Timelock not elapsed");
+
+    // Past the delay — succeeds.
+    await time.increase(120);
+    await expect(voucher.connect(owner).executeEmergencyWithdrawal())
       .to.emit(voucher, "EmergencyWithdrawal")
+      .withArgs(target, amount)
+      .and.to.emit(voucher, "EmergencyWithdrawalExecuted")
       .withArgs(target, amount);
     expect(await usdc.balanceOf(target)).to.equal(before + amount);
+
+    // Slot is cleared; a second execute reverts.
+    const pending = await voucher.pendingWithdrawal();
+    expect(pending.exists).to.equal(false);
+    await expect(
+      voucher.connect(owner).executeEmergencyWithdrawal()
+    ).to.be.revertedWith("No pending withdrawal");
+  });
+
+  it("T42. execute/cancel revert when nothing is queued", async function () {
+    await expect(
+      voucher.connect(owner).executeEmergencyWithdrawal()
+    ).to.be.revertedWith("No pending withdrawal");
+    await expect(
+      voucher.connect(owner).cancelEmergencyWithdrawal()
+    ).to.be.revertedWith("No pending withdrawal");
+  });
+
+  it("T43. cancel aborts a pending withdrawal during the delay window (admin-only)", async function () {
+    const amount = usdcAmt("500");
+    await voucher.connect(owner).initiateEmergencyWithdrawal(amount, user2.address);
+
+    await expect(
+      voucher.connect(user1).cancelEmergencyWithdrawal()
+    ).to.be.revertedWithCustomError(voucher, "AccessControlUnauthorizedAccount");
+
+    await expect(voucher.connect(owner).cancelEmergencyWithdrawal())
+      .to.emit(voucher, "EmergencyWithdrawalCancelled")
+      .withArgs(user2.address, amount);
+
+    // After cancel, even past the original delay nothing can be executed.
+    await time.increase(ONE_DAY * 2);
+    await expect(
+      voucher.connect(owner).executeEmergencyWithdrawal()
+    ).to.be.revertedWith("No pending withdrawal");
+  });
+
+  it("T44. only one withdrawal may be queued at a time", async function () {
+    await voucher.connect(owner).initiateEmergencyWithdrawal(usdcAmt("100"), user2.address);
+    await expect(
+      voucher.connect(owner).initiateEmergencyWithdrawal(usdcAmt("200"), user1.address)
+    ).to.be.revertedWith("Withdrawal already pending");
+    // Cancel then re-queue with new params succeeds.
+    await voucher.connect(owner).cancelEmergencyWithdrawal();
+    await expect(
+      voucher.connect(owner).initiateEmergencyWithdrawal(usdcAmt("200"), user1.address)
+    ).to.emit(voucher, "EmergencyWithdrawalInitiated");
   });
 
   it("T27. MINTER_ROLE revocation prevents further mints from revoked party", async function () {
