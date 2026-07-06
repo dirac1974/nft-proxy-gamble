@@ -126,7 +126,15 @@ contract NFTProxyVoucher is ERC1155, AccessControl, Pausable, ReentrancyGuard {
         );
 
         _burn(msg.sender, tokenId, 1);
+        // Redeem is terminal: the voucher is burned and can never be redeemed
+        // again. Clear ALL per-token state (FABLE-2026-07 audit L: terminal-state
+        // cleanup) — not just coinBalance — so no orphan storage lingers after the
+        // token's lifecycle ends. gameType/mintedTimestamp are historical only and
+        // preserved off-chain in the VoucherMinted event; on-chain nothing reads
+        // them post-burn. Deleting them also reclaims a storage gas refund.
         delete coinBalance[tokenId];
+        delete gameType[tokenId];
+        delete mintedTimestamp[tokenId];
 
         usdcToken.safeTransfer(msg.sender, usdcAmount);
 

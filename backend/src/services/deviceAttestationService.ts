@@ -1,28 +1,25 @@
 import { config } from "../config/index.js";
+import { verifyPlayIntegrityToken } from "./deviceAttest/playIntegrity.js";
+import { verifyAppleAttestation } from "./deviceAttest/appAttest.js";
+import { verifyChallenge } from "./deviceAttest/challenge.js";
 
 export type AttestationPlatform = "ios" | "android";
 
-export interface AttestationResult {
-  valid: boolean;
-  shadowMode: boolean;
-  reason?: string;
-}
-
 // ---------------------------------------------------------------------------
-// FABLE-2026-07 M-1 hardening.
+// FABLE-2026-07 M-1 — REAL device attestation (supersedes the M-1 stubs).
 //
-// IMPORTANT: the platform verifiers below are still STUBS — they only check that
-// the attestation token is present and structurally well-formed. They do NOT yet
-// perform real Apple App Attest / Google Play Integrity server-side verification,
-// so a determined attacker can forge a well-formed token. This is therefore a
-// weak control, not a strong one. The hardening here does three concrete things
-// the audit asked for while real verification is built:
-//   1. Fail CLOSED in production (or when DEVICE_ATTESTATION_ENFORCE=true):
-//      a missing or malformed attestation token blocks the money path.
-//   2. Log every failure (missing / malformed / shadow-fail) with context.
-//   3. Unattested requests are additionally rate-limited (see
-//      middleware/attestationRateLimit.ts) so they can't be spammed.
-// Do not describe this as a strong control until the TODOs below are done.
+// Money-path routes (cashout, IAP) call checkDeviceAttestation. When a platform
+// is configured with real verification keys AND enforcement is on (production or
+// DEVICE_ATTESTATION_ENFORCE=true), the client's attestation is verified
+// cryptographically:
+//   * iOS     → Apple App Attest attestation object (see deviceAttest/appAttest).
+//   * Android → Google Play Integrity classic token (deviceAttest/playIntegrity).
+// Both are bound to a fresh server-issued challenge (deviceAttest/challenge) to
+// defeat replay. Failure fails CLOSED under enforcement.
+//
+// Shadow mode (not enforced) never blocks; it runs the same verification and
+// logs what WOULD have happened, so rollout risk is measurable before flipping
+// the flag. Unattested traffic is additionally rate-limited (attestationRateLimit).
 // ---------------------------------------------------------------------------
 
 // Enforcement is on when explicitly enabled OR whenever we run in production.
@@ -31,7 +28,19 @@ export function isAttestationEnforced(nodeEnv: string, enforceFlag: boolean): bo
   return enforceFlag || nodeEnv === "production";
 }
 
-// Structural checks only (shape, not authenticity). Pure + exported for tests.
+export function isPlatformConfigured(platform: AttestationPlatform): boolean {
+  if (platform === "ios") {
+    return Boolean(config.APPLE_APP_ATTEST_TEAM_ID && config.APPLE_APP_ATTEST_BUNDLE_ID);
+  }
+  return Boolean(
+    config.GOOGLE_PLAY_INTEGRITY_PACKAGE &&
+      config.GOOGLE_PLAY_INTEGRITY_AES_KEY_B64 &&
+      config.GOOGLE_PLAY_INTEGRITY_EC_PUBLIC_KEY_B64,
+  );
+}
+
+// Cheap structural pre-filter (shape, not authenticity). Kept as a fast reject
+// before the heavier cryptographic verification. Pure + exported for tests.
 export function appleTokenWellFormed(token: string): boolean {
   try {
     return Buffer.from(token, "base64").length >= 32;
@@ -41,9 +50,9 @@ export function appleTokenWellFormed(token: string): boolean {
 }
 
 export function androidTokenWellFormed(token: string): boolean {
-  // Play Integrity tokens are compact JWS: three non-empty base64url segments.
+  // A JWE compact serialization is five non-empty base64url segments.
   const parts = token.split(".");
-  return parts.length === 3 && parts.every((p) => p.length > 0);
+  return parts.length === 5 && parts.every((p) => p.length > 0);
 }
 
 export interface AttestationDecision {
@@ -52,23 +61,23 @@ export interface AttestationDecision {
   reason: string;
 }
 
-// Pure decision core (FABLE-2026-07 M-1). Fully unit-testable.
-// - Shadow mode (!enforced): never blocks, but still surfaces a reason for logging.
-// - Enforced: a present, well-formed token is required; anything else is blocked.
-export function evaluateAttestation(params: {
+// Pure decision core. Given the facts, decide allow/block. Shadow mode
+// (!enforced) never blocks; enforce mode requires present + configured +
+// cryptographically verified. Fully unit-testable.
+export function decideAttestation(params: {
   enforced: boolean;
   present: boolean;
-  wellFormed: boolean;
   configured: boolean;
+  verified: boolean;
 }): AttestationDecision {
-  const { enforced, present, wellFormed, configured } = params;
-
+  const { enforced, present, configured, verified } = params;
   let reason: string;
   if (!present) reason = "missing-token";
-  else if (!wellFormed) reason = "malformed-token";
-  else reason = configured ? "well-formed(stub-verify)" : "well-formed(shape-only,unconfigured)";
+  else if (!configured) reason = "platform-unconfigured";
+  else if (!verified) reason = "verification-failed";
+  else reason = "verified";
 
-  const ok = present && wellFormed;
+  const ok = present && configured && verified;
   return {
     allowed: enforced ? ok : true, // shadow mode never blocks
     blocked: enforced && !ok,
@@ -76,14 +85,64 @@ export function evaluateAttestation(params: {
   };
 }
 
-function isPlatformConfigured(platform: AttestationPlatform): boolean {
-  return platform === "ios"
-    ? Boolean(config.APPLE_APP_ATTEST_TEAM_ID && config.APPLE_APP_ATTEST_BUNDLE_ID)
-    : Boolean(config.GOOGLE_PLAY_INTEGRITY_PACKAGE);
+interface IosToken {
+  keyId: string;
+  attestation: string; // base64 attestation object
 }
 
-function isTokenWellFormed(platform: AttestationPlatform, token: string): boolean {
-  return platform === "ios" ? appleTokenWellFormed(token) : androidTokenWellFormed(token);
+// In-memory single-use cache of consumed challenge MACs (replay defense within
+// the TTL window on this instance). Bounded + pruned so it can't grow unbounded.
+// For strict multi-instance single-use, back this with Redis (deployment note).
+const consumedChallenges = new Set<string>();
+function pruneIfLarge(): void {
+  if (consumedChallenges.size > 10_000) consumedChallenges.clear();
+}
+
+// Run the real cryptographic verification for a present, configured platform.
+// Returns whether the attestation is authentic + a granular reason for logging.
+export async function verifyAttestationToken(
+  platform: AttestationPlatform,
+  token: string,
+  challengeToken: string | undefined,
+  now: number = Date.now(),
+): Promise<{ verified: boolean; reason: string }> {
+  if (!challengeToken) return { verified: false, reason: "challenge-missing" };
+  pruneIfLarge();
+  const ch = verifyChallenge(config.JWT_SECRET, challengeToken, now, consumedChallenges);
+  if (!ch.valid || !ch.nonce) return { verified: false, reason: ch.reason };
+  const nonce = ch.nonce;
+
+  if (platform === "android") {
+    if (!androidTokenWellFormed(token)) return { verified: false, reason: "malformed-token" };
+    const res = verifyPlayIntegrityToken(token, {
+      aesKeyB64: config.GOOGLE_PLAY_INTEGRITY_AES_KEY_B64!,
+      ecPublicKeyB64: config.GOOGLE_PLAY_INTEGRITY_EC_PUBLIC_KEY_B64!,
+      packageName: config.GOOGLE_PLAY_INTEGRITY_PACKAGE!,
+      requireStrongIntegrity: config.GOOGLE_PLAY_INTEGRITY_REQUIRE_STRONG,
+      expectedNonce: nonce,
+      now: () => now,
+    });
+    return { verified: res.verified, reason: res.reason };
+  }
+
+  // iOS: token is base64url JSON { keyId, attestation }.
+  let parsed: IosToken;
+  try {
+    parsed = JSON.parse(Buffer.from(token, "base64url").toString("utf8")) as IosToken;
+    if (!parsed.keyId || !parsed.attestation) throw new Error("fields");
+  } catch {
+    return { verified: false, reason: "ios-token-format" };
+  }
+  const res = await verifyAppleAttestation(
+    { attestationObjectB64: parsed.attestation, keyId: parsed.keyId, challenge: nonce },
+    {
+      teamId: config.APPLE_APP_ATTEST_TEAM_ID!,
+      bundleId: config.APPLE_APP_ATTEST_BUNDLE_ID!,
+      // Development attestations are NEVER accepted in production, regardless of flag.
+      allowDevelopmentEnv: config.APP_ATTEST_ALLOW_DEV_ENV && config.NODE_ENV !== "production",
+    },
+  );
+  return { verified: res.verified, reason: res.reason };
 }
 
 // Called by money-path routes (cashout, IAP). Returns whether the request may
@@ -93,25 +152,32 @@ export async function checkDeviceAttestation(
   token: string | undefined,
   userId: string,
   ip?: string,
+  challengeToken?: string,
 ): Promise<{ allowed: boolean; shadowMode: boolean }> {
   const enforced = isAttestationEnforced(config.NODE_ENV, config.DEVICE_ATTESTATION_ENFORCE);
-
   const present = Boolean(platform && token);
-  const wellFormed = present ? isTokenWellFormed(platform!, token!) : false;
   const configured = present ? isPlatformConfigured(platform!) : false;
 
-  const decision = evaluateAttestation({ enforced, present, wellFormed, configured });
+  let verified = false;
+  let detail = "no-verify";
+  if (present && configured) {
+    const r = await verifyAttestationToken(platform!, token!, challengeToken);
+    verified = r.verified;
+    detail = r.reason;
+  }
 
-  // Log every non-clean outcome with context (FABLE-2026-07 M-1). In enforce mode
-  // a block is a warning; in shadow mode the same condition is informational but
-  // still recorded so we can see how much traffic *would* be blocked pre-rollout.
+  const decision = decideAttestation({ enforced, present, configured, verified });
+
+  // Log every non-clean outcome with context (FABLE-2026-07 M-1). In enforce
+  // mode a block is a warning; in shadow mode the same condition is recorded
+  // informationally so we can measure how much traffic *would* be blocked.
   if (decision.blocked) {
     console.warn(
-      `[attestation] BLOCKED userId=${userId} ip=${ip ?? "?"} platform=${platform ?? "none"} reason=${decision.reason}`,
+      `[attestation] BLOCKED userId=${userId} ip=${ip ?? "?"} platform=${platform ?? "none"} reason=${decision.reason} detail=${detail}`,
     );
-  } else if (decision.reason !== "well-formed(stub-verify)") {
+  } else if (decision.reason !== "verified") {
     console.info(
-      `[attestation] ${enforced ? "enforce" : "shadow"} userId=${userId} ip=${ip ?? "?"} platform=${platform ?? "none"} reason=${decision.reason} allowed=${decision.allowed}`,
+      `[attestation] ${enforced ? "enforce" : "shadow"} userId=${userId} ip=${ip ?? "?"} platform=${platform ?? "none"} reason=${decision.reason} detail=${detail} allowed=${decision.allowed}`,
     );
   }
 

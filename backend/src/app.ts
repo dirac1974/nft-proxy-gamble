@@ -7,6 +7,7 @@ import balanceRoutes from "./routes/balance.js";
 import iapRoutes from "./routes/iap.js";
 import gameRoutes from "./routes/game.js";
 import rouletteRoutes from "./routes/roulette.js";
+import attestationRoutes from "./routes/attestation.js";
 import blackjackRoutes from "./routes/blackjack.js";
 import nftRoutes from "./routes/nfts.js";
 import adminRoutes from "./routes/admin.js";
@@ -43,6 +44,7 @@ export function createApp(): express.Application {
   app.use("/iap", gameLimiter, iapRoutes);
   app.use("/game", gameLimiter, gameRoutes);
   app.use("/roulette", gameLimiter, rouletteRoutes);
+  app.use("/attestation", gameLimiter, attestationRoutes);
   app.use("/blackjack", gameLimiter, blackjackRoutes);
   app.use("/nfts", gameLimiter, nftRoutes);
   app.use("/admin", gameLimiter, adminRoutes);
