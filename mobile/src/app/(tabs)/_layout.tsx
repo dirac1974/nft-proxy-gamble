@@ -49,6 +49,15 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="blackjack"
+        options={{
+          title: "Blackjack",
+          tabBarLabel: "Blackjack",
+          tabBarIcon: ({ color }) => <TabBarEmoji emoji="🃏" color={color} />,
+          headerTitle: "Blackjack",
+        }}
+      />
+      <Tabs.Screen
         name="nfts"
         options={{
           title: "My NFTs",

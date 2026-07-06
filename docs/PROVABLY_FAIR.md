@@ -63,6 +63,23 @@ with `nonce = 0`. Recompute it from the revealed `serverSeed` and your
 must hash to the committed `serverSeedHash`. The app does this on-device
 (`verifyRouletteSpin`) and refuses to trust a spin that fails.
 
+## Verifying a blackjack round
+
+The whole shoe is a committed permutation. Rebuild it from the revealed seeds:
+
+```
+shoe = Fisher-Yates( [0..51] × numDecks,  keccak256 chain seeded by
+                      `${serverSeed}:${clientSeed}:blackjack:0` )
+```
+
+Deal order is player, dealer, player, dealer, then draws continue from the top of
+the shoe: player opening = `[shoe[0], shoe[2]]`, dealer opening =
+`[shoe[1], shoe[3]]`, subsequent hits/dealer draws come from `shoe[4], shoe[5], …`.
+Confirm `keccak256(serverSeed) == serverSeedHash` and that every card you were
+dealt matches the reproduced shoe in order. The app checks the opening on-device
+(`verifyBlackjackDeal`); `serverSeed` is only revealed once the round settles, so
+you can never see the hole card or undealt cards early.
+
 ## One round per session
 
 Once a `serverSeed` is revealed it is public. If we let you play another hand or
