@@ -24,7 +24,7 @@ The platform is well-engineered for a beta: OpenZeppelin contracts with 40 passi
 | **H-3** | 🟠 HIGH | Admin authz trusts unverifiable self-asserted `isAdmin` JWT claim | ✅ **FIXED** (§8, DB role) |
 | **H-4** | 🟠 HIGH | `emergencyWithdrawUSDC` = single-EOA instant drain of all USDC, no timelock | ✅ **FIXED** (§8, timelock) |
 | **H-5** | 🟠 HIGH | `jwt.verify` had no algorithm allowlist | ✅ **FIXED & PUSHED** |
-| **M-1** | 🟡 MED | Device attestation is forgeable/fail-open theater wired to money paths | 🟨 **PARTIAL** (§8, fail-closed) |
+| **M-1** | 🟡 MED | Device attestation is forgeable/fail-open theater wired to money paths | ✅ **FIXED** (real server-side verification, §8; PR #17) |
 | **M-2** | 🟡 MED | Jurisdiction override honored in `development` (deployed env) | ✅ **FIXED & PUSHED** |
 | **M-3** | 🟡 MED | On-chain `mint()` not idempotent per `sessionId` (double-mint on retry) | 📋 Documented |
 | **M-4** | 🟡 MED | No request body-size limit (DoS) | ✅ **FIXED & PUSHED** |
@@ -37,7 +37,7 @@ The platform is well-engineered for a beta: OpenZeppelin contracts with 40 passi
 | **L-3** | 🔵 LOW | `/nfts/:id` param not schema-validated (ownership still enforced) | 📋 Documented |
 | **L-4** | 🔵 LOW | In-memory nonce & rate-limit stores (multi-instance) | 📋 Documented (known) |
 
-**Bottom line:** After the pushed fixes, the directly-exploitable player-theft and free-coin paths are closed. Before any real-money / mainnet promotion, the team **must** rotate the exposed secrets (C-3), redesign provable-fairness to include committed client entropy (H-2), move admin to a Safe + timelock with a DB-backed admin role (H-3/H-4), and implement real device attestation or stop gating on it (M-1).
+**Bottom line:** After the pushed fixes, the directly-exploitable player-theft and free-coin paths are closed. As of 2026-07-06, **M-1 device attestation now has real server-side verification (PR #17)**; a low-severity contract terminal-state cleanup landed (PR #18); and two new games shipped provably-fair with red-team coverage (blackjack PR #19, video-poker variants PR #20). Before any real-money / mainnet promotion, the team **still must**: rotate the exposed secrets (C-3), move admin to a Gnosis Safe + role split on top of the shipped timelock (H-4 governance), finish the client/ops side of device attestation (native module + Play Console keys), and complete an external audit (Slither/MythX + a firm). H-2 (seed chain), H-3 (DB admin role), and H-4 (timelock) shipped earlier; M-3/M-5/M-6/M-7/M-8 and L-2/L-4 remain documented/open.
 
 ---
 
@@ -182,6 +182,15 @@ Admin gating rests entirely on a claim inside the JWT. There is no issuance path
 
 Provides no real protection and, being fail-open by default, blocks nothing — but its presence gives false assurance. **Fix:** implement real Apple App Attest / Google Play Integrity (server-side token verification against Apple/Google), fail **closed** once enforced; until then, treat `x-attestation-*` as untrusted and do not describe it as a control.
 
+**Remediation (2026-07-06, PR #17) — FIXED (server side):** the stubs are replaced with real cryptographic verification in `backend/src/services/deviceAttest/`:
+- **Apple App Attest** (`appAttest.ts`): CBOR decode → cert-chain validation to the pinned Apple App Attestation Root CA → nonce binding via the `1.2.840.113635.100.8.2` extension → public-key-hash / rpId / counter / aaguid / keyId checks; plus per-request assertion verification with monotonic `signCount` replay protection.
+- **Google Play Integrity classic** (`playIntegrity.ts`): A256KW key-unwrap → A256GCM decrypt → ES256 JWS verify → verdict policy (PLAY_RECOGNIZED, device integrity, package, freshness, nonce). Rooted / emulator / stale / replay all rejected.
+- **Challenge binding** (`challenge.ts` + `POST /attestation/challenge`): stateless single-use HMAC nonce echoed in `x-attestation-challenge`.
+- `deviceAttestationService.ts` runs real verification when the platform is configured **and** enforcement is on (prod / `DEVICE_ATTESTATION_ENFORCE=true`), failing **closed**; shadow mode is unchanged. Dev-env attestations are never accepted in production.
+- 37 round-trip unit tests mint tokens exactly as Apple/Google do and assert every tamper is rejected.
+
+**Still owed (client/ops):** the mobile client needs a **native module** (App Attest / Play Integrity are unavailable in pure-JS Expo) to emit real tokens; wire up Play Console response-encryption keys + Apple team/bundle config; for strict multi-instance single-use challenges, back the nonce cache with Redis; iOS assert-once/verify-many needs a `DeviceKey` store (`verifyAppleAssertion` is built + tested).
+
 ### M-2 🟡 MEDIUM — Jurisdiction override honored in `development` — FIXED
 
 **Location:** `middleware/jurisdictionBlock.ts:40`. `x-country-override` was honored whenever `NODE_ENV !== "production"`; the deployed `.env` is `development`, so any client could spoof its country and bypass the geo-block on money paths. **Fix (shipped):** honor the override only when `NODE_ENV === "test"`. (Note: the block is still fail-open when no geo header is present — acceptable for beta per the code comment, but flip to fail-closed in prod and ensure origin is only reachable via the CDN edge.)
@@ -256,8 +265,8 @@ Known/accepted for single-instance beta (`auth.ts:11`, `app.ts:23`). Move to Red
 | **Roulette (Euro single-0)** | One spin = one number `keccak(serverSeed:clientSeed:nonce) % 37`. One-shot → fits current model directly. Inside/outside bets resolved server-side. | None (reuse voucher `gameType`) | **Low** — best first addition. |
 | **Slots** | Per-spin reel stops from the hash; publish paytable + RTP; one-shot. Could reuse the existing slot-simulator engine for reels/animation. | None | **Low–Med** (math/paytable design is the work). |
 | **Baccarat (Punto Banco)** | Fixed drawing rules, no player decisions → deterministic from the shuffled shoe seed; one-shot per coup. | None | **Low–Med**. |
-| **Blackjack** | **Needs seed chain** — each player decision (hit/stand/double/split) consumes the next committed card; commit shoe seed, reveal on round end. Side bets/insurance = extra one-shot resolutions. | None (voucher already carries `gameType` bytes32) | **High** (state machine + seed chain). |
-| **Video Poker variants** (Deuces, Bonus) | Same engine as today; new paytables + `evaluateHand` rules. One-shot. | None | **Low** (per variant). |
+| **Blackjack** | ✅ **SHIPPED (PR #19)** — 6-deck shoe committed as a permutation of `(serverSeed, clientSeed)`, dealt from the top; revealed at settle. Hole card + undealt cards never leak mid-round. Full hit/stand/double/split/insurance state machine; one round per session (C-1). Atomic per-session concurrency + gte-guarded wager debits. `services/blackjack.ts` + `routes/blackjack.ts`; 25 unit + integration + red-team tests. | None (voucher already carries `gameType` bytes32) | Done. |
+| **Video Poker variants** (Deuces Wild, Bonus Poker) | ✅ **SHIPPED (PR #20)** — same deck + seed chain; variant evaluator + paytables in `services/pokerVariants.ts`. Deuces Wild uses wild-aware best-hand evaluation. Jacks-or-Better path unchanged. 17 unit + integration tests. | None | Done. |
 | **Craps** | Multi-roll series → **needs seed chain**; each roll = committed dice pair. Complex bet resolution. | None | **High**. |
 | **Texas Hold'em vs. house** | **Needs seed chain**; commit deck, reveal per street. Heads-up vs. house avoids multi-player collusion. | None | **Very High** (betting rounds, hand eval, house strategy). |
 | **Sports / prediction markets** | Fundamentally different — off-chain oracle/settlement, not RNG. Could integrate the existing Polymarket tooling as a separate product line, not a "provably fair" game. | New settlement path/oracle | **Very High** (regulatory + oracle). |
