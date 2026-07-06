@@ -1,22 +1,61 @@
 import { Router } from "express";
+import type { Request, Response, NextFunction } from "express";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { AppError } from "../middleware/errorHandler.js";
-import type { JwtPayload } from "../types/index.js";
 
 const router = Router();
 
-// All admin routes require a valid JWT with `isAdmin: true` claim
-function requireAdmin(req: Parameters<typeof requireAuth>[0], res: Parameters<typeof requireAuth>[1], next: Parameters<typeof requireAuth>[2]): void {
+// FABLE-2026-07 H-3: admin authority is decided by the DB `User.isAdmin` column,
+// NEVER by a self-asserted JWT claim. Previously `requireAdmin` trusted
+// `req.user.isAdmin`, but nothing ever set that claim server-side and there was
+// no server-side role — so anyone who could forge/leak a token (see C-3) could
+// self-grant admin. Now the token only identifies *who* you are; whether you are
+// an admin is looked up fresh from the database on every request.
+function requireAdmin(req: Request, res: Response, next: NextFunction): void {
   requireAuth(req, res, () => {
-    const payload = req.user as (JwtPayload & { isAdmin?: boolean }) | undefined;
-    if (!payload?.isAdmin) {
-      res.status(403).json({ error: "Admin access required" });
-      return;
-    }
-    next();
+    void (async () => {
+      try {
+        const userId = req.user?.userId;
+        if (!userId) {
+          res.status(401).json({ error: "Unauthenticated" });
+          return;
+        }
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { isAdmin: true },
+        });
+        if (!user?.isAdmin) {
+          res.status(403).json({ error: "Admin access required" });
+          return;
+        }
+        next();
+      } catch (err) {
+        next(err);
+      }
+    })();
   });
+}
+
+// Append-only audit record of a privileged admin action (FABLE-2026-07 H-3).
+// Fire-and-forget: an audit-write failure must never break the admin operation
+// itself, but it is logged loudly so a missing trail is detectable.
+async function logAdminAction(
+  adminUserId: string,
+  action: string,
+  targetUserId: string | null,
+  detail: Prisma.InputJsonValue,
+  ip: string | undefined,
+): Promise<void> {
+  try {
+    await prisma.adminAuditLog.create({
+      data: { adminUserId, action, targetUserId, detail, ip: ip ?? null },
+    });
+  } catch (err) {
+    console.error("[admin-audit] failed to record action", action, adminUserId, err);
+  }
 }
 
 // GET /admin/flagged-users?riskLevel=MEDIUM&page=0&limit=50
@@ -45,6 +84,16 @@ router.get("/flagged-users", requireAdmin, async (req, res, next) => {
       }),
       prisma.userAnalytics.count({ where }),
     ]);
+
+    // Reading flagged users exposes wallet addresses + risk data — a privileged
+    // read, so it is audited too (who looked at whom, and with what filter).
+    await logAdminAction(
+      req.user!.userId,
+      "read-flagged-users",
+      null,
+      { riskLevel: riskLevel ?? "ALL", page, limit, returned: rows.length },
+      req.ip,
+    );
 
     res.json({
       total,
@@ -91,6 +140,16 @@ router.post("/users/:userId/set-risk", requireAdmin, async (req, res, next) => {
         riskFlags: { push: `manual_override:${reason}` },
       },
     });
+
+    // Overriding a user's risk level can unblock a flagged account — a
+    // sensitive, abuse-prone action, so it is always audited.
+    await logAdminAction(
+      req.user!.userId,
+      "set-risk",
+      userId,
+      { riskLevel, reason },
+      req.ip,
+    );
 
     res.json({ userId, riskLevel: updated.riskLevel });
   } catch (err) {

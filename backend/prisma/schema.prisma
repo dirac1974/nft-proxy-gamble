@@ -39,6 +39,10 @@ model User {
   walletAddress String        @unique
   coinBalance   Int           @default(0)
   ageConfirmed  Boolean       @default(false)
+  // Server-side admin authority (FABLE-2026-07 H-3). Admin access is decided by
+  // this column, NEVER by a self-asserted JWT claim. Defaults false; granted only
+  // out-of-band (DB/ops), so a forged or leaked token cannot self-elevate.
+  isAdmin       Boolean       @default(false)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   sessions      GameSession[]
@@ -46,6 +50,24 @@ model User {
   iapReceipts   IAPReceipt[]
   transactions  Transaction[]
   analytics     UserAnalytics?
+  adminActions  AdminAuditLog[]
+}
+
+// Append-only audit trail of privileged admin actions (FABLE-2026-07 H-3).
+// Every mutating admin route writes one row here so admin activity is
+// attributable and reviewable after the fact.
+model AdminAuditLog {
+  id           String   @id @default(cuid())
+  adminUserId  String
+  admin        User     @relation(fields: [adminUserId], references: [id])
+  action       String   // e.g. "set-risk", "read-flagged-users"
+  targetUserId String?  // subject of the action, when applicable
+  detail       Json     @default("{}")
+  ip           String?
+  createdAt    DateTime @default(now())
+
+  @@index([adminUserId, createdAt])
+  @@index([targetUserId, createdAt])
 }
 
 model GameSession {
