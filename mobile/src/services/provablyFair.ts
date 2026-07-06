@@ -109,3 +109,56 @@ export function verifyRouletteSpin(
     expectedNumber,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Blackjack provably-fair verification.
+// Mirrors backend/src/services/blackjack.ts:generateShoe exactly — a multi-deck
+// shoe Fisher-Y2ates-shuffled by a keccak256 chain seeded by
+//   `${serverSeed}:${clientSeed}:blackjack:0`
+// After the round settles the server reveals serverSeed, letting the player
+// reproduce the whole shoe and confirm every card they were dealt.
+// ---------------------------------------------------------------------------
+
+export function generateShoe(serverSeed: string, clientSeed: string, numDecks: number): number[] {
+  const size = numDecks * 52;
+  const shoe: number[] = Array.from({ length: size }, (_, i) => i % 52);
+  let hash = keccak256(toUtf8Bytes(`${serverSeed}:${clientSeed}:blackjack:0`));
+  for (let i = size - 1; i > 0; i--) {
+    hash = keccak256(hash as Hex);
+    const j = Number(BigInt(hash) % BigInt(i + 1));
+    const tmp = shoe[i];
+    shoe[i] = shoe[j]!;
+    shoe[j] = tmp!;
+  }
+  return shoe;
+}
+
+export interface BlackjackVerificationResult {
+  seedHashMatches: boolean;
+  cardsMatch: boolean; // dealt player + dealer cards match the reproduced shoe order
+}
+
+// Verify a settled blackjack round:
+// 1. serverSeedHash (committed before the deal) matches keccak256(serverSeed).
+// 2. The opening cards match the reproduced shoe: player=[shoe0,shoe2],
+//    dealer=[shoe1,shoe3]. (Subsequent draws follow the same shoe order; the
+//    caller can extend this check with the full dealt sequence if desired.)
+export function verifyBlackjackDeal(
+  serverSeed: string,
+  serverSeedHash: string,
+  clientSeed: string,
+  numDecks: number,
+  playerOpening: number[],
+  dealerOpening: number[],
+): BlackjackVerificationResult {
+  const seedHashMatches = hashServerSeed(serverSeed) === serverSeedHash;
+  const shoe = generateShoe(serverSeed, clientSeed, numDecks);
+  const cardsMatch =
+    playerOpening.length >= 2 &&
+    dealerOpening.length >= 2 &&
+    playerOpening[0] === shoe[0] &&
+    playerOpening[1] === shoe[2] &&
+    dealerOpening[0] === shoe[1] &&
+    dealerOpening[1] === shoe[3];
+  return { seedHashMatches, cardsMatch };
+}

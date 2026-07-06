@@ -122,3 +122,50 @@ HTTP 400.
 
 One spin per session: after the seed is revealed a new session must be started
 for the next spin (prevents outcome prediction — see `docs/PROVABLY_FAIR.md`).
+
+---
+
+# Game Rules — Blackjack (6-deck, dealer hits soft 17)
+
+## Overview
+Standard casino blackjack against the dealer. Provably fair: the entire shoe is
+a committed permutation derived from `(serverSeed, clientSeed)`, revealed at the
+end of the round so the player can reproduce every card. House edge ≈ **0.5%**
+with basic strategy (6 decks, dealer hits soft 17, blackjack pays 3:2, double on
+any two, split to 4 hands, split aces one card).
+
+Game type id: `blackjack-6deck-h17-1-0`. Engine: `backend/src/services/blackjack.ts`.
+
+## Rules
+- **Card values**: 2–10 face value; J/Q/K = 10; Ace = 11 or 1 (whichever avoids a bust).
+- **Blackjack** (natural): an Ace + a ten-value card on the first two cards of the
+  original (un-split) hand. Pays **3:2** (profit floored on odd bets, house-favorable).
+  A 21 made after a split is **not** a blackjack.
+- **Dealer** draws to 17 and **hits soft 17** (`…-h17-…`).
+- **Hit / Stand**: draw another card, or end your turn.
+- **Double**: only on your first two cards — doubles the bet, draws exactly one card,
+  ends the hand. Not allowed on split aces.
+- **Split**: two equal-**value** cards (e.g. 8-8, or K-10) split into two hands, each
+  taking one new card and an additional bet equal to the base bet. Up to **4** hands.
+  **Split aces** receive exactly one card each and cannot be hit.
+- **Insurance**: offered only when the dealer's upcard is an Ace. Costs up to half the
+  base bet and pays **2:1** if the dealer has a natural; otherwise it is lost.
+- **Settlement**: win 1:1, push returns the stake, loss/bust returns nothing.
+
+## Limits
+- Base bet: **1**–**500** coins (integer). Additional wagers (double/split/insurance)
+  are debited atomically as they occur and can never take the balance negative.
+
+## Game flow (in app)
+1. **Start session** (commit): server publishes `serverSeedHash` + `clientSeed` and
+   the next session's seed commitment (H-2 chain) **before** any bet.
+2. **Deal**: place the base bet; two cards to the player, two to the dealer (the hole
+   card stays hidden). Naturals resolve immediately.
+3. **Insurance** (if offered) → **Actions** (hit/stand/double/split) until every hand
+   is done, then the dealer plays and the round **settles**.
+4. On settle the server reveals `serverSeed` + `numDecks`; the app reproduces the shoe
+   and verifies the dealt cards (`verifyBlackjackDeal`). A failed check shows a red banner.
+5. Winnings credit to the coin balance; cash out via `/game/cashout` (100 coins = 1 USDC).
+
+One round per session: the revealed seed can never be re-dealt (outcome-prediction
+defense — the same C-1 class rule as video poker and roulette).
