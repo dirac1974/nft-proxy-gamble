@@ -49,6 +49,9 @@ high-level sketch above where they differ).
   - `serverSeedHash` for this session equals the previous session's
     `nextServerSeedHash` (chain continuity). Clients may supply their own
     high-entropy `clientSeed` for grinding resistance.
+- `POST /game/start-session { betAmount, clientSeed?, variant? }` — `variant` ∈
+  `jacks-or-better` (default) | `bonus-poker` | `deuces-wild`; returned as `gameType`.
+  Same deal/draw flow; only evaluation + paytable differ (see `docs/GAME_RULES.md`).
 - `POST /game/deal { sessionId }` → `{ handNumber, dealtCards, serverSeedHash }`
   (rejects roulette sessions with 409; one hand per session — C-1).
 - `POST /game/draw { sessionId, holds[5] }`

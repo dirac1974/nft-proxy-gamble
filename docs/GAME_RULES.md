@@ -125,6 +125,54 @@ for the next spin (prevents outcome prediction — see `docs/PROVABLY_FAIR.md`).
 
 ---
 
+# Video Poker Variants — Bonus Poker & Deuces Wild
+
+Same deck derivation, seed chain, deal/draw flow, and `/game/start-session` →
+`/game/deal` → `/game/draw` endpoints as 9/6 Jacks or Better. Pick the variant at
+start with `{ variant: "jacks-or-better" | "bonus-poker" | "deuces-wild" }`
+(default Jacks or Better). Only hand evaluation + paytable differ
+(`backend/src/services/pokerVariants.ts`). Royal pays 800× on a 5-coin max bet.
+
+## Bonus Poker (`bonus-poker-8-5`, ~99.2% EV)
+Jacks-or-Better ranks, but four-of-a-kind is split by rank:
+
+| Hand | × bet |
+|---|---|
+| Royal Flush | 250 (800 max) |
+| Straight Flush | 50 |
+| Four Aces | 80 |
+| Four 2s–4s | 40 |
+| Four 5s–Ks | 25 |
+| Full House | 8 |
+| Flush | 5 |
+| Straight | 4 |
+| Three of a Kind | 3 |
+| Two Pair | 2 |
+| Jacks or Better | 1 |
+
+## Deuces Wild (`deuces-wild-nsud`, "Not So Ugly", ~99.7% EV)
+All four **2s are wild** and stand in for any card. Minimum paying hand is three
+of a kind. A 21… (blackjack aside) a royal made with a wild is a *Wild Royal*; a
+royal with no wild is a *Natural Royal*.
+
+| Hand | × bet |
+|---|---|
+| Natural Royal | 250 (800 max) |
+| Four Deuces | 200 |
+| Wild Royal | 25 |
+| Five of a Kind | 16 |
+| Straight Flush | 10 |
+| Four of a Kind | 4 |
+| Full House | 4 |
+| Flush | 3 |
+| Straight | 2 |
+| Three of a Kind | 1 |
+
+Provably fair identically to Jacks or Better — reproduce the deck from the revealed
+`serverSeed` and re-evaluate with the variant's rules (`evaluateVariant`).
+
+---
+
 # Game Rules — Blackjack (6-deck, dealer hits soft 17)
 
 ## Overview

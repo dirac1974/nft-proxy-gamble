@@ -73,16 +73,19 @@ export const balanceApi = {
 };
 
 // Game
+export type PokerVariant = "jacks-or-better" | "bonus-poker" | "deuces-wild";
+
 export const gameApi = {
-  startSession: (betAmount: number) =>
+  startSession: (betAmount: number, variant: PokerVariant = "jacks-or-better") =>
     request<{
       sessionId: string;
+      gameType: string;
       serverSeedHash: string;
       clientSeed: string;
       nextServerSeedHash?: string; // H-2 chain commitment for the next session
     }>(
       "/game/start-session",
-      { method: "POST", body: JSON.stringify({ betAmount }) },
+      { method: "POST", body: JSON.stringify({ betAmount, variant }) },
     ),
 
   deal: (sessionId: string) =>
