@@ -87,6 +87,21 @@ describe("NFTProxyVoucher", function () {
     await expect(voucher.connect(user1).redeem(0)).to.be.reverted;
   });
 
+  it("T5b. redeem is terminal — clears coinBalance, gameType, and mintedTimestamp", async function () {
+    await voucher.connect(minter).mint(user1.address, 100, GAME, SESSION);
+    // Populated after mint.
+    expect(await voucher.coinBalance(0)).to.equal(100);
+    expect(await voucher.gameType(0)).to.equal(GAME);
+    expect(await voucher.mintedTimestamp(0)).to.be.greaterThan(0);
+
+    await voucher.connect(user1).redeem(0);
+
+    // All per-token state cleared on the terminal burn (no orphan storage).
+    expect(await voucher.coinBalance(0)).to.equal(0);
+    expect(await voucher.gameType(0)).to.equal(ethers.ZeroHash);
+    expect(await voucher.mintedTimestamp(0)).to.equal(0);
+  });
+
   it("T6. prevents non-owner from redeeming", async function () {
     await voucher.connect(minter).mint(user1.address, 100, GAME, SESSION);
     await expect(voucher.connect(user2).redeem(0)).to.be.revertedWith(
