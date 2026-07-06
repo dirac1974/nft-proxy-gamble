@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import hre, { ethers } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import * as fc from "fast-check";
@@ -408,6 +408,13 @@ describe("NFTProxyVoucher", function () {
   });
 
   it("T28. gas snapshots — mint < 150,000 and redeem < 80,000", async function () {
+    // solidity-coverage rewrites the bytecode with per-branch instrumentation,
+    // which inflates gasUsed (mint ~150,065 vs the real ~149,x under normal
+    // compilation). Gas assertions are only meaningful against uninstrumented
+    // bytecode, so skip this snapshot when the coverage runner is active.
+    if ((hre as unknown as { __SOLIDITY_COVERAGE_RUNNING?: boolean }).__SOLIDITY_COVERAGE_RUNNING) {
+      this.skip();
+    }
     const tx1 = await voucher
       .connect(minter)
       .mint(user1.address, 500, GAME, SESSION);

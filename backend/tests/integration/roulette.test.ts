@@ -16,7 +16,7 @@ const wallet = Wallet.createRandom();
 let token: string;
 let userId: string;
 
-async function startSession(clientSeed?: string): Promise<{ sessionId: string; serverSeedHash: string; clientSeed: string }> {
+async function startSession(clientSeed?: string): Promise<{ sessionId: string; gameType: string; serverSeedHash: string; clientSeed: string; nextServerSeedHash: string }> {
   const res = await request(app)
     .post("/roulette/start-session")
     .set("Authorization", `Bearer ${token}`)
