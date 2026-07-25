@@ -2,33 +2,33 @@
 
 ## Current Overall Status
 
-**Phase 1 (Contracts)**: ✅ COMPLETE and STABLE. No new commits, PRs, or comments on Issue #1 since last review (as of 2026-07-25). Pre-plan compliance perfect; contract tests robust (45+), coverage 100% key metrics, deployment solid with zero regressions.
+**Phase 1 (Contracts)**: ✅ COMPLETE and STABLE. No new commits, PRs, or comments on Issue #1 since last review (as of 2026-07-25). Pre-plan compliance perfect; contract tests robust (45+), coverage 100% key metrics, deployment solid with zero regressions. Contract at `0xf0d9bD16292A06a189220E4369a561442aEC15Cd` (Amoy) remains the immutable foundation; later audit fixes (timelock, terminal-state cleanup) did not reopen Phase 1 scope.
 
-**Recent Progress**: Continued advancement on Video Poker UI (Issue #13 / open PR #14), multi-game support (Blackjack, Poker variants, Roulette), device attestation enhancements (PR #17), security/audit refinements (PRs #15–21). CI remains green, test suite expanded. Open UI PRs (#12, #14) still pending merge/polish.
+**Recent Progress**: Continued advancement on Video Poker UI (Issue #13 / open PR #14), multi-game support (Blackjack, Poker variants, Roulette — merged via #16–#21 on 2026-07-06), device attestation (real App Attest + Play Integrity, fail-closed), security/audit refinements (H-2 seed chain, H-3 DB admin, H-4 timelock). CI remains green on main for merged work; test suite expanded. Open PRs #12 (premium UI redesign) and #14 (classic VP cabinet UI) still pending human review/merge.
 
-**Pre-plan Compliance**: Excellent adherence to IMPLEMENTATION_PLAN.md, DEVELOPMENT_MEMORY.md, and related docs across features. All recent game/security work followed mandatory pre-plan discipline.
+**Pre-plan Compliance**: Excellent adherence to IMPLEMENTATION_PLAN.md, DEVELOPMENT_MEMORY.md §1 (deep analysis + plan before code), and related ADRs across features. Phase 1 pre-plan on Issue #1 fully executed and closed.
 
-**Test Coverage**: High across contracts (100% core metrics), backend (unit suites green, expanded for variants/attestation/blackjack), and advancing in mobile/UI. Strong focus on game logic, integration paths, and red-team coverage. Gaps remain in full Maestro E2E device runs and some backend branch coverage.
+**Test Coverage**: High across contracts (45+ tests, 100% stmts/fns/lines on NFTProxyVoucher), backend (197+ unit after attestation/roulette/blackjack/variants), and advancing in mobile/UI. Strong focus on game logic, provably-fair parity, integration paths, and red-team cases. Integration tests run in CI (Postgres).
 
-**Security**: Solid with hardened attestation (real App Attest + Play Integrity server-side, fail-closed), provably-fair mechanisms (seed chain + one-hand-per-session), timelock on emergency withdraw, and proactive audit remediations. Residual items: C-3 secret rotation, Gnosis Safe governance, client native attestation module, external audit.
+**Security**: Solid with hardened attestation (real crypto verification + fail-closed), provably-fair server-seed chain (H-2), DB-backed admin + audit log (H-3), emergency-withdraw timelock (H-4), terminal-state cleanup on redeem, and proactive measures. No critical regressions. Remaining team items: C-3 secret rotation, Gnosis Safe governance, native attestation modules + Redis nonce cache, external audit before mainnet.
 
 ## Fresh Feedback (2026-07-25)
 
-- **Phase 1**: Remains a strong, immutable foundation. No changes required. Pre-plan compliance perfect; tests and deployment unchanged. Issue #1 closed since 2026-05-24; last comment 2026-07-03 (“No new activity detected”).
-- **Overall**: Strong momentum on client-side (Video Poker UI #13/#14, games). CI green. Excellent progress toward beta. Merged features (#17–21) show good integration and security-first design. Open PRs #12 (premium UI) and #14 (classic VP UI) need review/merge or rebase.
-- **Notes**: Focus on full E2E flows (IAP-play-cashout-mint). Verify provably-fair across variants, session security. Security-first approach solid; no regressions. Complete remaining audit residuals (C-3 rotation, Safe, native attestation client) before real-money.
+- **Phase 1**: Remains a strong, immutable foundation. No changes, commits, PRs, or comments on Issue #1 since 2026-07-03 (last “No new activity detected”). Pre-plan compliance perfect; tests, gas budgets, Slither posture, and Amoy deployment unchanged. Treat as closed and stable — do not reopen unless a new critical contract finding appears.
+- **Overall**: Strong momentum on client-side (Video Poker classic UI #13/#14, premium redesign #12) and multi-game/security work already merged. CI green for landed changes. Excellent progress toward beta. Focus next on landing/polish of open UI PRs and full E2E (IAP → play → cashout → mint) plus native attestation wiring.
+- **Notes**: Prioritize full E2E flows (IAP-play-cashout-mint) with Maestro/CI. Verify provably-fair across all variants (Jacks, Bonus, Deuces, Blackjack, Roulette). Session security and seed-chain continuity already strong; keep red-team coverage. Security-first approach solid; no regressions observed. Open PRs #12/#14 need human visual/audio QA and merge decision.
 
 ## Prioritized Action Items for Claude
 
-1. **High**: Finalize Video Poker UI polish/full integration (Issue #13 / PR #14) — variants, SFX, animations, 100% tests; rebase/merge if needed.
-2. **High**: Complete native attestation client module + E2E Maestro/CI updates; enable enforcement after shadow samples.
-3. **Medium**: Client verification tools, audit updates, fraud detection strengthening; address open audit residuals (CORS, token revocation, solvency).
-4. **Medium**: Expand multi-game/integration tests with isolation; lift backend branch coverage; refresh TEST_COVERAGE_REPORT.md.
-5. **Low**: Refresh runbooks/checklists for beta; review/merge open UI PR #12.
+1. **High**: Finalize Video Poker UI polish/full integration (Issue #13 / PR #14) — variants, SFX, animations, meter rollup, 100% tests; coordinate with open PR #12 if needed; get human visual/audio QA + merge.
+2. **High**: Complete native attestation client modules + E2E Maestro/CI updates; enable enforcement after shadow samples; Redis single-use challenge cache for production.
+3. **Medium**: Client verification tools, audit status updates, fraud-detection strengthening; close remaining FABLE items (C-3 rotation is operator-only).
+4. **Medium**: Expand multi-game/integration tests with isolation (cross-game guards already present); full E2E IAP → play → cashout → mint on testnet.
+5. **Low**: Refresh runbooks/checklists for beta; land or close stale open PRs (#12, #14) after review.
 
 ## History
 
-- 2026-07-25: Grok Secondary PM review — Phase 1 stable (no new #1 activity), Video Poker UI/games/attestation/security progress with prior merges; pre-plan compliance, test coverage, and security focus. Updated fresh feedback and actions; appended to history.
+- 2026-07-25: Grok Secondary PM review - Phase 1 stable (no new #1 commits/PRs/comments), Video Poker UI (#13/#14) + multi-game/attestation/security progress; pre-plan compliance, test coverage, and security focus. Updated fresh feedback and actions; appended to history.
 - 2026-07-24: Grok Secondary PM review - Phase 1 stable (no new #1 activity), Video Poker UI/games/attestation/security progress with recent merges; pre-plan compliance, test coverage, and security focus. Updated fresh feedback and actions; appended to history.
 - 2026-07-23: Grok Secondary PM review - Phase 1 stable (no new #1 activity), Video Poker UI/games/attestation/security progress; pre-plan compliance, test coverage, and security focus. Refined fresh feedback and actions; appended.
 - 2026-07-22: Grok Secondary PM review - Phase 1 stable (no new #1 activity), continued progress on Video Poker UI/games/attestation/security/tests; pre-plan compliance, coverage, and security focus. Fresh feedback and actions; appended to history.
