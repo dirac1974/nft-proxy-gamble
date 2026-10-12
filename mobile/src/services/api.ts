@@ -75,16 +75,19 @@ export function extractVerifiedBalance(response: SignedBalanceResponse): number 
 // Auth
 export const authApi = {
   nonce: (address: string) =>
-    request<{ nonce: string }>(`/auth/nonce?address=${address}`),
+    request<{ nonce: string; message?: string; expiresAt?: string }>(`/auth/nonce?address=${address}`),
 
-  verify: (address: string, signature: string) =>
+  verify: (address: string, signature: string, message?: string) =>
     request<{ token: string; userId: string; ageConfirmed: boolean; serverSeedChainHash: string | null }>(
       "/auth/verify",
       {
         method: "POST",
-        body: JSON.stringify({ address, signature }),
+        body: JSON.stringify({ address, signature, ...(message ? { message } : {}) }),
       },
     ),
+
+  /** Revokes the current JWT server-side. */
+  logout: () => request<{ loggedOut: boolean; revoked: boolean }>("/auth/logout", { method: "POST" }),
 
   confirmAge: () =>
     request<{ ageConfirmed: boolean }>("/auth/confirm-age", { method: "POST" }),

@@ -21,6 +21,19 @@ enum MintStatus {
   PENDING
   MINTING
   MINTED
+  // Legacy terminal state (pre mint-worker). The mint worker re-checks these
+  // rows on-chain and either marks them MINTED or retries/refunds them.
+  FAILED
+  // Terminal: mint abandoned (terminal revert or MINT_MAX_ATTEMPTS) AND proven
+  // unmintable on-chain; coins credited back via a CASHOUT_REFUND transaction.
+  FAILED_REFUNDED
+}
+
+// On-chain PurchaseCommitted audit job state, one per IAPReceipt row.
+enum CommitStatus {
+  PENDING
+  SENT
+  COMMITTED
   FAILED
 }
 
@@ -29,6 +42,8 @@ enum TransactionType {
   GAME_WIN
   GAME_LOSS
   CASHOUT_MINT
+  // Compensating credit for a cashout whose voucher could not be minted.
+  CASHOUT_REFUND
 }
 
 enum RiskLevel {
@@ -39,14 +54,14 @@ enum RiskLevel {
 }
 
 model User {
-  id            String        @id @default(cuid())
-  walletAddress String        @unique
-  coinBalance   Int           @default(0)
-  ageConfirmed  Boolean       @default(false)
+  id                 String          @id @default(cuid())
+  walletAddress      String          @unique
+  coinBalance        Int             @default(0)
+  ageConfirmed       Boolean         @default(false)
   // Server-side admin authority (FABLE-2026-07 H-3). Admin access is decided by
   // this column, NEVER by a self-asserted JWT claim. Defaults false; granted only
   // out-of-band (DB/ops), so a forged or leaked token cannot self-elevate.
-  isAdmin       Boolean       @default(false)
+  isAdmin            Boolean         @default(false)
   // Per-user provably-fair server-seed chain (FABLE-2026-07 H-2). nextServerSeed
   // is the secret pre-image consumed by the NEXT session; nextServerSeedHash is
   // its published commitment. Committing the seed before the next clientSeed is
@@ -54,14 +69,14 @@ model User {
   // chain is initialized (account creation or first session).
   nextServerSeed     String?
   nextServerSeedHash String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  sessions      GameSession[]
-  nftVouchers   NFTVoucher[]
-  iapReceipts   IAPReceipt[]
-  transactions  Transaction[]
-  analytics     UserAnalytics?
-  adminActions  AdminAuditLog[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  sessions           GameSession[]
+  nftVouchers        NFTVoucher[]
+  iapReceipts        IAPReceipt[]
+  transactions       Transaction[]
+  analytics          UserAnalytics?
+  adminActions       AdminAuditLog[]
 }
 
 // Append-only audit trail of privileged admin actions (FABLE-2026-07 H-3).
@@ -71,8 +86,8 @@ model AdminAuditLog {
   id           String   @id @default(cuid())
   adminUserId  String
   admin        User     @relation(fields: [adminUserId], references: [id])
-  action       String   // e.g. "set-risk", "read-flagged-users"
-  targetUserId String?  // subject of the action, when applicable
+  action       String // e.g. "set-risk", "read-flagged-users"
+  targetUserId String? // subject of the action, when applicable
   detail       Json     @default("{}")
   ip           String?
   createdAt    DateTime @default(now())
@@ -82,19 +97,19 @@ model AdminAuditLog {
 }
 
 model GameSession {
-  id             String       @id @default(cuid())
+  id             String        @id @default(cuid())
   userId         String
-  user           User         @relation(fields: [userId], references: [id])
-  gameType       String       @default("jacks-or-better-9-6")
+  user           User          @relation(fields: [userId], references: [id])
+  gameType       String        @default("jacks-or-better-9-6")
   betAmount      Int
   serverSeed     String
   serverSeedHash String
   clientSeed     String
-  state          SessionState @default(ACTIVE)
-  hands          Json         @default("[]")
-  totalPayout    Int          @default(0)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  state          SessionState  @default(ACTIVE)
+  hands          Json          @default("[]")
+  totalPayout    Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
   nftVoucher     NFTVoucher?
   transactions   Transaction[]
 
@@ -102,55 +117,76 @@ model GameSession {
 }
 
 model NFTVoucher {
-  id          String     @id @default(cuid())
-  userId      String
-  user        User       @relation(fields: [userId], references: [id])
-  sessionId   String     @unique
-  session     GameSession @relation(fields: [sessionId], references: [id])
-  tokenId     String?
-  coinBalance Int
-  gameType    String
-  txHash      String?
-  mintStatus  MintStatus @default(PENDING)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  transactions Transaction[]
+  id               String        @id @default(cuid())
+  userId           String
+  user             User          @relation(fields: [userId], references: [id])
+  sessionId        String        @unique
+  session          GameSession   @relation(fields: [sessionId], references: [id])
+  tokenId          String?
+  coinBalance      Int
+  gameType         String
+  txHash           String?
+  mintStatus       MintStatus    @default(PENDING)
+  // Mint worker job state. Each voucher row is the durable mint job.
+  // bytes32 sessionId sent to mint(). keccak256(utf8(sessionId)) for new rows;
+  // NULL on legacy rows, which keep the legacy encodeBytes32String(sessionId)
+  // so on-chain usedSessionId dedupes against any orphaned legacy tx.
+  onChainSessionId String?
+  mintAttempts     Int           @default(0)
+  nextAttemptAt    DateTime      @default(now())
+  mintNonce        Int? // highest minter-account nonce used for this voucher's tx
+  txSentAt         DateTime? // broadcast time of txHash (stuck-tx detection)
+  lastMintError    String?
+  refundedAt       DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  transactions     Transaction[]
 
+  @@index([mintStatus, nextAttemptAt])
   // /nfts route does `findMany({ where: { userId }, orderBy: { createdAt: 'desc' } })`
   // on every My-NFTs tab render. Compound index supports both filter and sort.
   @@index([userId, createdAt(sort: Desc)])
 }
 
 model IAPReceipt {
-  id             String       @id @default(cuid())
-  userId         String
-  user           User         @relation(fields: [userId], references: [id])
-  platform       String
-  receiptHash    String       @unique
-  productId      String
-  coinsGranted   Int
-  onChainTxHash  String?      // Polygon tx hash of PurchaseCommitted event (null until batch flushes)
-  createdAt      DateTime     @default(now())
-  transaction    Transaction?
+  id                  String       @id @default(cuid())
+  userId              String
+  user                User         @relation(fields: [userId], references: [id])
+  platform            String
+  receiptHash         String       @unique
+  productId           String
+  coinsGranted        Int
+  onChainTxHash       String? // latest broadcast commitPurchase tx hash (persisted before awaiting)
+  commitStatus        CommitStatus @default(PENDING)
+  commitAttempts      Int          @default(0)
+  commitNextAttemptAt DateTime     @default(now())
+  commitNonce         Int?
+  commitTxHashes      String[]     @default([]) // every broadcast hash (replacements included)
+  commitSentAt        DateTime?
+  commitLastError     String?
+  createdAt           DateTime     @default(now())
+  transaction         Transaction?
+
+  @@index([commitStatus, commitNextAttemptAt])
 }
 
 model UserAnalytics {
-  id                String    @id @default(cuid())
-  userId            String    @unique
-  user              User      @relation(fields: [userId], references: [id])
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  user                 User      @relation(fields: [userId], references: [id])
   // rolling 1-hour window counters (reset by analyticsService on each update)
-  coinsAddedLastHour  Int     @default(0)
-  cashoutsToday       Int     @default(0)
-  handsLastHour       Int     @default(0)
-  winsLastHour        Int     @default(0)
+  coinsAddedLastHour   Int       @default(0)
+  cashoutsToday        Int       @default(0)
+  handsLastHour        Int       @default(0)
+  winsLastHour         Int       @default(0)
   // persistent lifetime counters
-  totalCoinsAdded     Int     @default(0)
-  totalCashoutsAllTime Int    @default(0)
+  totalCoinsAdded      Int       @default(0)
+  totalCashoutsAllTime Int       @default(0)
   // risk assessment
-  riskLevel           RiskLevel @default(LOW)
-  riskFlags           String[]  @default([])
-  lastEvaluatedAt     DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  riskLevel            RiskLevel @default(LOW)
+  riskFlags            String[]  @default([])
+  lastEvaluatedAt      DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 }
 
 model Transaction {
@@ -172,4 +208,39 @@ model Transaction {
   // daily-limit count. Every game result and cashout triggers 4 filters on
   // (userId, type, createdAt) — without this index those are full table scans.
   @@index([userId, type, createdAt])
+}
+
+// EIP-4361 sign-in nonces. Keyed by the nonce itself (not the address) so a
+// third party requesting a nonce for someone else's address cannot overwrite
+// theirs. Single-use: consumedAt is set atomically on successful /auth/verify.
+model AuthNonce {
+  nonce      String    @id
+  address    String // lowercase 0x address the message was issued for
+  message    String // exact EIP-4361 message issued (verified byte-for-byte)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([address, createdAt])
+  @@index([expiresAt])
+}
+
+// JWT revocation list (POST /auth/logout). Rows can be purged after expiresAt
+// (the token itself is rejected by jwt.verify past its exp anyway).
+model RevokedToken {
+  jti       String   @id
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+// Single-leader lease for background workers (mint / commitment sender), so
+// multiple backend instances never broadcast from the minter key concurrently.
+model WorkerLease {
+  name      String   @id
+  holder    String
+  expiresAt DateTime
+  updatedAt DateTime @updatedAt
 }

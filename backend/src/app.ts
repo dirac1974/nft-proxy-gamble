@@ -17,12 +17,23 @@ import adminRoutes from "./routes/admin.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { config } from "./config/index.js";
 import { getPendingBatchSize } from "./services/purchaseCommitmentService.js";
+import { userOrIpKey } from "./middleware/attestationRateLimit.js";
 
 export function createApp(): express.Application {
   const app = express();
 
+  // Rate limiters and req.ip must see the real client IP, not the edge/LB IP.
+  // TRUST_PROXY = number of proxy hops in front of the app (default 1 in
+  // production). Never "true": that trusts a client-supplied X-Forwarded-For.
+  app.set("trust proxy", config.TRUST_PROXY);
+
   app.use(helmet());
-  app.use(cors());
+  // CORS allowlist (CORS_ORIGINS). Production default: no browser origin is
+  // allowed. Native mobile apps send no Origin header and are unaffected.
+  // Outside production with CORS_ORIGINS unset, any origin is allowed (dev).
+  const corsOrigin: cors.CorsOptions["origin"] =
+    config.CORS_ORIGINS_SET || config.NODE_ENV === "production" ? config.CORS_ORIGINS : true;
+  app.use(cors({ origin: corsOrigin }));
   // Bound request bodies (FABLE-2026-07 M-4). Apple receipts are the largest
   // legitimate payload and sit well under this; the cap prevents large-payload
   // memory-pressure DoS on the unauthenticated-ish JSON parser.
@@ -30,7 +41,9 @@ export function createApp(): express.Application {
 
   const skipInTest = () => config.NODE_ENV === "test";
   const authLimiter = rateLimit({ windowMs: 60_000, max: 10, skip: skipInTest, standardHeaders: true, legacyHeaders: false });
-  const gameLimiter = rateLimit({ windowMs: 60_000, max: 60, skip: skipInTest, standardHeaders: true, legacyHeaders: false });
+  // Keyed per authenticated user (fallback IP) so NAT/shared-IP users do not
+  // share one budget and an abuser cannot dodge it by rotating IPs.
+  const gameLimiter = rateLimit({ windowMs: 60_000, max: 60, keyGenerator: userOrIpKey, skip: skipInTest, standardHeaders: true, legacyHeaders: false });
 
   // /health is the canonical liveness probe. Now also surfaces internal
   // backlog metrics so monitoring (per docs/MONITORING_ALERTS_SPEC.md) can

@@ -4,10 +4,10 @@ import { prisma } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { requireAllowedJurisdiction } from "../middleware/jurisdictionBlock.js";
-import { unattestedRateLimit } from "../middleware/attestationRateLimit.js";
+import { moneyPathRateLimit } from "../middleware/attestationRateLimit.js";
 import { verifyAppleReceipt, verifyGoogleReceipt } from "../services/iapVerifier.js";
 import { signBalance } from "../services/balanceSigning.js";
-import { queuePurchaseCommitment } from "../services/purchaseCommitmentService.js";
+import { kickChainWorker } from "../services/chainWorker.js";
 import { recordAnalyticsEvent } from "../services/analyticsService.js";
 import { checkDeviceAttestation } from "../services/deviceAttestationService.js";
 import type { AttestationPlatform } from "../types/index.js";
@@ -26,7 +26,7 @@ const purchaseSchema = z.discriminatedUnion("platform", [
   }),
 ]);
 
-router.post("/verify-purchase", requireAuth, requireAllowedJurisdiction, unattestedRateLimit, async (req, res, next) => {
+router.post("/verify-purchase", requireAuth, requireAllowedJurisdiction, moneyPathRateLimit, async (req, res, next) => {
   try {
     const body = purchaseSchema.parse(req.body);
     const userId = req.user!.userId;
@@ -70,13 +70,9 @@ router.post("/verify-purchase", requireAuth, requireAllowedJurisdiction, unattes
       (err) => console.error("[analytics] iap event error:", err),
     );
 
-    // Queue on-chain commitment (async — does not block coin credit)
-    queuePurchaseCommitment({
-      user: user.walletAddress as `0x${string}`,
-      coinsAdded: result.coinsGranted,
-      receiptHash: `0x${result.receiptHash}` as `0x${string}`,
-      iapRecordId: receipt.id,
-    }).catch((err) => console.error("[commitPurchase] queue failed", err));
+    // On-chain PurchaseCommitted audit: the IAPReceipt row (commitStatus
+    // PENDING) is the durable job; the chain worker sends it. Never blocks here.
+    kickChainWorker();
 
     res.json({
       coinsGranted: result.coinsGranted,

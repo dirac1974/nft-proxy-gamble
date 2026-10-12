@@ -1,6 +1,7 @@
 import { prisma } from "../db/client.js";
 import { AppError } from "../middleware/errorHandler.js";
-import { mintVoucher } from "./mintOrchestrator.js";
+import { sessionIdToBytes32 } from "./mintOrchestrator.js";
+import { kickChainWorker } from "./chainWorker.js";
 import { recordAnalyticsEvent, getRiskLevel } from "./analyticsService.js";
 import { checkDeviceAttestation } from "./deviceAttestationService.js";
 import type { Request } from "express";
@@ -188,7 +189,16 @@ export async function performCashout(req: CashoutRequest): Promise<CashoutResult
       }
 
       const v = await tx.nFTVoucher.create({
-        data: { userId, sessionId, coinBalance: coinsToCashout, gameType, mintStatus: "PENDING" },
+        // The voucher row is the durable mint job (services/mintWorker.ts).
+        // onChainSessionId: keccak256(utf8(sessionId)) — full id, never truncated (L-4).
+        data: {
+          userId,
+          sessionId,
+          coinBalance: coinsToCashout,
+          gameType,
+          mintStatus: "PENDING",
+          onChainSessionId: sessionIdToBytes32(sessionId),
+        },
       });
       await tx.transaction.create({
         data: {
@@ -215,11 +225,10 @@ export async function performCashout(req: CashoutRequest): Promise<CashoutResult
     console.error("[analytics] cashout event error:", err),
   );
 
-  // Async mint — client polls /nfts/:id for status.
-  const { voucherId, sessionId } = result;
-  triggerMint(voucherId, user.walletAddress, coinsToCashout, gameType, sessionId).catch((err) =>
-    console.error("[mint] failed for voucher", voucherId, err),
-  );
+  // Durable async mint: the PENDING voucher row is picked up by the chain
+  // worker (retry / reconcile / refund). Client polls /nfts/:id for status.
+  const { voucherId } = result;
+  kickChainWorker();
 
   return {
     voucherId,
@@ -242,24 +251,4 @@ async function replayResult(userId: string, replay: { voucherId: string; mintSta
     remainingToday: Math.max(0, MAX_CASHOUTS_PER_DAY - today),
     replayed: true,
   };
-}
-
-async function triggerMint(
-  voucherId: string,
-  walletAddress: string,
-  coinAmount: number,
-  gameType: string,
-  sessionId: string,
-): Promise<void> {
-  await prisma.nFTVoucher.update({ where: { id: voucherId }, data: { mintStatus: "MINTING" } });
-  try {
-    const { txHash, tokenId } = await mintVoucher(walletAddress, coinAmount, gameType, sessionId);
-    await prisma.nFTVoucher.update({
-      where: { id: voucherId },
-      data: { mintStatus: "MINTED", txHash, tokenId },
-    });
-  } catch (err) {
-    await prisma.nFTVoucher.update({ where: { id: voucherId }, data: { mintStatus: "FAILED" } });
-    throw err;
-  }
 }

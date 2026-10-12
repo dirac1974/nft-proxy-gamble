@@ -145,7 +145,7 @@ describe("POST /keno/play", () => {
     expect(b.netProfit).toBe(b.totalReturn - 20);
     expect(b.capped).toBe(false);
     expect(b.coinBalance).toBe(5000 - 20 + b.totalReturn);
-    expect(b.balanceSig).toMatch(/^[0-9a-f]{64}$/);
+    expect(b.balanceSig).toMatch(/^[0-9a-f]{128}$/);
     expect(await balance()).toBe(b.coinBalance);
 
     const txs = await prisma.transaction.findMany({ where: { sessionId: s.sessionId }, orderBy: { createdAt: "asc" } });

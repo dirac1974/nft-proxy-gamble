@@ -133,12 +133,18 @@ export async function switchToRequiredNetwork(): Promise<void> {
 
 export async function signAndAuthenticate(address: Address): Promise<void> {
   const client = getWalletClient();
-  const { nonce } = await authApi.nonce(address);
+  const { nonce, message } = await authApi.nonce(address);
+  // EIP-4361 (SIWE): sign the full server-issued message. Refuse anything that
+  // isn't bound to this address and nonce, so a tampered response can't make
+  // the user sign an arbitrary statement.
+  if (message && (!message.toLowerCase().includes(address.toLowerCase()) || !message.includes(nonce))) {
+    throw new Error("Sign-in message didn't match this wallet. Please try again.");
+  }
   const signature = await client.signMessage({
     account: client.account ?? address,
-    message: nonce,
+    message: message ?? nonce,
   });
-  const { token, userId, ageConfirmed } = await authApi.verify(address, signature);
+  const { token, userId, ageConfirmed } = await authApi.verify(address, signature, message);
   useWalletStore.getState().connect(address);
   useWalletStore.getState().setJwt(token, userId, ageConfirmed);
 }

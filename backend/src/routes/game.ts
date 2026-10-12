@@ -4,7 +4,7 @@ import { prisma } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { requireAllowedJurisdiction } from "../middleware/jurisdictionBlock.js";
-import { unattestedRateLimit } from "../middleware/attestationRateLimit.js";
+import { moneyPathRateLimit } from "../middleware/attestationRateLimit.js";
 import {
   generateClientSeed,
   createHandRecord,
@@ -279,7 +279,7 @@ const cashoutSchema = z.object({
   coinsToCashout: z.number().int().min(MIN_CASHOUT_COINS).max(MAX_CASHOUT_COINS),
 });
 
-router.post("/cashout", requireAuth, requireAllowedJurisdiction, unattestedRateLimit, async (req, res, next) => {
+router.post("/cashout", requireAuth, requireAllowedJurisdiction, moneyPathRateLimit, async (req, res, next) => {
   try {
     const { sessionId, coinsToCashout } = cashoutSchema.parse(req.body);
     const userId = req.user!.userId;

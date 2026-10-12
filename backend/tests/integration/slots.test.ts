@@ -125,7 +125,7 @@ describe("POST /slots/spin — base game", () => {
     expect(b.totalReturn).toBe(b.spin.totalWin);
     expect(b.netProfit).toBe(b.totalReturn - 50);
     expect(b.coinBalance).toBe(100_000 - 50 + b.totalReturn);
-    expect(b.balanceSig).toMatch(/^[0-9a-f]{64}$/);
+    expect(b.balanceSig).toMatch(/^[0-9a-f]{128}$/);
     expect(await balance()).toBe(b.coinBalance);
 
     const txs = await prisma.transaction.findMany({ where: { sessionId: s.sessionId }, orderBy: { createdAt: "asc" } });

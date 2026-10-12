@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { requireAllowedJurisdiction } from "../middleware/jurisdictionBlock.js";
-import { unattestedRateLimit } from "../middleware/attestationRateLimit.js";
+import { moneyPathRateLimit } from "../middleware/attestationRateLimit.js";
 import { signBalance } from "../services/balanceSigning.js";
 import {
   IDEMPOTENCY_KEY_RE,
@@ -24,7 +24,7 @@ const cashoutSchema = z.object({
   idempotencyKey: z.string().regex(IDEMPOTENCY_KEY_RE).optional(),
 });
 
-router.post("/cashout", requireAuth, requireAllowedJurisdiction, unattestedRateLimit, async (req, res, next) => {
+router.post("/cashout", requireAuth, requireAllowedJurisdiction, moneyPathRateLimit, async (req, res, next) => {
   try {
     const { coinsToCashout, idempotencyKey } = cashoutSchema.parse(req.body);
     const userId = req.user!.userId;
