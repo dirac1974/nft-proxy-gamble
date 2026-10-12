@@ -1,140 +1,163 @@
-import React, { useEffect } from "react";
-import { Modal, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useMemo } from "react";
+import { Dimensions, Modal, Pressable, StyleSheet, View } from "react-native";
 import Animated, {
-  useSharedValue,
+  Easing,
   useAnimatedStyle,
-  withSequence,
-  withTiming,
-  withSpring,
+  useSharedValue,
   withDelay,
-  runOnJS,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
 } from "react-native-reanimated";
-import { colors, spacing, typography } from "@/theme";
+import { fonts, motion, palette, shadows, spacing } from "@/theme";
+import { AppText, CoinIcon, haptic, useRollingNumber } from "@/components/ui";
+import { formatCoins } from "@/config/brand";
+import { playSound } from "@/services/soundService";
 
 export type WinTier = "big" | "medium" | "small";
 
+/**
+ * Tier by NET win relative to stake. Returns null when nothing was won
+ * (push or loss) so callers never celebrate a loss disguised as a win.
+ */
+export function classifyWin(net: number, bet: number): WinTier | null {
+  if (net <= 0 || bet <= 0) return null;
+  const mult = net / bet;
+  if (mult >= 25) return "big";
+  if (mult >= 5) return "medium";
+  return "small";
+}
+
 interface WinOverlayProps {
   visible: boolean;
-  rank: string;
-  payout: number;
   tier: WinTier;
+  /** Headline, e.g. hand name ("Full House") or "Blackjack". */
+  title: string;
+  /** Net coins won (payout − stake). */
+  amount: number;
   onDismiss: () => void;
 }
 
-/** Auto-dismisses after 2.5 s. Manual tap also dismisses. */
-export function WinOverlay({ visible, rank, payout, tier, onDismiss }: WinOverlayProps) {
-  const scale = useSharedValue(0);
+const DURATION: Record<WinTier, number> = { small: 1600, medium: 2600, big: 4200 };
+const COUNT: Record<WinTier, number> = { small: motion.countSmall, medium: motion.countMedium, big: motion.countBig };
+const { width: SW, height: SH } = Dimensions.get("window");
+
+function FallingCoin({ index }: { index: number }) {
+  const seed = useMemo(() => {
+    const r = (n: number) => ((Math.sin(index * 9301 + n * 49297) + 1) / 2) % 1;
+    return { x: r(1) * SW, delay: r(2) * 1400, dur: 1400 + r(3) * 900, size: 16 + r(4) * 18, spin: r(5) > 0.5 ? 1 : -1 };
+  }, [index]);
+  const y = useSharedValue(-60);
+  const rot = useSharedValue(0);
+  useEffect(() => {
+    y.value = withDelay(seed.delay, withTiming(SH + 60, { duration: seed.dur, easing: Easing.in(Easing.quad) }));
+    rot.value = withDelay(seed.delay, withRepeat(withTiming(seed.spin, { duration: 500 }), -1, true));
+  }, [seed, y, rot]);
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateY: y.value }, { scaleX: 0.35 + Math.abs(rot.value) * 0.65 }],
+  }));
+  return (
+    <Animated.View style={[styles.coin, { left: seed.x }, style]} pointerEvents="none">
+      <CoinIcon size={seed.size} />
+    </Animated.View>
+  );
+}
+
+export function WinOverlay({ visible, tier, title, amount, onDismiss }: WinOverlayProps) {
+  const scale = useSharedValue(0.6);
   const opacity = useSharedValue(0);
-  const glow = useSharedValue(0);
+  const shine = useSharedValue(0);
+  const shown = useRollingNumber(visible ? amount : 0, COUNT[tier]);
 
   useEffect(() => {
     if (!visible) {
-      scale.value = 0;
+      scale.value = 0.6;
       opacity.value = 0;
-      glow.value = 0;
       return;
     }
+    opacity.value = withTiming(1, { duration: 180 });
+    scale.value = withSpring(1, { damping: 11, stiffness: 160 });
+    shine.value = withRepeat(withSequence(withTiming(1, { duration: 900 }), withTiming(0, { duration: 900 })), -1);
+    haptic(tier === "big" ? "heavy" : "success");
+    void playSound(tier === "big" ? "win_big" : tier === "medium" ? "win_medium" : "win_small");
+    const t = setTimeout(onDismiss, DURATION[tier]);
+    return () => clearTimeout(t);
+  }, [visible, tier, onDismiss, scale, opacity, shine]);
 
-    opacity.value = withTiming(1, { duration: 200 });
-    scale.value = withSequence(
-      withTiming(0, { duration: 0 }),
-      withSpring(1.1, { damping: 8, stiffness: 180 }),
-      withDelay(1800, withTiming(0, { duration: 400 }))
-    );
-    glow.value = withSequence(
-      withTiming(1, { duration: 300 }),
-      withDelay(1600, withTiming(0, { duration: 400 }))
-    );
-
-    const timeout = setTimeout(() => {
-      runOnJS(onDismiss)();
-    }, 2500);
-    return () => clearTimeout(timeout);
-  }, [visible, scale, opacity, glow, onDismiss]);
-
-  const containerStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-    opacity: opacity.value,
-  }));
-
-  const glowStyle = useAnimatedStyle(() => ({
-    shadowOpacity: glow.value * (tier === "big" ? 0.9 : 0.5),
-    shadowRadius: glow.value * (tier === "big" ? 40 : 20),
-  }));
+  const cardStyle = useAnimatedStyle(() => ({ opacity: opacity.value, transform: [{ scale: scale.value }] }));
+  const glowStyle = useAnimatedStyle(() => ({ opacity: 0.35 + shine.value * 0.4 }));
 
   if (!visible) return null;
 
-  const glowColor = tier === "big" ? colors.neonGreen : colors.win;
-  const emoji = tier === "big" ? "🏆" : tier === "medium" ? "🎉" : "✨";
-
+  const big = tier === "big";
   return (
-    <Modal transparent visible={visible} animationType="none" onRequestClose={onDismiss}>
-      <View style={styles.backdrop} onTouchEnd={onDismiss}>
+    <Modal transparent visible animationType="fade" onRequestClose={onDismiss} statusBarTranslucent>
+      <Pressable style={[styles.backdrop, big && styles.backdropBig]} onPress={onDismiss} accessibilityLabel="Dismiss">
+        {big && Array.from({ length: 28 }, (_, i) => <FallingCoin key={i} index={i} />)}
         <Animated.View
-          style={[styles.card, { shadowColor: glowColor, borderColor: glowColor }, containerStyle, glowStyle]}
+          style={[styles.card, big && styles.cardBig, cardStyle]}
           accessibilityRole="alert"
-          accessibilityLabel={`${rank} wins ${payout} coins`}
+          accessibilityLabel={`${title}. You win ${formatCoins(amount)} coins`}
           accessible
         >
-          <Text style={styles.emoji}>{emoji}</Text>
-          <Text style={[styles.rank, { color: glowColor }]}>{rank}</Text>
-          <Text style={styles.payout}>+{payout} coins</Text>
-          {tier === "big" && (
-            <Text style={styles.bigWinLabel}>BIG WIN!</Text>
+          <Animated.View style={[styles.glow, glowStyle]} pointerEvents="none" />
+          {big && (
+            <AppText style={styles.bigWin} testID="big-win-label">
+              BIG WIN
+            </AppText>
           )}
+          <AppText style={[styles.title, big && styles.titleBig]} align="center">
+            {title}
+          </AppText>
+          <View style={styles.amountRow}>
+            <CoinIcon size={big ? 30 : 24} />
+            <AppText style={[styles.amount, big && styles.amountBig]}>+{formatCoins(shown)}</AppText>
+          </View>
+          <AppText variant="caption" align="center">
+            Tap to continue
+          </AppText>
         </Animated.View>
-      </View>
+      </Pressable>
     </Modal>
   );
 }
 
-/**
- * Classify payout into a tier for overlay intensity.
- * big: Royal Flush / Straight Flush (payout ≥ 50)
- * medium: 4-of-a-kind / Full House (payout ≥ 9)
- * small: everything else that pays out
- */
-export function classifyWin(payout: number, betAmount: number): WinTier | null {
-  if (payout <= 0) return null;
-  const perCoin = payout / betAmount;
-  if (perCoin >= 50) return "big";
-  if (perCoin >= 9) return "medium";
-  return "small";
-}
-
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  backdrop: { flex: 1, backgroundColor: "rgba(4,6,10,0.6)", alignItems: "center", justifyContent: "center" },
+  backdropBig: { backgroundColor: "rgba(4,6,10,0.82)" },
+  coin: { position: "absolute", top: 0 },
   card: {
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: 24,
-    borderWidth: 2,
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.xxl,
+    minWidth: 260,
     alignItems: "center",
     gap: spacing.sm,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 24,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    borderRadius: 24,
+    backgroundColor: palette.bgRaised,
+    borderWidth: 1.5,
+    borderColor: palette.gold,
+    ...shadows.goldGlow,
   },
-  emoji: { fontSize: 56 },
-  rank: {
-    ...typography.heading1,
-    textAlign: "center",
-    letterSpacing: 2,
+  cardBig: { paddingVertical: spacing.xl, minWidth: 300 },
+  glow: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 24,
+    borderWidth: 6,
+    borderColor: "rgba(233,196,106,0.25)",
   },
-  payout: {
-    ...typography.heading2,
-    color: colors.neonGreen,
-    textAlign: "center",
+  bigWin: {
+    fontFamily: fonts.displayBlack,
+    fontSize: 44,
+    lineHeight: 52,
+    color: palette.gold,
+    letterSpacing: 3,
+    textShadowColor: "rgba(233,196,106,0.6)",
+    textShadowRadius: 18,
   },
-  bigWinLabel: {
-    ...typography.caption,
-    color: colors.neonGreen,
-    letterSpacing: 6,
-    marginTop: spacing.xs,
-  },
+  title: { fontFamily: fonts.display, fontSize: 22, color: palette.text, letterSpacing: 1 },
+  titleBig: { fontSize: 26 },
+  amountRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  amount: { fontFamily: fonts.heavy, fontSize: 30, color: palette.emerald, fontVariant: ["tabular-nums"] },
+  amountBig: { fontSize: 38 },
 });

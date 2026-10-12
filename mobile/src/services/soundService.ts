@@ -1,58 +1,123 @@
 import { Audio } from "expo-av";
+import { useSettingsStore } from "@/stores/settingsStore";
+import { SFX_ASSETS, VOICE_ASSETS, ROULETTE_NUMBER_ASSETS } from "@/assets/sounds/manifest";
 
-// Sound keys
-export type SoundKey = "deal" | "hold" | "win" | "bigWin" | "lose" | "coinDrop";
+// Audio direction: understated casino foley + a single calm dealer voice
+// (ElevenLabs, see scripts/gen-audio.mjs). Never celebrate losses; no voice on losses.
 
-type SoundMap = Partial<Record<SoundKey, Audio.Sound>>;
+export type SfxKey = keyof typeof SFX_ASSETS;
+export type VoiceKey = keyof typeof VOICE_ASSETS;
+/** @deprecated legacy keys kept for older call sites */
+export type LegacySoundKey = "deal" | "hold" | "win" | "bigWin" | "lose" | "coinDrop";
+export type SoundKey = SfxKey | LegacySoundKey;
 
-let sounds: SoundMap = {};
-let initialized = false;
-
-// Asset map — add .mp3 files to mobile/src/assets/sounds/ to activate
-const SOUND_ASSETS: Record<SoundKey, number | null> = {
-  deal: null,      // require("@/assets/sounds/deal.mp3")
-  hold: null,      // require("@/assets/sounds/hold.mp3")
-  win: null,       // require("@/assets/sounds/win.mp3")
-  bigWin: null,    // require("@/assets/sounds/bigwin.mp3")
-  lose: null,      // require("@/assets/sounds/lose.mp3")
-  coinDrop: null,  // require("@/assets/sounds/coindrop.mp3")
+const LEGACY: Record<LegacySoundKey, SfxKey> = {
+  deal: "card_deal",
+  hold: "card_hold",
+  win: "win_small",
+  bigWin: "win_big",
+  lose: "lose",
+  coinDrop: "chip_place",
 };
 
-export async function initSounds(): Promise<void> {
-  if (initialized) return;
-  initialized = true;
+const VOLUME: Partial<Record<SfxKey, number>> = {
+  ui_tap: 0.35,
+  ui_toggle: 0.45,
+  count_tick: 0.3,
+  lose: 0.5,
+  card_hold: 0.6,
+};
 
-  await Audio.setAudioModeAsync({
-    playsInSilentModeIOS: false,
-    staysActiveInBackground: false,
-  });
+const sfx: Partial<Record<SfxKey, Audio.Sound>> = {};
+const voices = new Map<string, Audio.Sound>();
+let initPromise: Promise<void> | null = null;
+let currentVoice: Audio.Sound | null = null;
 
-  for (const [key, asset] of Object.entries(SOUND_ASSETS) as [SoundKey, number | null][]) {
-    if (!asset) continue;
+export function initSounds(): Promise<void> {
+  if (initPromise) return initPromise;
+  initPromise = (async () => {
     try {
-      const { sound } = await Audio.Sound.createAsync(asset, { shouldPlay: false });
-      sounds[key] = sound;
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: false,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+      });
     } catch {
-      // Missing asset — no-op; game still works without sound
+      // Audio mode unavailable (tests/web) — continue.
     }
-  }
+    await Promise.all(
+      (Object.entries(SFX_ASSETS) as [SfxKey, number][]).map(async ([key, asset]) => {
+        try {
+          const { sound } = await Audio.Sound.createAsync(asset, {
+            shouldPlay: false,
+            volume: VOLUME[key] ?? 0.8,
+          });
+          sfx[key] = sound;
+        } catch {
+          // Missing/unsupported asset — game works silently.
+        }
+      }),
+    );
+  })();
+  return initPromise;
 }
 
 export async function playSound(key: SoundKey): Promise<void> {
-  const sound = sounds[key];
+  if (!useSettingsStore.getState().soundOn) return;
+  const resolved: SfxKey = key in LEGACY ? LEGACY[key as LegacySoundKey] : (key as SfxKey);
+  const sound = sfx[resolved];
   if (!sound) return;
   try {
-    await sound.setPositionAsync(0);
-    await sound.playAsync();
+    await sound.replayAsync();
   } catch {
-    // Sound system error — swallow silently
+    // Swallow audio errors.
   }
 }
 
-export async function unloadSounds(): Promise<void> {
-  for (const sound of Object.values(sounds)) {
-    await sound?.unloadAsync().catch(() => null);
+export async function stopSound(key: SfxKey): Promise<void> {
+  await sfx[key]?.stopAsync().catch(() => null);
+}
+
+async function playVoiceAsset(id: string, asset: number | undefined): Promise<void> {
+  const s = useSettingsStore.getState();
+  if (!s.soundOn || !s.voiceOn || asset === undefined) return;
+  try {
+    let sound = voices.get(id);
+    if (!sound) {
+      ({ sound } = await Audio.Sound.createAsync(asset, { shouldPlay: false, volume: 1 }));
+      voices.set(id, sound);
+    }
+    if (currentVoice && currentVoice !== sound) await currentVoice.stopAsync().catch(() => null);
+    currentVoice = sound;
+    await sound.replayAsync();
+  } catch {
+    // Voice is optional.
   }
-  sounds = {};
-  initialized = false;
+}
+
+export function playVoice(key: VoiceKey): Promise<void> {
+  return playVoiceAsset(key, VOICE_ASSETS[key]);
+}
+
+export function playRouletteNumber(n: number): Promise<void> {
+  return playVoiceAsset(`n${n}`, ROULETTE_NUMBER_ASSETS[n]);
+}
+
+export async function unloadSounds(): Promise<void> {
+  const all = [...Object.values(sfx), ...voices.values()];
+  await Promise.all(all.map((s) => s?.unloadAsync().catch(() => null)));
+  for (const k of Object.keys(sfx)) delete sfx[k as SfxKey];
+  voices.clear();
+  currentVoice = null;
+  initPromise = null;
+}
+
+/** Pick the win sound by NET result relative to stake (responsible-gaming: no fanfare for pushes/losses). */
+export function winSoundFor(net: number, bet: number): SfxKey {
+  if (net < 0) return "lose";
+  if (net === 0) return "push";
+  const mult = bet > 0 ? net / bet : 0;
+  if (mult >= 25) return "win_big";
+  if (mult >= 5) return "win_medium";
+  return "win_small";
 }
