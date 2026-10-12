@@ -69,7 +69,7 @@ export function ConnectWalletSheet({ visible, onClose }: ConnectWalletSheetProps
     connectE2EWallet()
       .then(closeAll)
       .catch((e: unknown) => {
-        console.warn("[e2e-wallet]", e instanceof Error ? e.message : e);
+        if (__DEV__) console.warn("[e2e-wallet]", e instanceof Error ? e.message : e);
         setConnectionError(e instanceof Error ? e.message : "Test wallet failed");
       });
   };

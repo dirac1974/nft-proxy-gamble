@@ -2,13 +2,36 @@ import Constants from "expo-constants";
 import { useWalletStore } from "@/stores/walletStore";
 import { verifyAndExtractBalance, type SignedBalanceResponse } from "./balanceVerification";
 import { getAttestationHeaders } from "./deviceAttestationService";
+import { withClientSeed } from "./clientSeed";
+
+// M2: release builds may only talk to an allow-listed https backend.
+export const API_HOST_ALLOWLIST: readonly string[] = ["api.nftproxygamble.com", "api-staging.nftproxygamble.com"];
+
+function httpsHost(url: string | undefined): string | null {
+  const m = url ? /^https:\/\/([a-z0-9.-]+)(:\d+)?(\/.*)?$/i.exec(url.trim()) : null;
+  return m ? m[1]!.toLowerCase() : null;
+}
 
 // Bundle-time env wins over the config embedded at native build time, so a
 // rebuilt JS bundle always talks to the backend it was bundled for.
-const BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL ??
-  (Constants.expoConfig?.extra?.apiUrl as string | undefined) ??
-  "http://localhost:3000";
+export function resolveApiBaseUrl(envUrl: string | undefined, extraUrl: string | undefined, isDev: boolean): string {
+  const url = envUrl || extraUrl;
+  if (isDev) return (url ?? "http://localhost:3000").replace(/\/+$/, "");
+  if (!url) throw new Error("API URL not configured (EXPO_PUBLIC_API_URL) — refusing to start a release build");
+  const host = httpsHost(url);
+  if (!host) throw new Error(`API URL must be https:// in release builds (got ${url})`);
+  const allowed = new Set(API_HOST_ALLOWLIST);
+  const extraHost = httpsHost(extraUrl);
+  if (extraHost) allowed.add(extraHost);
+  if (!allowed.has(host)) throw new Error(`API host ${host} is not allow-listed`);
+  return url.trim().replace(/\/+$/, "");
+}
+
+const BASE_URL = resolveApiBaseUrl(
+  process.env.EXPO_PUBLIC_API_URL,
+  Constants.expoConfig?.extra?.apiUrl as string | undefined,
+  __DEV__,
+);
 
 export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = useWalletStore.getState().jwtToken;
@@ -79,16 +102,18 @@ export const balanceApi = {
 export type PokerVariant = "jacks-or-better" | "bonus-poker" | "deuces-wild";
 
 export const gameApi = {
-  startSession: (betAmount: number, variant: PokerVariant = "jacks-or-better") =>
-    request<{
-      sessionId: string;
-      gameType: string;
-      serverSeedHash: string;
-      clientSeed: string;
-      nextServerSeedHash?: string; // H-2 chain commitment for the next session
-    }>(
-      "/game/start-session",
-      { method: "POST", body: JSON.stringify({ betAmount, variant }) },
+  startSession: (betAmount: number, variant: PokerVariant = "jacks-or-better", clientSeed?: string) =>
+    withClientSeed("Video poker", clientSeed, (seed) =>
+      request<{
+        sessionId: string;
+        gameType: string;
+        serverSeedHash: string;
+        clientSeed: string;
+        nextServerSeedHash?: string; // H-2 chain commitment for the next session
+      }>(
+        "/game/start-session",
+        { method: "POST", body: JSON.stringify({ betAmount, variant, clientSeed: seed }) },
+      ),
     ),
 
   deal: (sessionId: string) =>
@@ -189,14 +214,16 @@ export interface RouletteSpinResult {
 }
 
 export const rouletteApi = {
-  startSession: () =>
-    request<{
-      sessionId: string;
-      gameType: string;
-      serverSeedHash: string;
-      clientSeed: string;
-      nextServerSeedHash?: string;
-    }>("/roulette/start-session", { method: "POST", body: JSON.stringify({}) }),
+  startSession: (clientSeed?: string) =>
+    withClientSeed("Roulette", clientSeed, (seed) =>
+      request<{
+        sessionId: string;
+        gameType: string;
+        serverSeedHash: string;
+        clientSeed: string;
+        nextServerSeedHash?: string;
+      }>("/roulette/start-session", { method: "POST", body: JSON.stringify({ clientSeed: seed }) }),
+    ),
 
   spin: async (sessionId: string, bets: RouletteBet[]): Promise<RouletteSpinResult> => {
     const resp = await request<
@@ -260,21 +287,23 @@ type RawRound = SignedBalanceResponse & Omit<BlackjackRound, "newBalance">;
 
 function toRound(resp: RawRound): BlackjackRound {
   const newBalance = extractVerifiedBalance(resp); // verifies the signed balance
-  const { coinBalance: _c, balanceSig: _b, sigTimestamp: _t, ...rest } = resp;
+  const { coinBalance: _c, balanceSig: _b, sigTimestamp: _t, sigAlg: _a, ...rest } = resp;
   return { ...(rest as Omit<BlackjackRound, "newBalance">), newBalance };
 }
 
 export const blackjackApi = {
-  startSession: () =>
-    request<{
-      sessionId: string;
-      gameType: string;
-      serverSeedHash: string;
-      clientSeed: string;
-      nextServerSeedHash?: string;
-      numDecks: number;
-      dealerHitsSoft17: boolean;
-    }>("/blackjack/start-session", { method: "POST", body: JSON.stringify({}) }),
+  startSession: (clientSeed?: string) =>
+    withClientSeed("Blackjack", clientSeed, (seed) =>
+      request<{
+        sessionId: string;
+        gameType: string;
+        serverSeedHash: string;
+        clientSeed: string;
+        nextServerSeedHash?: string;
+        numDecks: number;
+        dealerHitsSoft17: boolean;
+      }>("/blackjack/start-session", { method: "POST", body: JSON.stringify({ clientSeed: seed }) }),
+    ),
 
   deal: async (sessionId: string, bet: number): Promise<BlackjackRound> =>
     toRound(await request<RawRound>("/blackjack/deal", { method: "POST", body: JSON.stringify({ sessionId, bet }) })),

@@ -1,4 +1,6 @@
-// MUST be the very first import — installs URL, crypto, AsyncStorage, btoa/atob
+// MUST be the very first import — crypto.getRandomValues for client seeds (H1).
+import "react-native-get-random-values";
+// MUST come next — installs URL, crypto, AsyncStorage, btoa/atob
 // polyfills that the WalletConnect modal's native side reaches for at init.
 // Without this, iOS throws an uncaught NSException → abort() within ~1s of launch.
 import "@walletconnect/react-native-compat";
@@ -18,7 +20,7 @@ import {
 import { StatusBar } from "expo-status-bar";
 import { QueryClient, QueryClientProvider, focusManager } from "@tanstack/react-query";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 import { WalletConnectModal } from "@walletconnect/modal-react-native";
 import { colors } from "@/theme";
 import { useWalletStore } from "@/stores/walletStore";
@@ -29,7 +31,7 @@ import { GlobalSheets } from "@/components/GlobalSheets";
 import { AgeGateModal } from "@/components/AgeGateModal";
 import { NetworkBanner } from "@/components/NetworkBanner";
 import { BRAND } from "@/config/brand";
-import { E2E_WALLET_ENABLED } from "@/services/walletService";
+import { CHAIN, E2E_WALLET_ENABLED } from "@/services/walletService";
 
 SplashScreen.preventAutoHideAsync().catch(() => null);
 // Debug E2E runs only: dev warning toasts would cover on-screen controls.
@@ -54,8 +56,9 @@ const PROJECT_ID = process.env.EXPO_PUBLIC_WC_PROJECT_ID ?? "demo_project_id";
 const SESSION_PARAMS = {
   namespaces: {
     eip155: {
-      methods: ["eth_sign", "personal_sign"],
-      chains: ["eip155:80002"], // Polygon Amoy; switch to eip155:137 for mainnet
+      // M3: least privilege — sign-in (personal_sign) and redemption txs only; no blind eth_sign.
+      methods: ["personal_sign", "eth_sendTransaction"],
+      chains: [`eip155:${CHAIN.id}`], // from EXPO_PUBLIC_CHAIN_ID (walletService)
       events: ["accountsChanged", "chainChanged"],
     },
   },
@@ -66,7 +69,7 @@ const PROVIDER_METADATA = {
   description: BRAND.tagline,
   url: "https://nft-proxy-gamble.app",
   icons: ["https://nft-proxy-gamble.app/icon.png"],
-  redirect: { native: "nfpg://", universal: "" },
+  redirect: { native: "nftproxygamble://", universal: "" }, // must match app.config.js scheme
 };
 
 export default function RootLayout() {
@@ -101,7 +104,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <QueryClientProvider client={queryClient}>
           <StatusBar style="light" backgroundColor={colors.background} />
           <Stack

@@ -1,5 +1,6 @@
 import { extractVerifiedBalance, request } from "./api";
 import type { SignedBalanceResponse } from "./balanceVerification";
+import { withClientSeed } from "./clientSeed";
 
 export type KenoApiMode = "single" | "quad";
 
@@ -51,10 +52,12 @@ type RawPlay = SignedBalanceResponse & Omit<KenoPlayResult, "newBalance">;
 
 export const kenoApi = {
   startSession: (mode: KenoApiMode, clientSeed?: string) =>
-    request<KenoSession>("/keno/start-session", {
-      method: "POST",
-      body: JSON.stringify(clientSeed ? { mode, clientSeed } : { mode }),
-    }),
+    withClientSeed("Keno", clientSeed, (seed) =>
+      request<KenoSession>("/keno/start-session", {
+        method: "POST",
+        body: JSON.stringify({ mode, clientSeed: seed }),
+      }),
+    ),
 
   play: async (sessionId: string, cards: KenoCardBet[]): Promise<KenoPlayResult> => {
     const resp = await request<RawPlay>("/keno/play", {

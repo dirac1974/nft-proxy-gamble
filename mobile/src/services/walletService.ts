@@ -4,25 +4,66 @@ import { polygon, polygonAmoy } from "viem/chains";
 import { authApi } from "./api";
 import { useWalletStore } from "@/stores/walletStore";
 
-const IS_DEV = process.env.NODE_ENV !== "production";
+// M4: chain comes from an explicit EXPO_PUBLIC_CHAIN_ID (set per EAS profile),
+// never inferred from NODE_ENV. Release builds refuse to start without it.
+export const SUPPORTED_CHAIN_IDS = [polygonAmoy.id, polygon.id] as const;
+export type SupportedChainId = (typeof SUPPORTED_CHAIN_IDS)[number];
 
-// DEBUG-ONLY end-to-end test hooks. Both require __DEV__ (false in release
-// builds, so this code is dead-stripped) AND explicit EXPO_PUBLIC_E2E_* env at
-// bundle time. Used to drive the app on an emulator against a local chain.
-const E2E_CHAIN_RPC = __DEV__ ? process.env.EXPO_PUBLIC_E2E_CHAIN_RPC : undefined;
-const E2E_WALLET_PK = __DEV__ ? process.env.EXPO_PUBLIC_E2E_WALLET_PK : undefined;
-export const E2E_WALLET_ENABLED = __DEV__ && !!E2E_WALLET_PK && !!E2E_CHAIN_RPC;
+export function resolveChainId(raw: string | undefined, isDev: boolean): SupportedChainId {
+  if (!raw) {
+    if (isDev) return polygonAmoy.id;
+    throw new Error("EXPO_PUBLIC_CHAIN_ID is not set — refusing to start a release build");
+  }
+  const id = Number(raw);
+  if (!(SUPPORTED_CHAIN_IDS as readonly number[]).includes(id)) {
+    throw new Error(`EXPO_PUBLIC_CHAIN_ID must be one of ${SUPPORTED_CHAIN_IDS.join(", ")} (got ${raw})`);
+  }
+  return id as SupportedChainId;
+}
+
+const BASE_CHAIN = resolveChainId(process.env.EXPO_PUBLIC_CHAIN_ID, __DEV__) === polygon.id ? polygon : polygonAmoy;
+
+// DEBUG-ONLY end-to-end test hooks. All of: __DEV__ (false in release builds,
+// so this code is dead-stripped), explicit EXPO_PUBLIC_E2E_* env at bundle time,
+// EXPO_PUBLIC_E2E_CHAIN_ID=31337 and a loopback RPC. app.config.js and CI also
+// refuse EXPO_PUBLIC_E2E_* in any EAS build. Used to drive the app on an
+// emulator against a local chain.
+export const E2E_CHAIN_ID = 31337;
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "10.0.2.2"]);
+
+export function isLoopbackRpc(url: string | undefined): boolean {
+  const m = url ? /^https?:\/\/([^/:?#]+)(:\d+)?([/?#].*)?$/i.exec(url.trim()) : null;
+  return !!m && LOOPBACK_HOSTS.has(m[1]!.toLowerCase());
+}
+
+export function e2eAllowed(isDev: boolean, rpc: string | undefined, pk: string | undefined, chainId: string | undefined): boolean {
+  return isDev && !!pk && !!rpc && chainId === String(E2E_CHAIN_ID) && isLoopbackRpc(rpc);
+}
+
+const E2E_ENABLED_RAW = __DEV__
+  ? e2eAllowed(
+      __DEV__,
+      process.env.EXPO_PUBLIC_E2E_CHAIN_RPC,
+      process.env.EXPO_PUBLIC_E2E_WALLET_PK,
+      process.env.EXPO_PUBLIC_E2E_CHAIN_ID,
+    )
+  : false;
+// Every EXPO_PUBLIC_E2E_* read sits directly behind a literal __DEV__ so the minifier
+// drops it from release bundles (CI greps the exported bundle to prove it).
+const E2E_CHAIN_RPC = __DEV__ && E2E_ENABLED_RAW ? process.env.EXPO_PUBLIC_E2E_CHAIN_RPC : undefined;
+const E2E_WALLET_PK = __DEV__ && E2E_ENABLED_RAW ? process.env.EXPO_PUBLIC_E2E_WALLET_PK : undefined;
+export const E2E_WALLET_ENABLED = __DEV__ && E2E_ENABLED_RAW;
 
 const E2E_CHAIN = E2E_CHAIN_RPC
   ? defineChain({
-      id: 31337,
+      id: E2E_CHAIN_ID,
       name: "Local test chain",
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
       rpcUrls: { default: { http: [E2E_CHAIN_RPC] } },
     })
   : null;
 
-export const CHAIN = E2E_CHAIN ?? (IS_DEV ? polygonAmoy : polygon);
+export const CHAIN = E2E_CHAIN ?? BASE_CHAIN;
 
 let _walletClient: WalletClient | null = null;
 let _provider: unknown = null;

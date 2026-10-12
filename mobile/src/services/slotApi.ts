@@ -1,5 +1,6 @@
 import { request, extractVerifiedBalance } from "./api";
 import type { SignedBalanceResponse } from "./balanceVerification";
+import { withClientSeed } from "./clientSeed";
 import {
   BET_LEVELS,
   FEATURE_OPTIONS,
@@ -228,11 +229,13 @@ export function normalizePaytable(raw: Raw): SlotPaytable {
 
 export const slotApi = {
   startSession: async (clientSeed?: string): Promise<SlotSession> =>
-    normalizeSession(
-      await request<Raw>("/slots/start-session", {
-        method: "POST",
-        body: JSON.stringify(clientSeed ? { clientSeed } : {}),
-      }),
+    withClientSeed("Slots", clientSeed, async (seed) =>
+      normalizeSession(
+        await request<Raw>("/slots/start-session", {
+          method: "POST",
+          body: JSON.stringify({ clientSeed: seed }),
+        }),
+      ),
     ),
 
   spin: async (sessionId: string, betLevel: number): Promise<SlotSpinResult> => {
