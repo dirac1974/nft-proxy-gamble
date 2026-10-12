@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -7,16 +7,18 @@ import { AppText, Button, CoinIcon, Sheet, haptic } from "@/components/ui";
 import { useGameStore } from "@/stores/gameStore";
 import { useWalletStore } from "@/stores/walletStore";
 import { useUiStore } from "@/stores/uiStore";
-import { gameApi, rouletteApi } from "@/services/api";
+import { newIdempotencyKey, walletApi } from "@/services/api";
 import { playSound } from "@/services/soundService";
 import { BRAND, coinsToUsd, formatCoins } from "@/config/brand";
 import { fonts, palette, radius, spacing } from "@/theme";
 
-// Backend: POST /game/cashout takes { sessionId, coinsToCashout } with
-// coinsToCashout an int ≥ 100 (MIN_COIN_BALANCE) and ≤ balance, so partial amounts
-// are supported. It needs an ACTIVE session; outside a game we open a fresh
-// roulette session (free, no wager, starts ACTIVE) purely as the cash-out anchor.
+// Backend: POST /wallet/cashout takes { coinsToCashout, idempotencyKey? } with
+// coinsToCashout an int in [100, 100_000] and ≤ balance, so partial amounts are
+// supported. No game session needed. One idempotency key per (sheet open, amount):
+// re-tapping Confirm after a network error replays the original cash-out
+// instead of creating a second one.
 const MIN_CASHOUT = 100;
+const MAX_CASHOUT = 100_000; // NFTProxyVoucher.MAX_COIN_BALANCE
 const STEP = 100;
 
 interface CashOutSheetProps {
@@ -41,14 +43,17 @@ export function CashOutSheet({ visible, onClose }: CashOutSheetProps) {
   const setBalance = useGameStore((s) => s.setBalance);
   const isAuthenticated = useWalletStore((s) => s.isAuthenticated);
   const qc = useQueryClient();
+  const idemKey = useRef<{ coins: number; key: string } | null>(null);
 
-  const maxCashOut = Math.floor(balance);
+  const maxCashOut = Math.min(Math.floor(balance), MAX_CASHOUT);
   const [amount, setAmount] = useState(maxCashOut);
 
   const mutation = useMutation({
-    mutationFn: async (coins: number) => {
-      const { sessionId } = await rouletteApi.startSession();
-      return gameApi.cashout(sessionId, coins);
+    mutationFn: (coins: number) => {
+      const k = idemKey.current;
+      const key = k && k.coins === coins ? k.key : newIdempotencyKey();
+      idemKey.current = { coins, key };
+      return walletApi.cashout(coins, key);
     },
     onSuccess: (res) => {
       setBalance(res.newBalance);
@@ -66,7 +71,8 @@ export function CashOutSheet({ visible, onClose }: CashOutSheetProps) {
   // Reset each time the sheet opens.
   useEffect(() => {
     if (visible) {
-      setAmount(Math.floor(useGameStore.getState().coinBalance));
+      idemKey.current = null;
+      setAmount(Math.min(Math.floor(useGameStore.getState().coinBalance), MAX_CASHOUT));
       mutation.reset();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -197,7 +203,7 @@ export function CashOutSheet({ visible, onClose }: CashOutSheetProps) {
               You'll get {coinsToUsd(clamped)} USDC as a voucher
             </AppText>
             <AppText variant="bodySmall" align="center">
-              {BRAND.coinsPerUsd} coins = $1. Balance after: {formatCoins(maxCashOut - clamped)} coins.
+              {BRAND.coinsPerUsd} coins = $1. Balance after: {formatCoins(Math.floor(balance) - clamped)} coins.
             </AppText>
             <AppText variant="caption" align="center">
               The voucher appears in Wallet. Turn it into USDC whenever you like.

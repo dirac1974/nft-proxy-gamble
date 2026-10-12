@@ -12,6 +12,7 @@ import slotsRoutes from "./routes/slots.js";
 import attestationRoutes from "./routes/attestation.js";
 import blackjackRoutes from "./routes/blackjack.js";
 import nftRoutes from "./routes/nfts.js";
+import walletRoutes from "./routes/wallet.js";
 import adminRoutes from "./routes/admin.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { config } from "./config/index.js";
@@ -51,6 +52,7 @@ export function createApp(): express.Application {
   app.use("/attestation", gameLimiter, attestationRoutes);
   app.use("/blackjack", gameLimiter, blackjackRoutes);
   app.use("/nfts", gameLimiter, nftRoutes);
+  app.use("/wallet", gameLimiter, walletRoutes);
   app.use("/admin", gameLimiter, adminRoutes);
 
   app.use(errorHandler);

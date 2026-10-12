@@ -5,7 +5,12 @@ import { requireAuth } from "../middleware/auth.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { signBalance } from "../services/balanceSigning.js";
 import { recordAnalyticsEvent } from "../services/analyticsService.js";
-import { consumeServerSeed, prismaChainStore } from "../services/serverSeedChain.js";
+import {
+  CLIENT_SEED_MESSAGE,
+  CLIENT_SEED_RE,
+  consumeServerSeed,
+  prismaChainStore,
+} from "../services/serverSeedChain.js";
 import {
   ROULETTE_GAME_TYPE,
   MAX_BETS_PER_SPIN,
@@ -23,7 +28,7 @@ const router = Router();
 // and fixes clientSeed BEFORE the player places bets. betAmount is unused for
 // roulette (wager is placed at spin time), stored as 0.
 const startSchema = z.object({
-  clientSeed: z.string().min(1).max(256).optional(),
+  clientSeed: z.string().regex(CLIENT_SEED_RE, CLIENT_SEED_MESSAGE).optional(),
 });
 
 router.post("/start-session", requireAuth, async (req, res, next) => {
@@ -132,13 +137,16 @@ router.post("/spin", requireAuth, async (req, res, next) => {
     let postBalance: number;
     try {
       postBalance = await prisma.$transaction(async (tx) => {
-        // Concurrency claim: flip ACTIVE→AWAITING_DRAW so two parallel /spin
-        // calls can't both settle. The loser hits P2025 (state no longer ACTIVE).
-        // We restore state to ACTIVE at the end so the player can still cashout.
-        await tx.gameSession.update({
-          where: { id: sessionId, state: "ACTIVE" },
-          data: { state: "AWAITING_DRAW" },
-        });
+        // Concurrency claim ACTIVE→AWAITING_DRAW in ONE conditional statement that
+        // also requires hands = []. State alone is not enough: the winner restores
+        // ACTIVE at the end, so a loser queued on the row lock re-evaluates
+        // (Postgres EvalPlanQual) state='ACTIVE' as true and would settle again.
+        // The hands predicate is false after the first settlement → 0 rows → 409.
+        const claimed = await tx.$executeRaw`
+          UPDATE "GameSession" SET "state" = 'AWAITING_DRAW', "updatedAt" = NOW()
+          WHERE "id" = ${sessionId} AND "userId" = ${userId}
+            AND "state" = 'ACTIVE' AND "hands" = '[]'::jsonb`;
+        if (claimed !== 1) throw Object.assign(new Error("claim lost"), { code: "P2025" });
 
         // Atomic conditional debit of the total wager.
         const dec = await tx.user.update({

@@ -128,6 +128,32 @@ export const gameApi = {
   },
 };
 
+// Wallet — session-less cashout (POST /wallet/cashout). Same server gates as
+// /game/cashout. idempotencyKey ([A-Za-z0-9_-]{8,64}) makes a retry of the same
+// request return the original voucher instead of cashing out twice.
+export function newIdempotencyKey(): string {
+  return `co-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+export const walletApi = {
+  cashout: async (
+    coinsToCashout: number,
+    idempotencyKey?: string,
+  ): Promise<{ voucherId: string; mintStatus: string; newBalance: number }> => {
+    const attestHeaders = await getAttestationHeaders();
+    const resp = await request<SignedBalanceResponse & { voucherId: string; mintStatus: string }>(
+      "/wallet/cashout",
+      {
+        method: "POST",
+        body: JSON.stringify(idempotencyKey ? { coinsToCashout, idempotencyKey } : { coinsToCashout }),
+        headers: attestHeaders,
+      },
+    );
+    const newBalance = extractVerifiedBalance(resp);
+    return { voucherId: resp.voucherId, mintStatus: resp.mintStatus, newBalance };
+  },
+};
+
 // Roulette
 export type RouletteBetType =
   | "straight" | "split" | "street" | "corner" | "line"
