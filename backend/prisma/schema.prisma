@@ -11,6 +11,10 @@ enum SessionState {
   ACTIVE
   AWAITING_DRAW
   CASHED_OUT
+  // Slot base spin settled, free-games feature awarded but not yet resolved.
+  // serverSeed stays hidden; /slots/feature (or auto-resolve on the next
+  // /slots/start-session) moves it back to ACTIVE.
+  FEATURE_PENDING
 }
 
 enum MintStatus {
