@@ -5,6 +5,8 @@
 //   ELEVENLABS_API_KEY=... node scripts/gen-audio.mjs            # fill in missing files
 //   ELEVENLABS_API_KEY=... node scripts/gen-audio.mjs --force    # regenerate everything
 //   node scripts/gen-audio.mjs --sfx-fallback                    # procedural SFX only (no key)
+//   node scripts/gen-audio.mjs --offline --force                 # no network at all: re-synthesise every
+//                                                                # procedural .wav, never touch .mp3 files
 //
 // SFX use /v1/sound-generation (key needs the `sound_generation` permission).
 // When that call is not permitted, a procedurally synthesised WAV is written
@@ -19,7 +21,8 @@ const OUT = join(ROOT, "..", "src", "assets", "sounds");
 const API = "https://api.elevenlabs.io/v1";
 const KEY = process.env.ELEVENLABS_API_KEY;
 const FORCE = process.argv.includes("--force");
-const SFX_FALLBACK_ONLY = process.argv.includes("--sfx-fallback");
+const OFFLINE = process.argv.includes("--offline");
+const SFX_FALLBACK_ONLY = OFFLINE || process.argv.includes("--sfx-fallback");
 
 // Calm, low British male — reads as a croupier. Override with ELEVENLABS_VOICE_ID.
 const VOICE_ID = process.env.ELEVENLABS_VOICE_ID ?? "JBFqnCBsd6RMkjVDRZzb";
@@ -78,6 +81,7 @@ function existing(base) {
 }
 
 async function eleven(path, body, outFile) {
+  if (OFFLINE) throw new Error("offline: network disabled");
   const res = await fetch(`${API}${path}`, {
     method: "POST",
     headers: { "xi-api-key": KEY, "Content-Type": "application/json", Accept: "audio/mpeg" },
@@ -92,21 +96,67 @@ async function eleven(path, body, outFile) {
   writeFileSync(join(OUT, outFile), Buffer.from(await res.arrayBuffer()));
 }
 
-// ---------- procedural fallback synth (mono 16-bit 44.1k WAV) ----------
-const SR = 22050;
+// ---------- procedural fallback synth (mono 16-bit WAV) ----------
+// Short SFX render at 44.1 kHz so bell/clack partials (up to ~16 kHz) don't alias;
+// long seamless loops and low-band beds stay at 22.05 kHz to keep the bundle small.
+const SR_HI = 44100;
+const SR_LO = 22050;
+const LOW_RATE = new Set(["slot_spin_loop", "slot_fg_loop", "roulette_spin", "slot_gong", "shuffle"]);
+const SEAMLESS = new Set(["slot_spin_loop", "slot_fg_loop", "slot_anticipation"]);
+let SR = SR_HI;
 const len = (s) => Math.floor(s * SR);
-function wav(samples) {
+
+// Loudness buses: gated RMS target (dBFS) with a −1 dBFS sample-peak ceiling.
+const BUS_RMS = { ui: -24, foley: -20, win: -16 };
+const PEAK_CEIL = Math.pow(10, -1 / 20);
+const UI_KEYS = /^(ui_|card_hold|vp_bet|vp_hold|vp_unhold|vp_game_over|keno_mark|keno_unmark|keno_quickpick|keno_clear|keno_max_spots)/;
+const WIN_KEYS = /^(win_|vp_win|slot_win_|slot_gong|slot_fg_intro|slot_scatter_chime)/;
+const busOf = (key) => (UI_KEYS.test(key) ? "ui" : WIN_KEYS.test(key) ? "win" : "foley");
+
+// RMS over 10 ms blocks within 30 dB of the loudest block (ignores decay tails/silence).
+function gatedRms(x) {
+  const B = Math.max(1, Math.floor(SR * 0.01));
+  const blocks = [];
+  for (let i = 0; i < x.length; i += B) {
+    let sum = 0, n = 0;
+    for (let j = i; j < Math.min(x.length, i + B); j++, n++) sum += x[j] * x[j];
+    blocks.push(sum / Math.max(1, n));
+  }
+  const loud = Math.max(...blocks, 0);
+  if (loud <= 0) return 0;
+  const gate = loud * Math.pow(10, -30 / 10);
+  const kept = blocks.filter((b) => b >= gate);
+  return Math.sqrt(kept.reduce((a, b) => a + b, 0) / kept.length);
+}
+
+const LEVELS = [];
+function wav(samples, key) {
+  const bus = busOf(key);
+  let peak = 0;
+  for (const s of samples) peak = Math.max(peak, Math.abs(s));
+  const rms = gatedRms(samples);
+  const target = Math.pow(10, BUS_RMS[bus] / 20);
+  const g = rms > 0 && peak > 0 ? Math.min(target / rms, PEAK_CEIL / peak) : 1;
+  const db = (v) => (v > 0 ? (20 * Math.log10(v)).toFixed(1) : "-inf");
+  LEVELS.push(`${key.padEnd(20)} ${String(SR).padEnd(6)} ${bus.padEnd(6)} rms ${db(rms * g)}  peak ${db(peak * g)}`);
   const h = Buffer.alloc(44);
   h.write("RIFF", 0); h.writeUInt32LE(36 + samples.length * 2, 4); h.write("WAVE", 8);
   h.write("fmt ", 12); h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20); h.writeUInt16LE(1, 22);
   h.writeUInt32LE(SR, 24); h.writeUInt32LE(SR * 2, 28); h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34);
   h.write("data", 36); h.writeUInt32LE(samples.length * 2, 40);
   const d = Buffer.alloc(samples.length * 2);
-  let peak = 0;
-  for (const s of samples) peak = Math.max(peak, Math.abs(s));
-  const g = peak > 0 ? 0.89 / peak : 1;
   samples.forEach((s, i) => d.writeInt16LE(Math.round(Math.max(-1, Math.min(1, s * g)) * 32767), i * 2));
   return Buffer.concat([h, d]);
+}
+function render(key, synth) {
+  SR = LOW_RATE.has(key) ? SR_LO : SR_HI;
+  seed = 1234567;
+  const x = synth();
+  if (!SEAMLESS.has(key)) {
+    const f = Math.min(x.length, Math.floor(SR * 0.006)); // 6 ms tail fade: no truncation clicks
+    for (let i = 0; i < f; i++) x[x.length - 1 - i] *= i / f;
+  }
+  return wav(x, key);
 }
 let seed = 1234567;
 const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff) * 2 - 1;
@@ -127,7 +177,9 @@ function bell(freq, dur, decay, amp = 1) {
   return Array.from({ length: n }, (_, i) => {
     const t = i / SR;
     const env = Math.min(1, t / 0.004) * Math.exp(-t / decay);
-    return amp * env * (Math.sin(2 * Math.PI * freq * t) + 0.35 * Math.sin(2 * Math.PI * freq * 2.76 * t) * Math.exp(-t / (decay * 0.4)) + 0.2 * Math.sin(2 * Math.PI * freq * 5.4 * t) * Math.exp(-t / (decay * 0.2)));
+    const p2 = freq * 2.76 < SR * 0.45 ? 0.35 * Math.sin(2 * Math.PI * freq * 2.76 * t) * Math.exp(-t / (decay * 0.4)) : 0;
+    const p3 = freq * 5.4 < SR * 0.45 ? 0.2 * Math.sin(2 * Math.PI * freq * 5.4 * t) * Math.exp(-t / (decay * 0.2)) : 0;
+    return amp * env * (Math.sin(2 * Math.PI * freq * t) + p2 + p3);
   });
 }
 function mix(total, ...parts) {
@@ -225,6 +277,7 @@ const CABINET = {
 function karplus(freq, dur, { decay = 0.996, bright = 0.5, amp = 1 } = {}) {
   const n = len(dur);
   const period = Math.max(2, Math.round(SR / freq));
+  const d = Math.pow(decay, SR_LO / SR); // keep ring time independent of sample rate
   const buf = Array.from({ length: period }, () => rnd() * amp);
   const out = new Array(n);
   let idx = 0;
@@ -232,7 +285,7 @@ function karplus(freq, dur, { decay = 0.996, bright = 0.5, amp = 1 } = {}) {
     const a = buf[idx];
     const b = buf[(idx + 1) % period];
     out[i] = a;
-    buf[idx] = decay * (bright * a + (1 - bright) * b);
+    buf[idx] = d * (bright * a + (1 - bright) * b);
     idx = (idx + 1) % period;
   }
   return out;
@@ -287,7 +340,7 @@ const KENO_SLOT = {
   keno_ball_3: () => ballPop(660),
   ...Object.fromEntries(Array.from({ length: 10 }, (_, i) => [
     `keno_hit_${i + 1}`,
-    () => mix(0.6, [bell(PENTA[Math.min(PENTA.length - 1, i)] * 2, 0.55, 0.22, 0.8), 0]),
+    () => mix(0.45, [bell(PENTA[Math.min(PENTA.length - 1, i)] * 2, 0.45, 0.16, 0.8), 0]),
   ])),
   slot_stop_1: () => reelStop(120, 1568),
   slot_stop_2: () => reelStop(130, 1760),
@@ -296,7 +349,11 @@ const KENO_SLOT = {
   slot_stop_5: () => reelStop(160, 2349),
   slot_scatter_chime: () => mix(0.9, [bell(1046.5, 0.85, 0.3, 0.6), 0], [bell(1568, 0.8, 0.3, 0.45), 0.06]),
   slot_gong: () => gongHit(146.8, 3.0),
-  slot_anticipation: () => mix(1.0, ...Array.from({ length: 22 }, (_, i) => [drum(95 + i * 2, 42, 0.12, { noise: 0.35, decay: 0.05, amp: 0.25 + i * 0.03 }), i * (0.06 - i * 0.0012)])),
+  // Seamless 1.2 s drum-roll bed (16 even hits, accent every 4th) — games may loop it.
+  slot_anticipation: () => circularMix(1.2, [
+    ...Array.from({ length: 16 }, (_, i) => [drum(i % 4 === 0 ? 105 : 125, 42, 0.14, { noise: 0.35, decay: 0.05, amp: i % 4 === 0 ? 0.6 : 0.38 }), i * 0.075]),
+    [Array.from({ length: len(1.2) }, (_, i) => 0.05 * rnd() * (0.7 + 0.3 * Math.sin((2 * Math.PI * 4 * i) / len(1.2)))), 0],
+  ]),
   slot_win_small: () => mix(0.9, ...[0, 2, 4, 7].map((k, i) => [karplus(PENTA[k] * 2, 0.6, { decay: 0.995, amp: 0.7 }), i * 0.07])),
   slot_win_medium: () => mix(2.0,
     ...[0, 2, 4, 5, 7, 9, 10].map((k, i) => [karplus(PENTA[k] * 2, 0.9, { decay: 0.996, amp: 0.65 }), i * 0.08]),
@@ -309,12 +366,15 @@ const KENO_SLOT = {
     for (let i = 0; i < 18; i++) parts.push([clack(2300 + (i % 4) * 280), 1.4 + i * 0.09 + rnd() * 0.03, 0.35]);
     return mix(4.4, ...parts);
   },
+  // ~2.0 s drum build into an accent; no gong (slot_gong plays first on the trigger).
   slot_fg_intro: () => {
     const parts = [];
-    for (let i = 0; i < 12; i++) parts.push([drum(i % 4 === 0 ? 90 : 140, 45, 0.25, { noise: 0.3, decay: 0.09, amp: 0.4 + i * 0.04 }), i * 0.22]);
-    for (let i = 0; i < 10; i++) parts.push([noiseBurst(0.12, 0.002, 0.05, 3000, 12000), 0.11 + i * 0.22, 0.25]);
-    parts.push([gongHit(130.8, 2.5, 1), 2.7]);
-    return mix(5.0, ...parts);
+    for (let i = 0; i < 8; i++) parts.push([drum(i % 4 === 0 ? 90 : 140, 45, 0.25, { noise: 0.3, decay: 0.09, amp: 0.4 + i * 0.05 }), i * 0.17]);
+    for (let i = 0; i < 7; i++) parts.push([noiseBurst(0.1, 0.002, 0.04, 3000, 12000), 0.085 + i * 0.17, 0.22]);
+    parts.push([drum(80, 40, 0.6, { noise: 0.35, decay: 0.2, amp: 1 }), 1.36]);
+    parts.push([noiseBurst(0.6, 0.004, 0.18, 4000, 14000), 1.36, 0.3]);
+    parts.push([bell(1046.5, 0.6, 0.2, 0.35), 1.36], [bell(1568, 0.6, 0.2, 0.25), 1.36]);
+    return mix(2.0, ...parts);
   },
   slot_count_tick: () => mix(0.05, [bell(2793, 0.04, 0.008, 0.5), 0]),
   slot_returned: () => mix(0.12, [noiseBurst(0.1, 0.001, 0.015, 300, 2500), 0, 0.6]),
@@ -344,11 +404,11 @@ const KENO_SLOT = {
 async function main() {
   mkdirSync(OUT, { recursive: true });
   const failures = [];
-  let sfxPermission = !!KEY && !SFX_FALLBACK_ONLY;
+  let sfxPermission = !!KEY && !SFX_FALLBACK_ONLY && !OFFLINE;
 
   for (const [key, spec] of Object.entries(SFX)) {
     const have = existing(key);
-    if (have?.endsWith(".mp3") && !FORCE) continue; // already an ElevenLabs render
+    if (have?.endsWith(".mp3") && (!FORCE || OFFLINE)) continue; // ElevenLabs render — never shadowed offline
     if (sfxPermission) {
       try {
         await eleven("/sound-generation?output_format=mp3_44100_128", {
@@ -369,18 +429,19 @@ async function main() {
       }
     }
     if (!have || FORCE) {
-      writeFileSync(join(OUT, `${key}.wav`), wav(FALLBACK[key]()));
+      writeFileSync(join(OUT, `${key}.wav`), render(key, FALLBACK[key]));
       console.log(`sfx  ${key}.wav  (procedural fallback)`);
     }
   }
 
   for (const [key, synth] of Object.entries({ ...CABINET, ...KENO_SLOT })) {
-    if (existing(key) && !FORCE) continue;
-    writeFileSync(join(OUT, `${key}.wav`), wav(synth()));
+    const have = existing(key);
+    if (have && (!FORCE || have.endsWith(".mp3"))) continue;
+    writeFileSync(join(OUT, `${key}.wav`), render(key, synth));
     console.log(`cab  ${key}.wav`);
   }
 
-  if (KEY && !SFX_FALLBACK_ONLY) {
+  if (KEY && !SFX_FALLBACK_ONLY && !OFFLINE) {
     const lines = { ...VOICE };
     for (let n = 0; n <= 36; n++) lines[`vo_n${n}`] = numberLine(n);
     for (const [key, text] of Object.entries(lines)) {
@@ -399,6 +460,7 @@ async function main() {
   }
 
   writeManifest();
+  if (LEVELS.length) console.log(["", "key                  rate   bus    levels (dBFS)", ...LEVELS].join("\n"));
   if (failures.length) {
     console.error("\nFailures:\n" + failures.join("\n"));
     process.exitCode = 1;

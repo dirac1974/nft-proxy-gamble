@@ -39,6 +39,8 @@ interface WinOverlayProps {
   onDismiss: () => void;
   /** Skip the overlay's own win sound when the game plays its own jingle. */
   silent?: boolean;
+  /** Skip the overlay's own haptic when the game already fired one for this result. */
+  noHaptic?: boolean;
 }
 
 const DURATION: Record<WinTier, number> = { small: 1600, medium: 2600, big: 4200 };
@@ -66,7 +68,7 @@ function FallingCoin({ index }: { index: number }) {
   );
 }
 
-export function WinOverlay({ visible, tier, title, amount, onDismiss, silent = false }: WinOverlayProps) {
+export function WinOverlay({ visible, tier, title, amount, onDismiss, silent = false, noHaptic = false }: WinOverlayProps) {
   const scale = useSharedValue(0.6);
   const opacity = useSharedValue(0);
   const shine = useSharedValue(0);
@@ -81,11 +83,11 @@ export function WinOverlay({ visible, tier, title, amount, onDismiss, silent = f
     opacity.value = withTiming(1, { duration: 180 });
     scale.value = withSpring(1, { damping: 11, stiffness: 160 });
     shine.value = withRepeat(withSequence(withTiming(1, { duration: 900 }), withTiming(0, { duration: 900 })), -1);
-    haptic(tier === "big" ? "heavy" : "success");
+    if (!noHaptic) haptic(tier === "big" ? "heavy" : "success");
     if (!silent) void playSound(tier === "big" ? "win_big" : tier === "medium" ? "win_medium" : "win_small");
     const t = setTimeout(onDismiss, DURATION[tier]);
     return () => clearTimeout(t);
-  }, [visible, tier, onDismiss, silent, scale, opacity, shine]);
+  }, [visible, tier, onDismiss, silent, noHaptic, scale, opacity, shine]);
 
   const cardStyle = useAnimatedStyle(() => ({ opacity: opacity.value, transform: [{ scale: scale.value }] }));
   const glowStyle = useAnimatedStyle(() => ({ opacity: 0.35 + shine.value * 0.4 }));

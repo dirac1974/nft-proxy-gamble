@@ -33,7 +33,7 @@ import { useWalletStore } from "@/stores/walletStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { balanceApi, gameApi, type PokerVariant } from "@/services/api";
-import { playBetBeep, playSound } from "@/services/soundService";
+import { preloadGroup, playBetBeep, playSound } from "@/services/soundService";
 
 const HAND_SIZE = 5;
 const CARD_GAP = spacing.sm;
@@ -67,6 +67,10 @@ export function cabinetLayout(screenW: number, bodyH: number | null, rows: numbe
 }
 
 export default function VideoPokerScreen() {
+  // Load this game's sounds on mount so the first round has no audio latency.
+  useEffect(() => {
+    void preloadGroup("videopoker");
+  }, []);
   const qc = useQueryClient();
   const isAuthenticated = useWalletStore((s) => s.isAuthenticated);
   const openIAP = useUiStore((s) => s.openIAP);

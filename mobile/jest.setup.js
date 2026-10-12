@@ -1,15 +1,36 @@
 /* global jest */
 jest.mock("expo-av", () => {
-  const sound = {
-    replayAsync: jest.fn(() => Promise.resolve()),
-    stopAsync: jest.fn(() => Promise.resolve()),
-    unloadAsync: jest.fn(() => Promise.resolve()),
-    setVolumeAsync: jest.fn(() => Promise.resolve()),
+  // Each createAsync returns a fresh mock instance so tests can track individual voices.
+  // `__finish()` simulates the native didJustFinish status update.
+  const makeSound = (asset, initialStatus) => {
+    const s = {
+      asset,
+      initialStatus,
+      onStatus: null,
+      replayAsync: jest.fn(() => Promise.resolve()),
+      playAsync: jest.fn(() => Promise.resolve()),
+      pauseAsync: jest.fn(() => Promise.resolve()),
+      stopAsync: jest.fn(() => Promise.resolve()),
+      unloadAsync: jest.fn(() => Promise.resolve()),
+      setVolumeAsync: jest.fn(() => Promise.resolve()),
+      setPositionAsync: jest.fn(() => Promise.resolve()),
+      setIsLoopingAsync: jest.fn(() => Promise.resolve()),
+      setStatusAsync: jest.fn(() => Promise.resolve()),
+      setOnPlaybackStatusUpdate: jest.fn((cb) => {
+        s.onStatus = cb;
+      }),
+      __finish: () => s.onStatus?.({ isLoaded: true, didJustFinish: true, isPlaying: false }),
+    };
+    return s;
   };
   return {
     Audio: {
       setAudioModeAsync: jest.fn(() => Promise.resolve()),
-      Sound: { createAsync: jest.fn(() => Promise.resolve({ sound })) },
+      Sound: {
+        createAsync: jest.fn((asset, status) =>
+          Promise.resolve({ sound: makeSound(asset, status), status: { isLoaded: true } }),
+        ),
+      },
     },
   };
 });

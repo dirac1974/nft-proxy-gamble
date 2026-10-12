@@ -23,7 +23,7 @@ import { useRgBlock } from "@/components/shell/RgBlockNotice";
 import { useWalletStore } from "@/stores/walletStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { playSound, playVoice, winSoundFor } from "@/services/soundService";
+import { preloadGroup, playSound, playVoice, winSoundFor } from "@/services/soundService";
 import { balanceApi, blackjackApi, type BlackjackActionName, type BlackjackRound } from "@/services/api";
 import { verifyBlackjackDeal, type BlackjackVerificationResult } from "@/services/provablyFair";
 import { formatCoins } from "@/config/brand";
@@ -75,6 +75,10 @@ export function blackjackCardWidth(tableH: number | null, compact: boolean): num
 }
 
 export default function BlackjackScreen() {
+  // Load this game's sounds on mount so the first round has no audio latency.
+  useEffect(() => {
+    void preloadGroup("blackjack");
+  }, []);
   const { isAuthenticated } = useWalletStore();
   const openConnect = useUiStore((s) => s.openConnect);
 

@@ -15,7 +15,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { balanceApi } from "@/services/api";
 import { kenoApi, type KenoPlayResult, type KenoSession } from "@/services/kenoApi";
 import { isKenoVerified, verifyKenoDraw } from "@/services/kenoFair";
-import { playSound, type SfxKey } from "@/services/soundService";
+import { preloadGroup, playSound, type SfxKey } from "@/services/soundService";
 import { formatCoins } from "@/config/brand";
 import { KenoBoard, BOARD_PAD, DIVIDER_H } from "@/components/keno/KenoBoard";
 import { PaytableStrip, ResultBanner } from "@/components/keno/KenoStrip";
@@ -66,6 +66,10 @@ const SPEED_KEY = "keno.speed.v1";
 const TITLES: Record<KenoMode, string> = { single: "Midnight Keno", quad: "Midnight Keno ×4" };
 
 export default function KenoScreen() {
+  // Load this game's sounds on mount so the first round has no audio latency.
+  useEffect(() => {
+    void preloadGroup("keno");
+  }, []);
   const params = useLocalSearchParams<{ mode?: string }>();
   const mode: KenoMode = params.mode === "quad" ? "quad" : "single";
   const quad = mode === "quad";

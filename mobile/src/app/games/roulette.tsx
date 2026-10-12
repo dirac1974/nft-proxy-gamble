@@ -35,7 +35,7 @@ import { useUiStore } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { balanceApi, rouletteApi, type RouletteSpinResult } from "@/services/api";
 import { verifyRouletteSpin } from "@/services/provablyFair";
-import { playRouletteNumber, playSound, playVoice, winSoundFor, type SfxKey } from "@/services/soundService";
+import { preloadGroup, preloadRouletteNumber, playRouletteNumber, playSound, playVoice, winSoundFor, type SfxKey } from "@/services/soundService";
 import { formatCoins } from "@/config/brand";
 import { RouletteWheel, type RouletteWheelHandle } from "@/components/roulette/RouletteWheel";
 import { BettingLayout, boardChromeHeight, type BetOutcome } from "@/components/roulette/BettingLayout";
@@ -94,6 +94,10 @@ export function rouletteSettleDelay(startedAt: number, now: number, reduceMotion
 }
 
 export default function RouletteScreen() {
+  // Load this game's sounds on mount so the first round has no audio latency.
+  useEffect(() => {
+    void preloadGroup("roulette");
+  }, []);
   const qc = useQueryClient();
   const isAuthenticated = useWalletStore((s) => s.isAuthenticated);
   const openIAP = useUiStore((s) => s.openIAP);
@@ -381,6 +385,7 @@ export default function RouletteScreen() {
     try {
       const r = await rouletteApi.spin(sid, spun.map(toApiBet));
       if (!mounted.current) return;
+      void preloadRouletteNumber(r.winningNumber); // ready before the ~3.5 s reveal
       const verification = verifyRouletteSpin(r.serverSeed, r.serverSeedHash, r.clientSeed, r.nonce, r.winningNumber);
       const minPre = reduceMotion ? BANNER_MS : BANNER_MS + 600;
       later(Math.max(0, startedAt + minPre - Date.now()), () => {

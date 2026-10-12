@@ -21,7 +21,7 @@ import { useRgBlock } from "@/components/shell/RgBlockNotice";
 import { balanceApi } from "@/services/api";
 import { FALLBACK_PAYTABLE, slotApi, type SlotSession, type SlotSpin, type SlotSpinResult } from "@/services/slotApi";
 import { isSlotVerified, verifySlotRound, type MultiplierSet } from "@/services/slotFair";
-import { duckLoops, playLoop, playSound, playVoice, stopLoop, stopSound, type SfxKey } from "@/services/soundService";
+import { preloadGroup, duckLoops, playLoop, playSound, playVoice, stopLoop, stopSound, type SfxKey } from "@/services/soundService";
 import { MIN_CYCLE_MS, RESTRICTED_PLAY } from "@/config/compliance";
 import { formatCoins } from "@/config/brand";
 import { SlotBackdrop } from "@/components/slot/SlotTileArt";
@@ -143,6 +143,10 @@ function useCountUp() {
 }
 
 export default function SlotScreen() {
+  // Load this game's sounds on mount so the first round has no audio latency.
+  useEffect(() => {
+    void preloadGroup("slot");
+  }, []);
   const qc = useQueryClient();
   const win = useWindowDimensions();
   // JS-side insets (same commit as first layout) instead of native SafeAreaView padding,
