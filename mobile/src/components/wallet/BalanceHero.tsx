@@ -5,6 +5,9 @@ import { AppText, Button, CoinIcon, useRollingNumber } from "@/components/ui";
 import { coinsToUsd, formatCoins } from "@/config/brand";
 import { fonts, gradients, palette, radius, shadows, spacing } from "@/theme";
 
+// Mirrors CashOutSheet MIN_CASHOUT (backend /wallet/cashout minimum).
+export const MIN_CASHOUT_COINS = 100;
+
 interface BalanceHeroProps {
   balance: number;
   onCashOut: () => void;
@@ -13,6 +16,7 @@ interface BalanceHeroProps {
 
 export function BalanceHero({ balance, onCashOut, onBuy }: BalanceHeroProps) {
   const shown = useRollingNumber(balance);
+  const canCashOut = Math.floor(balance) >= MIN_CASHOUT_COINS;
   return (
     <LinearGradient colors={gradients.surface} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.card}>
       <LinearGradient
@@ -33,10 +37,31 @@ export function BalanceHero({ balance, onCashOut, onBuy }: BalanceHeroProps) {
         </AppText>
       </View>
       <AppText variant="bodySmall">Worth {coinsToUsd(balance)}</AppText>
-      <View style={styles.actions}>
-        <Button label="Cash out" icon="arrow-up-circle" onPress={onCashOut} style={styles.flex} testID="cashout-button" />
-        <Button label="Buy coins" variant="secondary" icon="add" onPress={onBuy} style={styles.flex} testID="wallet-buy-coins" />
-      </View>
+      {canCashOut ? (
+        <View style={styles.actions}>
+          <Button label="Cash out" icon="arrow-up-circle" onPress={onCashOut} style={styles.flex} testID="cashout-button" />
+          <Button label="Buy coins" variant="secondary" icon="add" onPress={onBuy} style={styles.flex} testID="wallet-buy-coins" />
+        </View>
+      ) : (
+        <>
+          <View style={styles.actions}>
+            <Button label="Buy coins" icon="add" onPress={onBuy} style={styles.flex} testID="wallet-buy-coins" />
+            <Button
+              label="Cash out"
+              variant="secondary"
+              icon="arrow-up-circle"
+              onPress={onCashOut}
+              disabled
+              style={styles.flex}
+              testID="cashout-button"
+              accessibilityLabel={`Cash out, unavailable. Cash out from ${MIN_CASHOUT_COINS} coins.`}
+            />
+          </View>
+          <AppText variant="caption" align="center" testID="cashout-min-helper">
+            Cash out from {formatCoins(MIN_CASHOUT_COINS)} coins ({coinsToUsd(MIN_CASHOUT_COINS)})
+          </AppText>
+        </>
+      )}
     </LinearGradient>
   );
 }

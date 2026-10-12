@@ -22,7 +22,10 @@ import {
   type Grid,
   type WayWin,
 } from "@/components/slot/slotMath";
-import { landingPlan } from "@/components/slot/Reel";
+import { impactMs, landingPlan } from "@/components/slot/Reel";
+import { MAX_CELL_ASPECT, frameGeometry } from "@/components/slot/ReelFrame";
+import { rtpRange } from "@/components/slot/SlotSheets";
+import { FALLBACK_PAYTABLE } from "@/services/slotApi";
 
 jest.mock("react-native-reanimated", () => require("react-native-reanimated/mock"));
 
@@ -212,5 +215,29 @@ describe("VoiceOver summary", () => {
     expect(s).toMatch(/^Row 1: .*Row 2: .*Row 3: /);
     expect(s).toContain("Lotus 3 of a kind, 1 way, pays 25.");
     expect(s).toContain("Returned 25 of 125. Net −100.");
+  });
+});
+
+describe("slot layout + presentation helpers", () => {
+  it("rtpRange collapses a range that rounds to one value", () => {
+    expect(rtpRange({ ...FALLBACK_PAYTABLE, rtp: { min: 95.489, max: 95.508 } })).toBe("95.5%");
+    expect(rtpRange({ ...FALLBACK_PAYTABLE, rtp: { min: 94.2, max: 96.1 } })).toBe("94.2–96.1%");
+  });
+
+  it("frameGeometry stretches cells into spare height, capped by aspect and by height", () => {
+    const wide = frameGeometry(395, 900);
+    expect(wide.cellH).toBe(Math.floor(wide.cell * MAX_CELL_ASPECT));
+    const tight = frameGeometry(395, 240);
+    expect(tight.cellH).toBe(tight.cell);
+    expect(tight.H).toBeLessThanOrEqual(240);
+    const some = frameGeometry(395, 330);
+    expect(some.cellH).toBeGreaterThan(some.cell);
+    expect(some.H).toBeLessThanOrEqual(330);
+  });
+
+  it("reel-stop impact fires at the end of travel, before the overshoot settle", () => {
+    expect(impactMs(600)).toBe(510);
+    expect(impactMs(150)).toBe(120);
+    expect(impactMs(300, true)).toBe(300);
   });
 });

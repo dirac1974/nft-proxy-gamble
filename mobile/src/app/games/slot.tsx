@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, Pressable, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { initialWindowMetrics, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Animated, {
   Easing,
@@ -12,21 +12,21 @@ import Animated, {
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
-import { Ionicons } from "@expo/vector-icons";
 import { fonts, palette, spacing } from "@/theme";
-import { AppText, EmptyState, GameHeader, Screen, Toast, haptic, type ToastTone } from "@/components/ui";
+import { AppText, EmptyState, FairnessBadge, GameHeader, Screen, Toast, haptic, type FairnessState, type ToastTone } from "@/components/ui";
 import { useWalletStore } from "@/stores/walletStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { balanceApi } from "@/services/api";
 import { FALLBACK_PAYTABLE, slotApi, type SlotSession, type SlotSpin, type SlotSpinResult } from "@/services/slotApi";
 import { isSlotVerified, verifySlotRound, type MultiplierSet } from "@/services/slotFair";
-import { duckLoops, playLoop, playSound, playVoice, stopLoop, type SfxKey } from "@/services/soundService";
+import { duckLoops, playLoop, playSound, playVoice, stopLoop, stopSound, type SfxKey } from "@/services/soundService";
+import { MIN_CYCLE_MS, RESTRICTED_PLAY } from "@/config/compliance";
 import { formatCoins } from "@/config/brand";
 import { SlotBackdrop } from "@/components/slot/SlotTileArt";
 import { HangingLantern, LanternToken, TitleWordmark } from "@/components/slot/Ornaments";
 import { ReelFrame, frameGeometry } from "@/components/slot/ReelFrame";
-import { Reel, type ReelHandle } from "@/components/slot/Reel";
+import { Reel, impactMs, type ReelHandle } from "@/components/slot/Reel";
 import { BetStepper, RoundToggle, SpinButton, WinBanner, type BannerTone } from "@/components/slot/Controls";
 import {
   AnticipationGlow,
@@ -43,7 +43,6 @@ import {
   CYCLE_MS,
   OPTION_NAMES,
   REELS,
-  RESTRICTED_PLAY,
   STRIPS,
   anticipationFromReel,
   bigWinTier,
@@ -68,7 +67,6 @@ import {
 type Phase = "idle" | "spinning" | "presenting" | "trigger" | "intro" | "picking" | "feature" | "outro";
 
 const INITIAL_STOPS = [2, 0, 1, 12, 16];
-const MIN_CYCLE_MS = 2500; // restrictedPlay only
 
 interface Banner {
   message: string;
@@ -146,6 +144,11 @@ function useCountUp() {
 export default function SlotScreen() {
   const qc = useQueryClient();
   const win = useWindowDimensions();
+  // JS-side insets (same commit as first layout) instead of native SafeAreaView padding,
+  // which lagged a frame and let the header sit under the status bar on mount.
+  const rawInsets = useSafeAreaInsets();
+  const insetTop = rawInsets.top || initialWindowMetrics?.insets.top || 0;
+  const insetBottom = rawInsets.bottom || initialWindowMetrics?.insets.bottom || 0;
   const isAuthenticated = useWalletStore((s) => s.isAuthenticated);
   const openIAP = useUiStore((s) => s.openIAP);
   const openConnect = useUiStore((s) => s.openConnect);
@@ -182,6 +185,7 @@ export default function SlotScreen() {
   const [lastFair, setLastFair] = useState<SlotFairRound | null>(null);
   const [sheet, setSheet] = useState<"rules" | "fair" | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
+  const [sceneTop, setSceneTop] = useState(0);
   const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
 
   const count = useCountUp();
@@ -219,6 +223,7 @@ export default function SlotScreen() {
       timers.current.forEach(clearTimeout);
       void stopLoop("slot_spin_loop", 0);
       void stopLoop("slot_fg_loop", 0);
+      void stopLoop("slot_anticipation", 0);
       duckLoops(false);
     };
   }, []);
@@ -264,13 +269,16 @@ export default function SlotScreen() {
   }, []);
   const CONTROLS_H = 96;
   const BANNER_H = 50;
-  const FAIR_H = 22;
+  const FAIR_H = 28;
   const TITLE_MIN = size.h > 0 && size.h < 600 ? 40 : 56;
+  const CHROME = BANNER_H + FAIR_H + CONTROLS_H + spacing.sm * 4;
+  // Reels take the spare height first (cells stretch up to MAX_CELL_ASPECT), the
+  // title plate the rest; any leftover is spread evenly so no band sits empty.
   const geo = useMemo(
-    () => frameGeometry(Math.max(200, size.w), size.h ? size.h - TITLE_MIN - BANNER_H - FAIR_H - CONTROLS_H - spacing.sm * 4 : undefined),
-    [size.w, size.h, TITLE_MIN],
+    () => frameGeometry(Math.max(200, size.w), size.h ? size.h - TITLE_MIN - CHROME : undefined),
+    [size.w, size.h, TITLE_MIN, CHROME],
   );
-  const titleH = size.h ? Math.max(TITLE_MIN, Math.min(124, size.h - geo.H - BANNER_H - FAIR_H - CONTROLS_H - spacing.sm * 4)) : TITLE_MIN;
+  const titleH = size.h ? Math.max(TITLE_MIN, Math.min(150, size.h - geo.H - CHROME)) : TITLE_MIN;
   const spinSize = size.h && size.h < 560 ? 80 : 88;
 
   // ── ambient lantern sway (paused while spinning) ─────────────────────────
@@ -304,12 +312,15 @@ export default function SlotScreen() {
   const landSpin = useCallback(
     (spin: SlotSpin, startedAt: number, onDone: () => void) => {
       const elapsed = Date.now() - startedAt;
-      const ant = reduceMotion ? null : spin.anticipation?.fromReel ?? anticipationFromReel(spin.grid);
+      // RESTRICTED_PLAY: no anticipation teaser (no slow-down, glow or roll).
+      const ant = reduceMotion || RESTRICTED_PLAY ? null : spin.anticipation?.fromReel ?? anticipationFromReel(spin.grid);
       const sched = stopSchedule({ turbo: fast, reduceMotion, anticipationFrom: ant, elapsed });
       let scatters = 0;
       sched.forEach((t, i) => {
-        reels.current[i]?.land(spin.stops[i]!, t - elapsed);
-        later(t - elapsed, () => {
+        const ms = t - elapsed;
+        reels.current[i]?.land(spin.stops[i]!, ms);
+        // Thud + haptic at impact (end of travel), not at the overshoot settle.
+        later(impactMs(ms, reduceMotion), () => {
           const last = i === REELS - 1;
           const thud = reduceMotion ? last : fast ? last : true;
           if (thud) {
@@ -318,16 +329,21 @@ export default function SlotScreen() {
           }
           const sc = scattersOnReel(spin.grid, i);
           if (sc > 0) {
+            const before = scatters;
             scatters += sc;
             if (scatters <= 2) void playSound("slot_scatter_chime");
+            else if (before < 3) void playSound("slot_gong"); // stinger only on a real 3rd scatter
           }
           if (ant !== null && i === ant - 1) {
             setAntOn(Array.from({ length: REELS }, (_, r) => r >= ant));
-            void playSound("slot_anticipation");
+            void playLoop("slot_anticipation", 0.7); // rolls until the last reel lands
           } else if (ant !== null && i >= ant) {
             setAntOn((a) => a.map((on, r) => (r === i ? false : on)));
           }
-          if (last) void stopLoop("slot_spin_loop");
+          if (last) {
+            void stopLoop("slot_spin_loop");
+            if (ant !== null) void stopLoop("slot_anticipation");
+          }
         });
       });
       later(sched[REELS - 1]! - elapsed + 140, () => {
@@ -366,15 +382,17 @@ export default function SlotScreen() {
       }
       const net = ret - w;
       const tier = bigWinTier(net, w);
+      // The amount lives in the WIN meter only; the headline carries the net.
+      const head = copy.detail.toUpperCase();
       setWinMode("celebrate");
       setHighlight(all);
-      setBanner({ message: copy.title, sub: copy.detail, tone: "win" });
+      setBanner({ message: head, sub: null, tone: "win" });
       const sound = winSoundKey(net, w);
       if (sound) void playSound(sound);
       haptic(tier ? "heavy" : "success");
       holdTotal.current = () => {
         setHighlight(all);
-        setBanner({ message: copy.title, sub: copy.detail, tone: "win" });
+        setBanner({ message: head, sub: null, tone: "win" });
       };
       const cycle = () => {
         const entries = winCycle(spin.wins, spin.scatter.payout > 0 ? spin.scatter : null);
@@ -382,15 +400,15 @@ export default function SlotScreen() {
           entries.forEach((e, k) => {
             later(k * CYCLE_MS, () => {
               setHighlight(winningCells([e]));
-              setBanner({ message: copy.title, sub: e.label, tone: "win" });
+              setBanner({ message: head, sub: e.label, tone: "win" });
             });
           });
           later(entries.length * CYCLE_MS, () => {
             setHighlight(all);
-            setBanner({ message: copy.title, sub: copy.detail, tone: "win" });
+            setBanner({ message: head, sub: null, tone: "win" });
           });
         } else if (entries[0]) {
-          setBanner({ message: copy.title, sub: entries[0].label, tone: "win" });
+          setBanner({ message: head, sub: entries[0].label, tone: "win" });
         }
       };
       if (tier) {
@@ -452,6 +470,7 @@ export default function SlotScreen() {
       clearTimers();
       reels.current.forEach((reel, i) => reel?.land(stopsRef.current[i]!, 300 + 120 * i));
       void stopLoop("slot_spin_loop");
+      void stopLoop("slot_anticipation");
       setPhase("idle");
       setBanner(IDLE_BANNER);
       setPendingDebit(null);
@@ -477,10 +496,10 @@ export default function SlotScreen() {
         const toIntro = () => later(r.totalReturn > 0 ? 1300 : 300, () => {
           setHighlight(scat);
           setWinMode("celebrate");
-          void playSound("slot_gong");
           haptic("heavy");
           later(500, () => {
-            duckLoops(true);
+            // Gong stinger already fired at the 3rd-scatter impact. No duckLoops here: no
+            // loop is running and the duck was never released (FG music stayed at 0.4x).
             void playSound("slot_fg_intro");
             void playVoice("vo_free_games");
             setOffer({
@@ -576,8 +595,7 @@ export default function SlotScreen() {
             const added = Math.min(state.option.spins, state.spins.length - state.total);
             if (added > 0) {
               next = { ...next, total: state.total + added };
-              void playSound("slot_gong");
-              haptic("heavy");
+              haptic("heavy"); // gong stinger already fired at the 3rd-scatter impact
               setRetrig(added);
               later(1300, () => setRetrig(null));
               pause += 1300;
@@ -597,6 +615,7 @@ export default function SlotScreen() {
     async (id: FeatureOptionId) => {
       if (!offer || busyOption) return;
       haptic("medium");
+      void stopSound("slot_fg_intro");
       void playSound("ui_tap");
       setBusyOption(id);
       try {
@@ -655,6 +674,7 @@ export default function SlotScreen() {
     featureToken.current = token + 1;
     clearTimers();
     void stopLoop("slot_spin_loop", 0);
+    void stopLoop("slot_anticipation", 0);
     const last = run.spins[run.spins.length - 1];
     if (last) {
       last.stops.forEach((s, i) => reels.current[i]?.snap(s));
@@ -679,7 +699,7 @@ export default function SlotScreen() {
 
   const onBigWinTap = useCallback(() => {
     if (count.value < (bigWin?.target ?? 0)) {
-      count.jump();
+      if (!RESTRICTED_PLAY) count.jump(); // RESTRICTED_PLAY: no tap-skip of the count-up
       return;
     }
     setBigWin(null);
@@ -690,7 +710,7 @@ export default function SlotScreen() {
 
   // Tap on the reels during a presentation: skip the cycle / count-up.
   const onReelTap = useCallback(() => {
-    if (phase === "presenting") {
+    if (phase === "presenting" && !RESTRICTED_PLAY) {
       clearTimers();
       count.jump();
       holdTotal.current?.();
@@ -701,6 +721,8 @@ export default function SlotScreen() {
   const freeMode = phase === "feature" || (phase === "outro" && !!outro);
   const displayBalance = pendingDebit ? pendingDebit.before - pendingDebit.wager : balance;
   const verified = isSlotVerified(lastFair?.verification);
+  const fairState: FairnessState =
+    offer || run ? "sealed" : lastFair ? (verified ? "verified" : "failed") : session ? "sealed" : "pending";
   const winShown = phase === "spinning" ? null : freeMode || winMode !== "none" || count.value > 0 ? count.value : null;
   const spinning = phase === "spinning";
 
@@ -721,15 +743,22 @@ export default function SlotScreen() {
 
   return (
     <View style={styles.flex}>
-      <SlotBackdrop width={win.width} height={win.height} />
-      <SafeAreaView style={styles.fill} edges={["top", "bottom"]}>
-        <GameHeader
-          title="Lion Lantern Night"
-          subtitle={`243 ways · RTP ${rtpRange(paytable)}`}
-          balance={displayBalance}
-          onAddCoins={openIAP}
-          onInfo={() => setSheet("rules")}
-        />
+      <SlotBackdrop width={win.width} height={win.height} sceneTop={sceneTop} />
+      <View style={[styles.fill, { paddingTop: insetTop, paddingBottom: insetBottom }]}>
+        <View
+          onLayout={(e) => {
+            const b = e.nativeEvent.layout.y + e.nativeEvent.layout.height;
+            setSceneTop((v) => (Math.abs(v - b) < 1 ? v : b));
+          }}
+        >
+          <GameHeader
+            title="Lion Lantern Night"
+            subtitle={`243 ways · RTP ${rtpRange(paytable)}`}
+            balance={displayBalance}
+            onAddCoins={openIAP}
+            onInfo={() => setSheet("rules")}
+          />
+        </View>
         <View style={styles.content}>
           <View style={styles.root} onLayout={onLayout} testID="slot-root">
             <View style={styles.stage}>
@@ -777,6 +806,7 @@ export default function SlotScreen() {
                         ))}
                         <WinLayer
                           cell={geo.cell}
+                          cellH={geo.cellH}
                           gap={geo.D}
                           grid={grid}
                           highlight={highlight}
@@ -788,13 +818,14 @@ export default function SlotScreen() {
                     }
                   >
                     {STRIPS.map((strip, i) => (
-                      <View key={`${i}-${geo.cell}`} style={[styles.reelSlot, { left: geo.reelX(i) }]}>
+                      <View key={`${i}-${geo.cell}-${geo.cellH}`} style={[styles.reelSlot, { left: geo.reelX(i) }]}>
                         <Reel
                           ref={(h) => {
                             reels.current[i] = h;
                           }}
                           strip={strip}
                           cell={geo.cell}
+                          cellH={geo.cellH}
                           initialStop={stopsRef.current[i]!}
                           reduceMotion={reduceMotion}
                         />
@@ -811,7 +842,7 @@ export default function SlotScreen() {
               />
 
               {/* ── banner + fairness ── */}
-              <View style={styles.bannerWrap}>
+              <View>
                 <WinBanner
                   bet={wager}
                   win={winShown}
@@ -819,28 +850,18 @@ export default function SlotScreen() {
                   message={banner.message}
                   sub={banner.sub}
                   tone={banner.tone}
-                  onPress={phase === "presenting" ? onReelTap : undefined}
+                  onPress={phase === "presenting" && !RESTRICTED_PLAY ? onReelTap : undefined}
                 />
+                <View style={styles.fairRow}>
+                  <FairnessBadge state={fairState} onPress={() => setSheet("fair")} testID="slot-fairness" />
+                </View>
               </View>
-              <Pressable onPress={() => setSheet("fair")} style={styles.fairRow} accessibilityRole="button" testID="slot-fairness" hitSlop={6}>
-                <Ionicons
-                  name={lastFair && !verified ? "warning" : "shield-checkmark"}
-                  size={12}
-                  color={lastFair && !verified ? palette.danger : palette.emerald}
-                />
-                <AppText variant="caption" style={[styles.fairText, lastFair && !verified && { color: palette.danger }]}>
-                  {offer || run ? "Seed sealed until free games end" : lastFair ? (verified ? "Fair spin ✓" : "Verification failed") : "Seed committed ✓"}
-                </AppText>
-                <AppText variant="caption" style={styles.fairLink}>
-                  Check fairness ›
-                </AppText>
-              </Pressable>
             </View>
 
             {/* ── controls ── */}
             <View style={[styles.controls, { height: CONTROLS_H }]}>
               <View style={styles.side}>
-                {phase === "feature" ? (
+                {phase === "feature" && !RESTRICTED_PLAY ? (
                   <RoundToggle icon="play-skip-forward" label="SKIP" onPress={onSkipFeature} testID="slot-skip" />
                 ) : allowTurbo ? (
                   <RoundToggle icon="flash" label="TURBO" active={turbo} onPress={() => setTurbo((t) => !t)} testID="slot-turbo" />
@@ -897,7 +918,7 @@ export default function SlotScreen() {
             pending={!!offer || !!run}
           />
         </View>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }
@@ -907,9 +928,9 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   content: { flex: 1, paddingHorizontal: spacing.sm, paddingBottom: spacing.xs },
   root: { flex: 1 },
-  stage: { flex: 1, justifyContent: "center" },
+  stage: { flex: 1, justifyContent: "space-evenly" },
   centerFill: { flex: 1, justifyContent: "center" },
-  titleBand: { alignItems: "center", justifyContent: "center", marginBottom: spacing.xs },
+  titleBand: { alignItems: "center", justifyContent: "center" },
   lanternL: { position: "absolute", left: 0, top: -10, transformOrigin: "50% 0%" },
   lanternR: { position: "absolute", right: 2, top: -8, transformOrigin: "50% 0%" },
   fgPlate: {
@@ -937,10 +958,7 @@ const styles = StyleSheet.create({
   frameWrap: { alignItems: "center" },
   reelSlot: { position: "absolute", top: 0 },
   a11yGrid: { position: "absolute", width: 1, height: 1, opacity: 0 },
-  bannerWrap: { marginTop: spacing.sm },
-  fairRow: { flexDirection: "row", alignItems: "center", gap: 4, height: 22 },
-  fairText: { color: palette.emerald },
-  fairLink: { color: palette.gold, marginLeft: "auto" },
+  fairRow: { height: 28, justifyContent: "center", alignItems: "center" },
   controls: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.xs },
   side: { width: 52, alignItems: "center" },
 });

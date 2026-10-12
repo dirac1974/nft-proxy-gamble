@@ -63,3 +63,12 @@ describe("Roulette screen", () => {
     qc.clear();
   });
 });
+
+describe("roulette settle timing", () => {
+  it("holds the reveal for the full presentation (and min cycle when restricted)", () => {
+    const { rouletteSettleDelay } = require("@/app/games/roulette");
+    expect(rouletteSettleDelay(0, 10_000, false)).toBe(1700);
+    expect(rouletteSettleDelay(0, 10_000, true)).toBe(900);
+    expect(rouletteSettleDelay(10_000, 10_100, true)).toBeGreaterThanOrEqual(900);
+  });
+});

@@ -21,12 +21,19 @@ interface RulesProps {
   onTurbo: ((on: boolean) => void) | null;
 }
 
+/** "95.5%" when the range collapses at 1 dp, else "95.4–95.6%". */
 export function rtpRange(pt: SlotPaytable): string {
-  if (pt.rtp) return `${pt.rtp.min.toFixed(1)}–${pt.rtp.max.toFixed(1)}%`;
-  const r = pt.options.map((o) => o.rtp);
-  if (!r.length) return "—";
-  const lo = Math.min(...r);
-  const hi = Math.max(...r);
+  let lo: number;
+  let hi: number;
+  if (pt.rtp) {
+    lo = pt.rtp.min;
+    hi = pt.rtp.max;
+  } else {
+    const r = pt.options.map((o) => o.rtp);
+    if (!r.length) return "—";
+    lo = Math.min(...r);
+    hi = Math.max(...r);
+  }
   return lo.toFixed(1) === hi.toFixed(1) ? `${lo.toFixed(1)}%` : `${lo.toFixed(1)}–${hi.toFixed(1)}%`;
 }
 

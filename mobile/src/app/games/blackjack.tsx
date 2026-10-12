@@ -9,7 +9,9 @@ import {
   Badge,
   Button,
   ChipGraphic,
+  CARD_RATIO,
   EmptyState,
+  FairnessBadge,
   GameHeader,
   Screen,
   Toast,
@@ -41,10 +43,10 @@ import { useDealTimeline } from "@/components/blackjack/useDealTimeline";
 import { CardFan, type FanCard } from "@/components/blackjack/CardFan";
 import { HandValueBadge } from "@/components/blackjack/HandValueBadge";
 import { BetCircle } from "@/components/blackjack/BetCircle";
-import { TablePrint } from "@/components/blackjack/TablePrint";
+import { PRINT_HEIGHT, TablePrint } from "@/components/blackjack/TablePrint";
 import { ActionBar } from "@/components/blackjack/ActionBar";
 import { InsurancePanel } from "@/components/blackjack/InsurancePanel";
-import { FairPill, FairnessSheet, type FairStatus } from "@/components/blackjack/FairnessSheet";
+import { FairnessSheet, type FairStatus } from "@/components/blackjack/FairnessSheet";
 import { RulesSheet } from "@/components/blackjack/RulesSheet";
 
 type Session = {
@@ -59,6 +61,17 @@ type ToastState = { message: string; tone: ToastTone } | null;
 type WinState = { tier: WinTier; title: string; amount: number } | null;
 
 const SESSION_TAIL_MS = 900;
+// Non-card vertical space inside the table (labels, badges, bet spot, minimum felt print).
+const TABLE_FIXED_H = 250;
+const PRINT_MIN_H = 96;
+
+// Card width from the table height measured in the betting layout (the tallest footer),
+// so cards grow ~30% on tall phones and never resize mid-round.
+export function blackjackCardWidth(tableH: number | null, compact: boolean): number {
+  if (!tableH) return compact ? 56 : 64;
+  const w = (tableH - TABLE_FIXED_H - PRINT_MIN_H) / (2 * CARD_RATIO);
+  return Math.round(Math.max(52, Math.min(88, w)));
+}
 
 export default function BlackjackScreen() {
   const { isAuthenticated } = useWalletStore();
@@ -104,7 +117,9 @@ function BlackjackTable() {
   const qc = useQueryClient();
   const { width: screenW, height: screenH } = useWindowDimensions();
   const compact = screenH < 760;
-  const bigCard = compact ? 56 : 64;
+  const [tableH, setTableH] = useState<number | null>(null);
+  const [printH, setPrintH] = useState<number | null>(null);
+  const bigCard = blackjackCardWidth(tableH, compact);
   const reduceMotion = useSettingsStore((s) => s.reduceMotion);
   const openIAP = useUiStore((s) => s.openIAP);
   const { data: balanceData } = useQuery({ queryKey: ["balance"], queryFn: balanceApi.get });
@@ -184,14 +199,16 @@ function BlackjackTable() {
           }
           const net = r.netProfit ?? 0;
           const base = roundBetRef.current || r.hands[0]?.bet || 0;
+          // One win sound (ours, by net) and one haptic: the overlay runs silent and owns the haptic when shown.
           void playSound(winSoundFor(net, base));
           const voice = roundVoice(r);
           if (voice) void playVoice(voice);
           const natural = (r.results ?? []).some((x) => x.outcome === "blackjack");
-          if (natural) haptic("success");
           const tier = classifyWin(net, base);
           if (tier === "medium" || tier === "big") {
             setWin({ tier, title: natural ? "Blackjack" : "Big win", amount: net });
+          } else if (tier) {
+            haptic("success");
           }
           setBet(0);
           if (tailTimer.current) clearTimeout(tailTimer.current);
@@ -347,7 +364,7 @@ function BlackjackTable() {
 
   const hands = round?.hands ?? [];
   const nHands = hands.length;
-  const cardW = nHands <= 1 ? bigCard : nHands === 2 ? 52 : 44;
+  const cardW = nHands <= 1 ? bigCard : nHands === 2 ? Math.round(bigCard * 0.8) : Math.round(bigCard * 0.66);
   const colW = nHands <= 1 ? contentW * 0.8 : (contentW - (nHands - 1) * spacing.sm) / nHands;
 
   const activeHand = round && round.phase === "player" ? hands[round.active] : undefined;
@@ -425,9 +442,10 @@ function BlackjackTable() {
                 <View style={styles.flex}>
                   <Button
                     label="Clear"
-                    variant="ghost"
+                    variant="secondary"
                     size="sm"
                     fullWidth
+                    sound={false}
                     disabled={pending || bet === 0}
                     onPress={() => {
                       setBet(0);
@@ -443,6 +461,7 @@ function BlackjackTable() {
                     variant="secondary"
                     size="sm"
                     fullWidth
+                    sound={false}
                     disabled={pending || lastBet === 0 || bet === lastBet}
                     onPress={() => {
                       if (applyBet(lastBet)) void playSound("chip_place");
@@ -456,6 +475,7 @@ function BlackjackTable() {
                     variant="secondary"
                     size="sm"
                     fullWidth
+                    sound={false}
                     disabled={pending || bet === 0}
                     onPress={() => {
                       if (applyBet(bet * 2)) void playSound("chip_place");
@@ -470,6 +490,7 @@ function BlackjackTable() {
                 size="lg"
                 fullWidth
                 haptic="medium"
+                sound={false}
                 loading={dealMutation.isPending || (!session && startMutation.isPending)}
                 disabled={bet < BJ_MIN_BET || dealMutation.isPending}
                 onPress={onDeal}
@@ -499,22 +520,32 @@ function BlackjackTable() {
         </View>
       }
     >
-      <View style={styles.table}>
+      <View
+        style={styles.table}
+        onLayout={(e) => {
+          // Measure only in the betting layout so card size is stable through the round.
+          if (betting) setTableH(e.nativeEvent.layout.height);
+        }}
+      >
         <Toast message={toast?.message ?? null} tone={toast?.tone} onHide={hideToast} />
 
         <View style={styles.topRow}>
           <AppText variant="overline" style={styles.zoneLabel}>
             Dealer
           </AppText>
-          {fairDetails && <FairPill status={fairStatus} onPress={() => setFairOpen(true)} />}
+          {fairDetails ? (
+            <FairnessBadge state={fairStatus} onPress={() => setFairOpen(true)} testID="bj-fair" />
+          ) : (
+            <FairnessBadge state="pending" />
+          )}
         </View>
 
         <View style={styles.dealerZone}>
-          <View style={[styles.dealerCards, { minHeight: bigCard * 1.4 }]}>
+          <View style={[styles.dealerCards, { minHeight: bigCard * CARD_RATIO }]}>
             {dealerCards.length > 0 ? (
               <CardFan cards={dealerCards} width={bigCard} maxWidth={contentW * 0.75} reduceMotion={reduceMotion} testID="bj-dealer-cards" />
             ) : (
-              <View style={{ height: bigCard * 1.4 }} />
+              <View style={{ height: bigCard * CARD_RATIO }} />
             )}
           </View>
           <View style={styles.badgeSlot}>
@@ -540,8 +571,8 @@ function BlackjackTable() {
             />
           </View>
         ) : (
-          <View style={styles.printWrap}>
-            <TablePrint width={contentW} dealerHitsSoft17={rules.dealerHitsSoft17} />
+          <View style={styles.printWrap} onLayout={(e) => setPrintH(e.nativeEvent.layout.height)}>
+            <TablePrint width={contentW} dealerHitsSoft17={rules.dealerHitsSoft17} maxHeight={printH ?? PRINT_HEIGHT} />
           </View>
         )}
 
@@ -580,7 +611,7 @@ function BlackjackTable() {
               })}
             </View>
           ) : (
-            <View style={{ height: bigCard * 1.4 + 56 }} />
+            <View style={{ height: bigCard * CARD_RATIO + 64 }} />
           )}
         </View>
 
@@ -613,7 +644,7 @@ function BlackjackTable() {
         dealerHitsSoft17={rules.dealerHitsSoft17}
       />
       {win && (
-        <WinOverlay visible tier={win.tier} title={win.title} amount={win.amount} onDismiss={() => setWin(null)} />
+        <WinOverlay visible silent tier={win.tier} title={win.title} amount={win.amount} onDismiss={() => setWin(null)} />
       )}
     </Screen>
   );
@@ -647,7 +678,7 @@ const styles = StyleSheet.create({
   handMeta: { flexDirection: "row", alignItems: "center", gap: spacing.sm, minHeight: 24 },
   handBet: { ...typography.caption, color: palette.goldLight, fontVariant: ["tabular-nums"] },
   resultSlot: { minHeight: 22, alignItems: "center" },
-  betZone: { alignItems: "center", justifyContent: "center", minHeight: 84, marginTop: spacing.sm, marginBottom: spacing.sm },
+  betZone: { alignItems: "center", justifyContent: "center", minHeight: 84, marginTop: spacing.xs, marginBottom: spacing.xs },
   netRow: { flexDirection: "row", gap: spacing.sm, alignItems: "center" },
   insuranceWrap: { flex: 1, justifyContent: "center", paddingVertical: spacing.sm },
   hidden: { display: "none" },
@@ -656,7 +687,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.s12,
     paddingBottom: spacing.sm,
     gap: spacing.sm,
-    minHeight: 196,
     justifyContent: "flex-end",
     backgroundColor: "rgba(4,16,12,0.55)",
     borderTopWidth: 1,

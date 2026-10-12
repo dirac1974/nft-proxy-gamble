@@ -35,11 +35,21 @@ export function PaytableStrip({ mode, activeCard, spots, bet, liveCatches, onPre
       }
       testID="keno-paytable"
     >
-      <View style={styles.label}>
-        {mode === "quad" ? <AppText style={[styles.cardTag, { color: cs.color }]}>{cs.glyphChar} {cs.letter}</AppText> : null}
-        <AppText style={styles.labelTop}>{spots ? `${spots} SPOT${spots > 1 ? "S" : ""}` : "PAYS"}</AppText>
-        <AppText style={styles.labelBottom}>CATCH</AppText>
-      </View>
+      {mode === "quad" ? (
+        <AppText style={[styles.cardTag, { color: cs.color }]} numberOfLines={1} testID="keno-paytable-card">
+          {cs.glyphChar} {cs.letter}
+        </AppText>
+      ) : null}
+      {spots > 0 ? (
+        <View style={styles.label}>
+          <AppText style={styles.labelTop} numberOfLines={1}>
+            CATCH
+          </AppText>
+          <AppText style={styles.labelBottom} numberOfLines={1}>
+            PAYS
+          </AppText>
+        </View>
+      ) : null}
       {spots === 0 ? (
         <AppText style={styles.empty} numberOfLines={2}>
           Mark 1–10 numbers · the more you catch, the more it pays
@@ -112,10 +122,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     gap: 6,
   },
-  label: { width: 50, alignItems: "flex-start" },
-  cardTag: { fontFamily: fonts.heavy, fontSize: 10, lineHeight: 12 },
-  labelTop: { fontFamily: fonts.heavy, fontSize: 10, lineHeight: 13, color: palette.gold, letterSpacing: 0.6 },
-  labelBottom: { fontFamily: fonts.bold, fontSize: 9, lineHeight: 12, color: palette.textDim, letterSpacing: 1 },
+  // Same two-line rhythm as each pay cell (catch over amount), so it reads as a row header.
+  label: { alignItems: "flex-end" },
+  cardTag: { fontFamily: fonts.heavy, fontSize: 13, lineHeight: 16 },
+  labelTop: { fontFamily: fonts.bold, fontSize: 9, lineHeight: 15, color: palette.textDim, letterSpacing: 0.6 },
+  labelBottom: { fontFamily: fonts.bold, fontSize: 9, lineHeight: 14, color: palette.gold, letterSpacing: 0.6 },
   empty: { flex: 1, fontFamily: fonts.semibold, fontSize: 12, lineHeight: 15, color: palette.textDim },
   rows: { flex: 1, flexDirection: "row", gap: 3 },
   pay: {

@@ -137,9 +137,16 @@ export function RulesSheet({ visible, onClose }: { visible: boolean; onClose: ()
           <AppText style={styles.pays}>{pays}</AppText>
         </View>
       ))}
-      <AppText variant="bodySmall">
-        Neighbours places 5 straight bets: the number you tap plus the two pockets either side of it on the wheel.
-      </AppText>
+      <View style={styles.payRow} testID="roulette-rules-neighbours">
+        <View style={styles.flex}>
+          <AppText variant="bodyStrong">Nbrs · Neighbours</AppText>
+          <AppText variant="caption">
+            Turn on Nbrs, then tap a number: it places 5 straight bets — that number plus the two pockets either side of
+            it on the wheel. Each chip costs your selected chip value and pays 35:1.
+          </AppText>
+        </View>
+        <AppText style={styles.pays}>5 × 35:1</AppText>
+      </View>
       <AppText variant="bodySmall">
         Limits: up to {MAX_BETS_PER_SPIN} bets and {MAX_TOTAL_WAGER.toLocaleString("en-US")} coins per spin. Zero loses
         all outside bets. Return to player 97.3%.

@@ -209,11 +209,15 @@ export const BettingLayout = memo(function BettingLayout({
     </View>
   );
 
-  const diamond = (fill: string, w: number, h: number) => {
-    const d = Math.min(w, h) * 0.42;
+  // Diamond + word: colour alone must not carry the meaning (colour-blind players).
+  const diamond = (fill: string, word: string, w: number, h: number) => {
+    const d = Math.min(w, h * 0.6) * 0.34;
     return (
-      <View style={[StyleSheet.absoluteFill, styles.center]}>
+      <View style={[StyleSheet.absoluteFill, styles.center, styles.diamondStack, { gap: d * 0.55 }]}>
         <View style={[styles.diamond, { width: d, height: d, backgroundColor: fill }]} />
+        <AppText style={styles.colorWord} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+          {word}
+        </AppText>
       </View>
     );
   };
@@ -316,9 +320,9 @@ export const BettingLayout = memo(function BettingLayout({
         const rect = { x: g.evenX, y: g.gridY + i * 2 * g.rowH, w: g.evenW, h: 2 * g.rowH };
         const label =
           t === "red"
-            ? diamond(palette.ruby, rect.w, rect.h)
+            ? diamond(palette.ruby, "RED", rect.w, rect.h)
             : t === "black"
-              ? diamond("#15171C", rect.w, rect.h)
+              ? diamond("#15171C", "BLACK", rect.w, rect.h)
               : vertical(evenLabels[t], rect.w, rect.h, true);
         return outsideCell(spots.outside(t), rect, label, `bet-${t}`, evenLabels[t]);
       })}
@@ -400,11 +404,21 @@ const styles = StyleSheet.create({
   numText: { fontFamily: fonts.heavy, fontSize: 16, color: palette.ivory, fontVariant: ["tabular-nums"], includeFontPadding: false },
   center: { alignItems: "center", justifyContent: "center" },
   rotWrap: { position: "absolute", alignItems: "center", justifyContent: "center", transform: [{ rotate: "-90deg" }] },
-  outsideText: { fontFamily: fonts.display, fontSize: 12, color: palette.goldLight, letterSpacing: 1.2 },
+  // ≥70% gold on felt: printed outside-bet labels must read at a glance.
+  outsideText: {
+    fontFamily: fonts.displayBlack,
+    fontSize: 12.5,
+    color: palette.goldLight,
+    letterSpacing: 1.2,
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowRadius: 2,
+  },
   outsideSmall: { fontSize: 11, letterSpacing: 0.8 },
+  diamondStack: { paddingHorizontal: 2 },
+  colorWord: { fontFamily: fonts.heavy, fontSize: 9, color: palette.goldLight, letterSpacing: 0.6, textAlign: "center", alignSelf: "stretch" },
   diamond: { transform: [{ scaleY: 1.5 }, { rotate: "45deg" }], borderWidth: 1, borderColor: palette.goldLight },
   plaque: { position: "absolute", alignItems: "center", justifyContent: "center" },
-  plaqueText: { fontFamily: fonts.display, fontSize: 9, color: palette.feltLine, letterSpacing: 1.5 },
+  plaqueText: { fontFamily: fonts.display, fontSize: 9, color: "rgba(248,227,163,0.7)", letterSpacing: 1.5 },
   winPulse: {
     ...StyleSheet.absoluteFillObject,
     borderWidth: 2.5,

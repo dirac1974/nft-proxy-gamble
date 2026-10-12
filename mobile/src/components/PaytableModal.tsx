@@ -2,7 +2,7 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { fonts, palette, radius, spacing } from "@/theme";
-import { AppText, Sheet } from "@/components/ui";
+import { AppText, CoinIcon, Sheet } from "@/components/ui";
 import { formatCoins } from "@/config/brand";
 import type { PokerVariant } from "@/services/api";
 import {
@@ -122,6 +122,13 @@ export function PaytableModal({ visible, betAmount, onClose, variant = "jacks-or
         </View>
       )}
 
+      <View style={styles.creditNote} testID="credit-note">
+        <CoinIcon size={14} />
+        <AppText variant="bodySmall" style={styles.flex}>
+          1 credit = 1 coin. Bets, wins and the CREDIT meter are all in coins.
+        </AppText>
+      </View>
+
       <AppText variant="caption">Payouts include your bet. Results are settled by the server.</AppText>
     </Sheet>
   );
@@ -159,6 +166,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(233,196,106,0.3)",
   },
   tips: { gap: spacing.sm },
+  creditNote: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   tipRow: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start" },
   dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: palette.gold, marginTop: 8 },
 });

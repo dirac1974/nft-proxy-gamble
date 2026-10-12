@@ -5,7 +5,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppText, EmptyState } from "@/components/ui";
-import { BalanceHero } from "@/components/wallet/BalanceHero";
+import { BalanceHero, MIN_CASHOUT_COINS } from "@/components/wallet/BalanceHero";
+import { coinsToUsd, formatCoins } from "@/config/brand";
 import { VoucherCard } from "@/components/wallet/VoucherCard";
 import { useWalletStore } from "@/stores/walletStore";
 import { useGameStore } from "@/stores/gameStore";
@@ -87,6 +88,7 @@ export default function WalletScreen() {
   }
 
   const vouchers = (data ?? []) as Voucher[];
+  const canCashOut = Math.floor(coinBalance) >= MIN_CASHOUT_COINS;
 
   return (
     <View style={styles.root}>
@@ -117,8 +119,12 @@ export default function WalletScreen() {
             <EmptyState
               icon="ticket-outline"
               title="No cash-outs yet"
-              body="When you cash out, your coins become a voucher here. Turn it into USDC whenever you like."
-              cta={{ label: "Cash out", onPress: openCashOut, testID: "empty-cashout" }}
+              body={
+                canCashOut
+                  ? "When you cash out, your coins become a voucher here. Turn it into USDC whenever you like."
+                  : `When you cash out, your coins become a voucher here. Cash-outs start at ${formatCoins(MIN_CASHOUT_COINS)} coins (${coinsToUsd(MIN_CASHOUT_COINS)}).`
+              }
+              cta={canCashOut ? { label: "Cash out", onPress: openCashOut, testID: "empty-cashout" } : undefined}
               testID="vouchers-empty"
             />
           )

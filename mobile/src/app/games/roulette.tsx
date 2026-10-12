@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View, type LayoutChangeEvent } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, {
   Easing,
   FadeIn,
@@ -18,19 +19,22 @@ import {
   Button,
   ChipRack,
   EmptyState,
+  FairnessBadge,
   GameHeader,
   Screen,
   Toast,
   haptic,
+  type FairnessState,
   type ToastTone,
 } from "@/components/ui";
+import { MIN_CYCLE_MS, RESTRICTED_PLAY } from "@/config/compliance";
 import { WinOverlay, classifyWin, type WinTier } from "@/components/WinOverlay";
 import { useWalletStore } from "@/stores/walletStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { balanceApi, rouletteApi, type RouletteSpinResult } from "@/services/api";
 import { verifyRouletteSpin } from "@/services/provablyFair";
-import { playRouletteNumber, playSound, playVoice, winSoundFor } from "@/services/soundService";
+import { playRouletteNumber, playSound, playVoice, winSoundFor, type SfxKey } from "@/services/soundService";
 import { formatCoins } from "@/config/brand";
 import { RouletteWheel, type RouletteWheelHandle } from "@/components/roulette/RouletteWheel";
 import { BettingLayout, boardChromeHeight, type BetOutcome } from "@/components/roulette/BettingLayout";
@@ -74,6 +78,19 @@ const BANNER_MS = 300;
 const HISTORY_KEEP = 100;
 const COLOR_NAME = { red: "Red", black: "Black", green: "Green" } as const;
 const DEFAULT_HINT = "Tap a number · tap a line to split · tap a corner for four";
+const NBRS_TIP_KEY = "roulette.nbrsTip.v1";
+const NBRS_A11Y_OFF = "Neighbours bets, off. When on, tapping a number also bets the two pockets either side of it on the wheel";
+const NBRS_A11Y_ON = "Neighbours bets, on. Tapping a number bets it plus the two pockets either side of it on the wheel";
+// Dark enough that the board doesn't show through the travelling wheel.
+const SCRIM_OPACITY = 0.82;
+const SCRIM_COLOR = "#020407";
+
+// Time from the reveal to the board reopening. Restricted play enforces a minimum game cycle from SPIN.
+export function rouletteSettleDelay(startedAt: number, now: number, reduceMotion: boolean): number {
+  const base = reduceMotion ? 900 : 1700;
+  if (!RESTRICTED_PLAY) return base;
+  return Math.max(base, startedAt + MIN_CYCLE_MS - now);
+}
 
 export default function RouletteScreen() {
   const qc = useQueryClient();
@@ -103,6 +120,7 @@ export default function RouletteScreen() {
   const [lastFair, setLastFair] = useState<FairSpin | null>(null);
   const [sheet, setSheet] = useState<"fair" | "rules" | "stats" | null>(null);
   const [layout, setLayout] = useState({ w: 0, h: 0, bandY: 0, boardH: 0 });
+  const [nbrsTip, setNbrsTip] = useState(false);
 
   const wheelRef = useRef<RouletteWheelHandle>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -170,6 +188,23 @@ export default function RouletteScreen() {
     }
   }, [sessionState]);
 
+  // One-time explainer for the "Nbrs" control.
+  useEffect(() => {
+    let alive = true;
+    AsyncStorage.getItem(NBRS_TIP_KEY)
+      .then((v) => {
+        if (alive && v !== "done") setNbrsTip(true);
+      })
+      .catch(() => null);
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const dismissNbrsTip = useCallback(() => {
+    setNbrsTip(false);
+    AsyncStorage.setItem(NBRS_TIP_KEY, "done").catch(() => null);
+  }, []);
+
   // --- wheel expand / collapse ---------------------------------------------
   const expand = useSharedValue(0);
   const wheelSize = Math.min(layout.w - spacing.md * 2, 300);
@@ -198,7 +233,7 @@ export default function RouletteScreen() {
       ],
     };
   });
-  const scrimStyle = useAnimatedStyle(() => ({ opacity: expand.value * 0.78 }));
+  const scrimStyle = useAnimatedStyle(() => ({ opacity: expand.value * SCRIM_OPACITY }));
 
   // --- betting ---------------------------------------------------------------
   const canBet = phase === "betting" && isAuthenticated;
@@ -301,7 +336,8 @@ export default function RouletteScreen() {
           setOverlay({ tier, title: `${r.winningNumber} ${COLOR_NAME[pocketColor(r.winningNumber)]}`, amount: r.netProfit });
         } else {
           void playSound(winSoundFor(r.netProfit, r.totalWagered));
-          haptic(tier ? "success" : "light");
+          // No haptic on loss / push / loss-disguised-as-win; overlay wins buzz via WinOverlay.
+          if (tier) haptic("success");
         }
       });
       later(1600, () => {
@@ -363,7 +399,7 @@ export default function RouletteScreen() {
           });
           haptic("medium");
           void playRouletteNumber(r.winningNumber);
-          later(reduceMotion ? 900 : 1700, () => settle(r, spun));
+          later(rouletteSettleDelay(startedAt, Date.now(), reduceMotion), () => settle(r, spun));
         });
       });
     } catch (e) {
@@ -432,6 +468,7 @@ export default function RouletteScreen() {
   const lastNumber = history[0] ?? null;
   const spinning = phase !== "betting";
   const verified = isVerified(lastFair?.verification);
+  const fairState: FairnessState = lastFair ? (verified ? "verified" : "failed") : session ? "sealed" : "pending";
 
   if (!isAuthenticated) {
     return (
@@ -483,25 +520,7 @@ export default function RouletteScreen() {
               </View>
             </View>
             <ResultHistoryStrip numbers={history} onPress={() => setSheet("stats")} />
-            <Pressable
-              onPress={() => setSheet("fair")}
-              style={styles.fairRow}
-              accessibilityRole="button"
-              testID="roulette-fairness"
-              hitSlop={8}
-            >
-              <Ionicons
-                name={lastFair && !verified ? "warning" : "shield-checkmark"}
-                size={13}
-                color={lastFair && !verified ? palette.danger : palette.emerald}
-              />
-              <AppText variant="caption" style={[styles.fairText, lastFair && !verified && { color: palette.danger }]}>
-                {lastFair ? (verified ? "Fair spin ✓" : "Verification failed") : "Seed committed ✓"}
-              </AppText>
-              <AppText variant="caption" style={styles.fairLink}>
-                Check fairness ›
-              </AppText>
-            </Pressable>
+            <FairnessBadge state={fairState} onPress={() => setSheet("fair")} testID="roulette-fairness" />
           </View>
         </View>
 
@@ -539,25 +558,46 @@ export default function RouletteScreen() {
           <View style={styles.rack}>
             <ChipRack values={[...CHIP_VALUES]} value={chip} onChange={setChip} disabled={spinning} maxAffordable={balance} />
           </View>
-          <IconAction
-            icon="git-network-outline"
-            label="Nbrs"
-            onPress={() => {
-              setNeighbours((v) => !v);
-              setHint(neighbours ? DEFAULT_HINT : "Neighbours on · tap a number for it + 2 either side");
-            }}
-            active={neighbours}
-            disabled={spinning}
-            testID="roulette-neighbours"
-          />
+          <View>
+            <IconAction
+              icon="git-network-outline"
+              label="Nbrs"
+              a11yLabel={neighbours ? NBRS_A11Y_ON : NBRS_A11Y_OFF}
+              sound="ui_toggle"
+              onPress={() => {
+                if (nbrsTip) dismissNbrsTip();
+                setNeighbours((v) => !v);
+                setHint(neighbours ? DEFAULT_HINT : "Neighbours on · tap a number for it + 2 either side");
+              }}
+              active={neighbours}
+              disabled={spinning}
+              testID="roulette-neighbours"
+            />
+            {nbrsTip && !spinning ? (
+              <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)} style={styles.tip}>
+                <Pressable
+                  onPress={dismissNbrsTip}
+                  accessibilityRole="button"
+                  accessibilityLabel="Neighbours tip. Nbrs bets a number plus the two pockets either side of it on the wheel. Tap to dismiss"
+                  testID="roulette-nbrs-tip"
+                >
+                  <AppText style={styles.tipTitle}>Nbrs · Neighbours</AppText>
+                  <AppText style={styles.tipBody}>Bets a number + the 2 pockets either side of it on the wheel (5 chips).</AppText>
+                  <AppText style={styles.tipDismiss}>Got it</AppText>
+                </Pressable>
+                <View style={styles.tipArrow} />
+              </Animated.View>
+            ) : null}
+          </View>
         </View>
         <View style={styles.actionRow}>
-          <IconAction icon="arrow-undo" label="Undo" onPress={onUndo} disabled={!canBet || undoStack.length === 0} testID="roulette-undo" />
-          <IconAction icon="trash-outline" label="Clear" onPress={onClear} disabled={!canBet || bets.length === 0} testID="roulette-clear" />
-          <IconAction icon="repeat" label="Rebet" onPress={onRebet} disabled={!canBet || lastBets.length === 0} testID="roulette-rebet" />
+          <IconAction icon="arrow-undo" label="Undo" sound={false} onPress={onUndo} disabled={!canBet || undoStack.length === 0} testID="roulette-undo" />
+          <IconAction icon="trash-outline" label="Clear" sound={false} onPress={onClear} disabled={!canBet || bets.length === 0} testID="roulette-clear" />
+          <IconAction icon="repeat" label="Rebet" sound={false} onPress={onRebet} disabled={!canBet || lastBets.length === 0} testID="roulette-rebet" />
           <IconAction
             text="2×"
             label="Double"
+            sound={false}
             onPress={onDouble}
             disabled={!canBet || (baseBets.length === 0 && lastBets.length === 0)}
             testID="roulette-double"
@@ -567,6 +607,7 @@ export default function RouletteScreen() {
             label={spinning ? "Spinning" : bets.length ? `Spin · ${formatCoins(total)}` : "Spin"}
             size="lg"
             haptic={false}
+            sound={false}
             onPress={() => void onSpin()}
             loading={phase === "betting" && sessionState === "loading" && bets.length > 0}
             disabled={!canBet || bets.length === 0}
@@ -666,6 +707,8 @@ function IconAction({
   icon,
   text,
   label,
+  a11yLabel,
+  sound = "ui_tap",
   onPress,
   disabled,
   active,
@@ -674,6 +717,9 @@ function IconAction({
   icon?: keyof typeof Ionicons.glyphMap;
   text?: string;
   label: string;
+  a11yLabel?: string;
+  /** false when the action plays its own semantic sound (chip place / collect). */
+  sound?: SfxKey | false;
   onPress: () => void;
   disabled?: boolean;
   active?: boolean;
@@ -684,12 +730,12 @@ function IconAction({
       testID={testID}
       onPress={() => {
         haptic("light");
-        void playSound("ui_tap");
+        if (sound) void playSound(sound);
         onPress();
       }}
       disabled={disabled}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={a11yLabel ?? label}
       accessibilityState={{ disabled: !!disabled, selected: !!active }}
       style={({ pressed }) => [styles.iconAction, disabled && styles.disabled, pressed && styles.pressed]}
       hitSlop={4}
@@ -726,9 +772,34 @@ const styles = StyleSheet.create({
   },
   lastMedalText: { fontFamily: fonts.heavy, fontSize: 16, color: palette.ivory, fontVariant: ["tabular-nums"] },
   resultTitle: { fontFamily: fonts.display, fontSize: 15, color: palette.text, letterSpacing: 0.4 },
-  fairRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  fairText: { color: palette.emerald },
-  fairLink: { color: palette.gold, marginLeft: "auto" },
+  tip: {
+    position: "absolute",
+    right: 0,
+    bottom: 64,
+    width: 200,
+    padding: spacing.sm,
+    borderRadius: 10,
+    backgroundColor: "rgba(7,9,15,0.96)",
+    borderWidth: 1,
+    borderColor: palette.gold,
+    zIndex: 10,
+    elevation: 10,
+  },
+  tipTitle: { fontFamily: fonts.bold, fontSize: 12, color: palette.goldLight },
+  tipBody: { fontFamily: fonts.medium, fontSize: 11, lineHeight: 15, color: palette.text, marginTop: 2 },
+  tipDismiss: { fontFamily: fonts.bold, fontSize: 11, color: palette.gold, marginTop: 6, alignSelf: "flex-end" },
+  tipArrow: {
+    position: "absolute",
+    bottom: -6,
+    right: 18,
+    width: 10,
+    height: 10,
+    backgroundColor: "rgba(7,9,15,0.96)",
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: palette.gold,
+    transform: [{ rotate: "45deg" }],
+  },
   boardArea: { flex: 1 },
   status: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: 6 },
   hint: { flex: 1, color: palette.goldLight, opacity: 0.85 },
@@ -753,7 +824,7 @@ const styles = StyleSheet.create({
   iconLabel: { fontFamily: fonts.semibold, fontSize: 9.5, color: palette.textDim, letterSpacing: 0.3 },
   disabled: { opacity: 0.35 },
   pressed: { transform: [{ scale: 0.94 }] },
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: palette.bg },
+  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: SCRIM_COLOR },
   wheelHost: { position: "absolute", left: 0, top: 0 },
   banner: {
     position: "absolute",

@@ -1,7 +1,7 @@
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { fonts, spacing } from "@/theme";
-import { AppText } from "@/components/ui";
+import { AppText, CoinIcon } from "@/components/ui";
 import { coinsToUsd, formatCoins } from "@/config/brand";
 import { cab, cabText } from "./cabinet";
 
@@ -18,7 +18,7 @@ export function MeterBar({ win, bet, credit, showUsd, onToggleUnits }: MeterBarP
   const fmt = (n: number) => (showUsd ? coinsToUsd(n) : formatCoins(n));
   return (
     <View style={styles.bar}>
-      <Meter label="Win" value={win > 0 ? fmt(win) : ""} align="left" testID="meter-win" />
+      <Meter label="Win" value={fmt(Math.max(0, win))} align="left" testID="meter-win" />
       <Meter label="Bet" value={String(bet)} align="center" testID="meter-bet" />
       <Pressable
         onPress={onToggleUnits}
@@ -28,17 +28,34 @@ export function MeterBar({ win, bet, credit, showUsd, onToggleUnits }: MeterBarP
         testID="meter-credit-toggle"
         hitSlop={6}
       >
-        <Meter label="Credit" value={fmt(credit)} align="right" testID="meter-credit" />
+        <Meter label="Credit" value={fmt(credit)} align="right" testID="meter-credit" coin={!showUsd} />
       </Pressable>
     </View>
   );
 }
 
-function Meter({ label, value, align, testID }: { label: string; value: string; align: "left" | "center" | "right"; testID: string }) {
+interface MeterProps {
+  label: string;
+  value: string;
+  align: "left" | "center" | "right";
+  testID: string;
+  /** Small coin mark: 1 credit = 1 coin. */
+  coin?: boolean;
+}
+
+// Fixed label + value line heights so WIN / BET / CREDIT baselines align whatever the value.
+function Meter({ label, value, align, testID, coin = false }: MeterProps) {
   const alignItems = align === "left" ? "flex-start" : align === "right" ? "flex-end" : "center";
   return (
-    <View style={[styles.meter, { alignItems }]} accessible accessibilityLabel={`${label} ${value || "0"}`}>
-      <AppText style={styles.label}>{label}</AppText>
+    <View
+      style={[styles.meter, { alignItems }]}
+      accessible
+      accessibilityLabel={`${label} ${value || "0"}${coin ? " coins" : ""}`}
+    >
+      <View style={styles.labelRow}>
+        {coin && <CoinIcon size={10} />}
+        <AppText style={styles.label}>{label}</AppText>
+      </View>
       <AppText style={styles.value} numberOfLines={1} testID={testID}>
         {value}
       </AppText>
@@ -59,12 +76,13 @@ const styles = StyleSheet.create({
   },
   meter: { flex: 1, justifyContent: "center" },
   meterRight: { flex: 1.3 },
+  labelRow: { flexDirection: "row", alignItems: "center", gap: 3, height: 12 },
   label: { fontFamily: fonts.heavy, fontSize: 10, lineHeight: 12, letterSpacing: 1.5, color: cab.dimWhite, textTransform: "uppercase" },
   value: {
     ...cabText.led,
     fontSize: 20,
     lineHeight: 24,
-    minHeight: 24,
+    height: 24,
     textShadowColor: cab.amberGlow,
     textShadowRadius: 8,
     textShadowOffset: { width: 0, height: 0 },

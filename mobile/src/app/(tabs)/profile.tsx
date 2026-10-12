@@ -7,6 +7,7 @@ import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { AppText, Badge, Button, ListRow, ListSection, haptic } from "@/components/ui";
 import { copyText } from "@/components/wallet/clipboard";
+import { ResponsibleGamingSection } from "@/components/shell/ResponsibleGamingSection";
 import { useWalletStore } from "@/stores/walletStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useUiStore } from "@/stores/uiStore";
@@ -15,8 +16,6 @@ import { BRAND } from "@/config/brand";
 import { fonts, palette, spacing } from "@/theme";
 
 const APP_VERSION = "0.3.0";
-const GAMBLE_AWARE_URL = "https://www.begambleaware.org";
-const REMINDER_OPTIONS = [0, 30, 60, 120];
 
 type ToggleKey = "soundOn" | "voiceOn" | "hapticsOn" | "reduceMotion";
 
@@ -98,12 +97,6 @@ export default function ProfileScreen() {
 
   const toggle = (key: ToggleKey) => (v: boolean) => settings.set(key, v);
 
-  const reminderLabel = (m: number) => (m === 0 ? "Off" : m < 60 ? `${m} min` : `${m / 60} hr`);
-  const cycleReminder = () => {
-    haptic("select");
-    const i = REMINDER_OPTIONS.indexOf(settings.sessionReminderMin);
-    settings.set("sessionReminderMin", REMINDER_OPTIONS[(i + 1) % REMINDER_OPTIONS.length]!);
-  };
 
   return (
     <View style={styles.root}>
@@ -168,22 +161,7 @@ export default function ProfileScreen() {
           />
         </ListSection>
 
-        <ListSection title="Responsible gaming">
-          <ListRow
-            icon="time"
-            label="Session reminder"
-            detail="A gentle nudge after this much play time"
-            value={reminderLabel(settings.sessionReminderMin)}
-            onPress={cycleReminder}
-            testID="session-reminder"
-          />
-          <ListRow
-            icon="heart"
-            label="Get support"
-            detail="Free, confidential help at begambleaware.org"
-            onPress={() => void Linking.openURL(GAMBLE_AWARE_URL)}
-          />
-        </ListSection>
+        <ResponsibleGamingSection />
 
         {connected && (
           <ListSection title="Account">

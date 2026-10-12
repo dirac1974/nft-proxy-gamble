@@ -6,11 +6,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fonts, motion, spacing } from "@/theme";
-import { AppText, Button, EmptyState, PlayingCard, Toast, haptic, type ToastTone } from "@/components/ui";
+import { AppText, Button, CARD_RATIO, EmptyState, FairnessBadge, PlayingCard, Toast, haptic, type FairnessState, type ToastTone } from "@/components/ui";
 import { WinOverlay } from "@/components/WinOverlay";
 import { PaytableModal } from "@/components/PaytableModal";
 import { ProvablyFairModal, isVerified, verifyVideoPokerHand } from "@/components/ProvablyFairModal";
-import { PaytableGrid } from "@/components/videopoker/PaytableGrid";
+import { PAYTABLE_MIN_ROW, PaytableGrid } from "@/components/videopoker/PaytableGrid";
 import { ControlDeck } from "@/components/videopoker/ControlDeck";
 import { MeterBar } from "@/components/videopoker/MeterBar";
 import { CabinetButton } from "@/components/videopoker/CabinetButton";
@@ -18,6 +18,7 @@ import { evaluateHand } from "@/components/videopoker/handEval";
 import { cab, cabText, cabTiming } from "@/components/videopoker/cabinet";
 import {
   MAX_BET,
+  PAYTABLES,
   VARIANTS,
   friendlyError,
   isLosingRank,
@@ -38,6 +39,31 @@ const CARD_GAP = spacing.sm;
 const SIDE = spacing.s12;
 
 type Overlay = { title: string; amount: number } | null;
+
+// Vertical budget (dp) for everything in the body except the card row and paytable rows.
+const BANNER_H = 58;
+const HELD_H = 26;
+const HOLD_H = 28;
+const FAIR_H = 28;
+const TABS_H = 30;
+const METER_H = 44;
+const DECK_H = 60;
+const BODY_GAPS = spacing.sm * 4 + spacing.sm;
+const TABLE_GAPS = spacing.sm * 3;
+const SLACK_H = 24;
+
+// Cards are capped by width (5 across); leftover height grows the paytable glass
+// instead of leaving empty bands around the banner.
+export function cabinetLayout(screenW: number, bodyH: number | null, rows: number): { cardWidth: number; rowHeight: number } {
+  const byWidth = Math.floor((screenW - SIDE * 2 - CARD_GAP * (HAND_SIZE - 1)) / HAND_SIZE);
+  if (!bodyH) return { cardWidth: Math.min(80, byWidth), rowHeight: PAYTABLE_MIN_ROW };
+  const fixed = TABS_H + METER_H + DECK_H + BODY_GAPS + BANNER_H + HELD_H + HOLD_H + FAIR_H + TABLE_GAPS + SLACK_H;
+  const minPaytable = rows * PAYTABLE_MIN_ROW;
+  const byHeight = Math.floor((bodyH - fixed - minPaytable) / CARD_RATIO);
+  const cardWidth = Math.max(48, Math.min(96, byWidth, byHeight));
+  const rowHeight = (bodyH - fixed - cardWidth * CARD_RATIO) / rows;
+  return { cardWidth, rowHeight };
+}
 
 export default function VideoPokerScreen() {
   const qc = useQueryClient();
@@ -100,7 +126,8 @@ export default function VideoPokerScreen() {
   }, [balanceData, setBalance]);
 
   const { width: screenW } = useWindowDimensions();
-  const cardWidth = Math.min(80, Math.floor((screenW - SIDE * 2 - CARD_GAP * (HAND_SIZE - 1)) / HAND_SIZE));
+  const [bodyH, setBodyH] = useState<number | null>(null);
+  const { cardWidth, rowHeight } = cabinetLayout(screenW, bodyH, PAYTABLES[variant].length);
 
   // ---- DEAL chains start-session → deal: a fresh seed commitment for every hand ----
   const dealMutation = useMutation({
@@ -176,13 +203,15 @@ export default function VideoPokerScreen() {
       stopRack();
       setWinMeter(payout);
       setCreditOverride(null);
-      if (!paysMoreThanBet) return; // push: ticks only, no celebration
-      haptic(premium ? "heavy" : "success");
+      if (!paysMoreThanBet) return; // push: no celebration
       void playSound(premium ? "vp_win_big" : "vp_win");
+      // WinOverlay fires its own haptic; only buzz here when it isn't shown.
       if (premium) setOverlay({ title: rankLabel(result!.rank), amount: payout - handBet });
+      else haptic("success");
     };
     const start = coinBalance - payout;
-    if (reduceMotion) {
+    if (reduceMotion || !paysMoreThanBet) {
+      // Push (bet returned) snaps the meters with a single tick — no rack-up that reads like a win.
       void playSound("vp_credit_tick");
       finish();
       return;
@@ -273,6 +302,8 @@ export default function VideoPokerScreen() {
     [session, dealt, result],
   );
   const fairOk = verification ? isVerified(verification) : null;
+  const fairState: FairnessState | null =
+    fairOk === true ? "verified" : fairOk === false ? "failed" : session ? "sealed" : busy ? "pending" : null;
 
   const creditShown = creditOverride ?? (showFinal && !revealed ? coinBalance - payout : coinBalance);
   const hideToast = useCallback(() => setToast(null), []);
@@ -286,6 +317,7 @@ export default function VideoPokerScreen() {
   if (showFinal && revealed) {
     if (payout <= 0) {
       bannerMain = "Game over";
+      bannerSub = `No win · −${handBet} credit${handBet === 1 ? "" : "s"}`;
       bannerTone = "white";
     } else {
       bannerMain = rankLabel(result!.rank);
@@ -384,7 +416,7 @@ export default function VideoPokerScreen() {
             <Button label="See pays" variant="ghost" icon="grid-outline" onPress={() => setPaytableOpen(true)} testID="paytable-button" />
           </View>
         ) : (
-          <View style={styles.body}>
+          <View style={styles.body} onLayout={(e) => setBodyH(e.nativeEvent.layout.height)}>
             <Toast message={toast?.message ?? null} tone={toast?.tone ?? "danger"} onHide={hideToast} />
 
             <View style={styles.gameSelect} accessibilityRole="tablist">
@@ -412,6 +444,7 @@ export default function VideoPokerScreen() {
               winningRank={showFinal && revealed && paysMoreThanBet ? result!.rank : null}
               blink={!reduceMotion}
               onPress={() => setPaytableOpen(true)}
+              rowHeight={rowHeight}
             />
 
             <View style={styles.table}>
@@ -425,7 +458,7 @@ export default function VideoPokerScreen() {
                 </AppText>
                 <AppText
                   numberOfLines={1}
-                  style={[styles.bannerSub, inHand && styles.bannerHint]}
+                  style={[styles.bannerSub, (inHand || (showFinal && payout <= 0)) && styles.bannerHint]}
                   testID={inHand ? "hold-hint" : "banner-sub"}
                 >
                   {bannerSub}
@@ -476,31 +509,11 @@ export default function VideoPokerScreen() {
                 ))}
               </View>
 
-              <Pressable
-                testID="check-fairness"
-                disabled={!verification}
-                onPress={() => setFairOpen(true)}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  fairOk === null
-                    ? "Provably fair. Check available after the draw"
-                    : fairOk
-                      ? "Fairness verified. Open fairness check"
-                      : "Fairness check failed. Open details"
-                }
-                style={styles.fairLink}
-              >
-                <Ionicons
-                  name={fairOk === false ? "alert-circle" : "shield-checkmark"}
-                  size={12}
-                  color={fairOk === false ? "#FF6B6B" : fairOk ? "#3BE29A" : cab.dimWhite}
-                />
-                <AppText style={[styles.fairText, fairOk === true && styles.fairOk, fairOk === false && styles.fairBad]}>
-                  {fairOk === null ? "Provably fair" : fairOk ? "Fairness verified" : "Fairness check failed"}
-                </AppText>
-                {verification && <AppText style={styles.fairCta}>Check fairness ›</AppText>}
-              </Pressable>
+              <View style={styles.fairRow}>
+                {fairState ? (
+                  <FairnessBadge state={fairState} onPress={verification ? () => setFairOpen(true) : undefined} />
+                ) : null}
+              </View>
             </View>
 
             <MeterBar
@@ -583,9 +596,5 @@ const styles = StyleSheet.create({
     textShadowRadius: 3,
   },
   hidden: { opacity: 0 },
-  fairLink: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.xs, paddingVertical: spacing.xxs },
-  fairText: { fontFamily: fonts.semibold, fontSize: 11, color: cab.dimWhite },
-  fairOk: { color: "#3BE29A" },
-  fairBad: { color: "#FF6B6B" },
-  fairCta: { fontFamily: fonts.bold, fontSize: 11, color: cab.yellow, marginLeft: spacing.xs },
+  fairRow: { alignItems: "center", justifyContent: "center", height: FAIR_H },
 });

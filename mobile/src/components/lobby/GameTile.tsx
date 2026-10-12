@@ -9,6 +9,9 @@ import { GameArt } from "./GameArt";
 import type { GameInfo } from "./games";
 
 const ART = 112;
+// Art is drawn inset inside the panel so rounded/edge-hugging tile art is never clipped by the tile corners.
+const ART_INSET = 10;
+const ART_SIZE = ART - ART_INSET * 2;
 
 interface GameTileProps {
   game: GameInfo;
@@ -37,7 +40,9 @@ export function GameTile({ game, onPress }: GameTileProps) {
         style={styles.tile}
       >
         <LinearGradient colors={gradients.felt} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.art}>
-          <GameArt game={game.id} size={ART} />
+          <View style={styles.artBox}>
+            <GameArt game={game.id} size={ART_SIZE} />
+          </View>
         </LinearGradient>
         <View style={styles.info}>
           <AppText variant="heading3">{game.title}</AppText>
@@ -69,6 +74,7 @@ const styles = StyleSheet.create({
     minHeight: ART,
   },
   art: { width: ART, alignSelf: "stretch", alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  artBox: { width: ART_SIZE, height: ART_SIZE, alignItems: "center", justifyContent: "center" },
   info: { flex: 1, paddingVertical: spacing.s12, paddingLeft: spacing.md, gap: spacing.xs },
   badges: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.xs },
   chevron: { marginHorizontal: spacing.s12 },

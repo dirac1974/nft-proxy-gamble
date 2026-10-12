@@ -2,12 +2,13 @@ import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppText, Button, CoinIcon, Sheet, haptic } from "@/components/ui";
 import { useGameStore } from "@/stores/gameStore";
 import { useWalletStore } from "@/stores/walletStore";
 import { useUiStore } from "@/stores/uiStore";
-import { newIdempotencyKey, walletApi } from "@/services/api";
+import { newIdempotencyKey, nftApi, walletApi, type Voucher } from "@/services/api";
+import { useSessionStore } from "@/components/shell/sessionStore";
 import { playSound } from "@/services/soundService";
 import { BRAND, coinsToUsd, formatCoins } from "@/config/brand";
 import { fonts, palette, radius, spacing } from "@/theme";
@@ -17,7 +18,7 @@ import { fonts, palette, radius, spacing } from "@/theme";
 // supported. No game session needed. One idempotency key per (sheet open, amount):
 // re-tapping Confirm after a network error replays the original cash-out
 // instead of creating a second one.
-const MIN_CASHOUT = 100;
+export const MIN_CASHOUT = 100;
 const MAX_CASHOUT = 100_000; // NFTProxyVoucher.MAX_COIN_BALANCE
 const STEP = 100;
 
@@ -55,8 +56,9 @@ export function CashOutSheet({ visible, onClose }: CashOutSheetProps) {
       idemKey.current = { coins, key };
       return walletApi.cashout(coins, key);
     },
-    onSuccess: (res) => {
+    onSuccess: (res, coins) => {
       setBalance(res.newBalance);
+      useSessionStore.getState().recordCashOut(coins);
       qc.invalidateQueries({ queryKey: ["nfts"] });
       qc.invalidateQueries({ queryKey: ["balance"] });
       haptic("success");
@@ -88,6 +90,23 @@ export function CashOutSheet({ visible, onClose }: CashOutSheetProps) {
     setAmount((a) => Math.max(MIN_CASHOUT, Math.min(maxCashOut, Math.max(MIN_CASHOUT, Math.min(a, maxCashOut)) + delta)));
   };
 
+  // After success, watch the new voucher so the copy says "ready" only once it is actually minted.
+  const voucherId = mutation.data?.voucherId ?? null;
+  const initiallyMinted = mutation.data?.mintStatus === "MINTED";
+  const { data: vouchers } = useQuery({
+    queryKey: ["nfts"],
+    queryFn: nftApi.list,
+    enabled: visible && done && !!voucherId && !initiallyMinted,
+    refetchInterval: (q) => {
+      const v = (q.state.data as Voucher[] | undefined)?.find((x) => x.id === voucherId);
+      return v?.mintStatus === "MINTED" || v?.mintStatus === "FAILED" ? false : 5_000;
+    },
+  });
+  const voucherStatus = initiallyMinted
+    ? "MINTED"
+    : ((vouchers as Voucher[] | undefined)?.find((x) => x.id === voucherId)?.mintStatus ?? mutation.data?.mintStatus);
+  const minted = voucherStatus === "MINTED";
+
   const viewInWallet = () => {
     onClose();
     router.push("/wallet");
@@ -102,10 +121,12 @@ export function CashOutSheet({ visible, onClose }: CashOutSheetProps) {
             <Ionicons name="checkmark" size={34} color={palette.goldInk} />
           </View>
           <AppText variant="heading2" align="center">
-            Cash-out started
+            {minted ? "Voucher ready" : "Cash-out started"}
           </AppText>
-          <AppText variant="body" tone="dim" align="center">
-            Your {coinsToUsd(cashed)} voucher is being created. It'll be ready in Wallet in about a minute.
+          <AppText variant="body" tone="dim" align="center" testID="cashout-success-copy">
+            {minted
+              ? `Your ${coinsToUsd(cashed)} voucher is ready. Turn it into USDC from Wallet whenever you like.`
+              : `Your ${coinsToUsd(cashed)} voucher is being created — usually under a minute. It'll appear in Wallet.`}
           </AppText>
         </View>
         <Button label="View in Wallet" onPress={viewInWallet} fullWidth testID="cashout-view-wallet" />

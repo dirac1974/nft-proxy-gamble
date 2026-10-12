@@ -97,3 +97,48 @@ describe("BlackjackScreen", () => {
     expect(await findByText(/table maximum is 500/)).toBeTruthy();
   });
 });
+
+describe("Blackjack table polish", () => {
+  const { fitOnArc, TablePrint } = require("@/components/blackjack/TablePrint");
+  const { ActionBar } = require("@/components/blackjack/ActionBar");
+  const { blackjackCardWidth } = require("@/app/games/blackjack");
+
+  it("fits felt text inside its arc and centres it with a px offset", () => {
+    const f = fitOnArc(49, 290, 10, 1.8);
+    expect(f.length).toBeLessThanOrEqual(290 * 0.9 + 0.001);
+    expect(f.fontSize).toBeLessThan(10);
+    expect(f.startOffset).toBeCloseTo((290 - f.length) / 2);
+    const roomy = fitOnArc(10, 400, 15, 2, 120);
+    expect(roomy.fontSize).toBe(15);
+    expect(roomy.length).toBe(120);
+    expect(roomy.startOffset).toBe(140);
+  });
+
+  it("prints every regulatory string in full", () => {
+    const { getByTestId } = render(<TablePrint width={360} dealerHitsSoft17 />);
+    expect(getByTestId("bj-table-print").props.accessibilityLabel).toBe(
+      "blackjack pays 3 to 2. dealer must hit soft 17. insurance pays 2 to 1",
+    );
+  });
+
+  it("scales cards with table height, clamped", () => {
+    expect(blackjackCardWidth(null, false)).toBe(64);
+    expect(blackjackCardWidth(580, false)).toBeGreaterThanOrEqual(80);
+    expect(blackjackCardWidth(2000, false)).toBe(88);
+    expect(blackjackCardWidth(300, true)).toBe(52);
+  });
+
+  it("action bar keeps full labels and the +bet sublabel", () => {
+    const onAction = jest.fn();
+    const { getByText, getAllByText, getByTestId } = render(
+      <ActionBar legal={["hit", "stand", "double"]} enabled extraCost={25} balance={100} onAction={onAction} />,
+    );
+    expect(getByText("STAND")).toBeTruthy();
+    expect(getByText("DOUBLE")).toBeTruthy();
+    expect(getAllByText("+25")).toHaveLength(2);
+    fireEvent.press(getByTestId("bj-double"));
+    expect(onAction).toHaveBeenCalledWith("double");
+    fireEvent.press(getByTestId("bj-split"));
+    expect(onAction).toHaveBeenCalledTimes(1);
+  });
+});

@@ -1,12 +1,16 @@
 import React, { memo } from "react";
 import { StyleSheet, View } from "react-native";
-import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg";
+import Svg, { Circle, ClipPath, Defs, G, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg";
 import { SymbolArt } from "./SymbolArt";
 import { HangingLantern, TitleWordmark } from "./Ornaments";
 import { C } from "./artKit";
 
 // Night-festival backdrop: indigo dusk, moon, distant pavilion roofline, stars.
-export const SlotBackdrop = memo(function SlotBackdrop({ width, height }: { width: number; height: number }) {
+/** `sceneTop`: y where the game scene starts (below the header). The moon + glow are
+ *  placed and clipped inside the scene so they never wash over header controls. */
+export const SlotBackdrop = memo(function SlotBackdrop({ width, height, sceneTop = 0 }: { width: number; height: number; sceneTop?: number }) {
+  const glowR = Math.min(width, height) * 0.16;
+  const moonY = sceneTop > 0 ? sceneTop + glowR * 0.45 : height * 0.07;
   const stars = [
     [0.08, 0.06], [0.22, 0.14], [0.36, 0.04], [0.55, 0.1], [0.68, 0.03], [0.9, 0.12], [0.14, 0.3], [0.82, 0.26], [0.45, 0.22],
   ];
@@ -25,10 +29,15 @@ export const SlotBackdrop = memo(function SlotBackdrop({ width, height }: { widt
           <Stop offset="0.5" stopColor="#F2E1B0" stopOpacity="0.35" />
           <Stop offset="1" stopColor="#F2E1B0" stopOpacity="0" />
         </RadialGradient>
+        <ClipPath id="bd-scene">
+          <Rect x={0} y={sceneTop} width={width} height={Math.max(0, height - sceneTop)} />
+        </ClipPath>
       </Defs>
       <Rect x={0} y={0} width={width} height={height} fill="url(#bd-sky)" />
-      <Circle cx={width * 0.84} cy={height * 0.07} r={Math.min(width, height) * 0.16} fill="url(#bd-moon)" />
-      <Circle cx={width * 0.84} cy={height * 0.07} r={Math.min(width, height) * 0.045} fill="#FFF6D8" opacity={0.85} />
+      <G clipPath="url(#bd-scene)">
+        <Circle cx={width * 0.84} cy={moonY} r={glowR} fill="url(#bd-moon)" />
+        <Circle cx={width * 0.84} cy={moonY} r={Math.min(width, height) * 0.045} fill="#FFF6D8" opacity={0.85} />
+      </G>
       {stars.map(([x, y], i) => (
         <Circle key={i} cx={x! * width} cy={y! * height} r={i % 3 === 0 ? 1.4 : 0.9} fill="#fff" opacity={0.55} />
       ))}
@@ -61,11 +70,12 @@ export const SlotTileArt = memo(function SlotTileArt({ size }: { size: number })
       <View style={[styles.abs, { right: s * 0.03, top: s * 0.04 }]}>
         <HangingLantern size={s * 0.26} hue="gold" />
       </View>
-      <View style={[styles.abs, { left: s * 0.08, top: s * 0.2, transform: [{ rotate: "-10deg" }] }]}>
+      {/* WILD gate + lion side by side above the wordmark — neither occludes the other. */}
+      <View style={[styles.abs, { left: s * 0.05, top: s * 0.25 }]}>
         <SymbolArt symbol="WILD" size={s * 0.42} />
       </View>
-      <View style={[styles.abs, { left: s * 0.3, top: s * 0.14 }]}>
-        <SymbolArt symbol="LION" size={s * 0.6} />
+      <View style={[styles.abs, { left: s * 0.51, top: s * 0.24 }]}>
+        <SymbolArt symbol="LION" size={s * 0.44} />
       </View>
       <View style={[styles.abs, { left: 0, right: 0, bottom: s * 0.01, alignItems: "center" }]}>
         <TitleWordmark width={s * 0.98} height={s * 0.98 * (104 / 360)} />

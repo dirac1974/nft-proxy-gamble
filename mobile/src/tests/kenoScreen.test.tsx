@@ -131,7 +131,7 @@ describe("Keno screen", () => {
     expect(kenoApi.play).toHaveBeenCalledWith("k1", [{ spots: [1, 2, 15, 51], bet: 20 }]);
     expect(await findByText("Bet returned", {}, { timeout: 3000 })).toBeTruthy();
     expect(getByText("Catch 2 of 4 · pays 20")).toBeTruthy();
-    expect(getByText("Fair draw ✓")).toBeTruthy();
+    expect(getByText("Fairness verified")).toBeTruthy();
     expect(getByTestId("keno-cell-51").props.accessibilityLabel).toBe("51, marked, drawn, hit");
     expect(getByTestId("keno-cell-17").props.accessibilityLabel).toBe("17, drawn");
     unmount();

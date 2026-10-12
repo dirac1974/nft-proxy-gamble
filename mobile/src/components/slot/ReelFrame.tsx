@@ -11,21 +11,32 @@ export interface FrameGeometry {
   B: number;
   D: number;
   cell: number;
+  /** Cell height: ≥ cell, stretched (≤ MAX_CELL_ASPECT) to use spare vertical space. */
+  cellH: number;
   innerW: number;
   innerH: number;
   reelX: (i: number) => number;
 }
 
-/** Square cells; border + dividers sized off width; optionally capped by height. */
+export const MAX_CELL_ASPECT = 1.3;
+
+/** Width-sized cells; border + dividers sized off width; capped by height. When the
+ *  frame is width-limited, spare height stretches cells (up to MAX_CELL_ASPECT). */
 export function frameGeometry(width: number, maxHeight?: number): FrameGeometry {
   const B = Math.round(Math.min(15, Math.max(10, width * 0.036)));
   const D = 3;
   let cell = Math.floor((width - 2 * B - (REELS - 1) * D) / REELS);
-  if (maxHeight && maxHeight > 0) cell = Math.min(cell, Math.floor((maxHeight - 2 * B) / ROWS));
+  let cellH = cell;
+  if (maxHeight && maxHeight > 0) {
+    const fitH = Math.floor((maxHeight - 2 * B) / ROWS);
+    cell = Math.min(cell, fitH);
+    cellH = Math.max(cell, Math.min(fitH, Math.floor(cell * MAX_CELL_ASPECT)));
+  }
   cell = Math.max(32, cell);
+  cellH = Math.max(cell, cellH);
   const innerW = cell * REELS + D * (REELS - 1);
-  const innerH = cell * ROWS;
-  return { W: innerW + 2 * B, H: innerH + 2 * B, B, D, cell, innerW, innerH, reelX: (i) => i * (cell + D) };
+  const innerH = cellH * ROWS;
+  return { W: innerW + 2 * B, H: innerH + 2 * B, B, D, cell, cellH, innerW, innerH, reelX: (i) => i * (cell + D) };
 }
 
 type Mode = "base" | "free";

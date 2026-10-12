@@ -52,8 +52,16 @@ export function Button({
   const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   const inactive = disabled || loading;
 
-  const textColor =
-    variant === "primary" ? palette.goldInk : variant === "ghost" ? palette.gold : palette.text;
+  const filled = variant === "primary" || variant === "danger" || variant === "felt";
+  // Filled variants swap to a dedicated disabled look (not just faded) so it reads as intentional on felt/cabinet/navy.
+  const filledDisabled = filled && disabled && !loading;
+  const textColor = filledDisabled
+    ? palette.textFaint
+    : variant === "primary"
+      ? palette.goldInk
+      : variant === "ghost"
+        ? palette.gold
+        : palette.text;
 
   const content = (
     <View style={styles.row}>
@@ -80,7 +88,14 @@ export function Button({
   const shape: ViewStyle = { height: HEIGHTS[size], borderRadius: size === "lg" ? radius.lg : radius.md };
 
   return (
-    <Animated.View style={[fullWidth && styles.full, animStyle, inactive && styles.disabled, style]}>
+    <Animated.View
+      style={[
+        fullWidth && styles.full,
+        animStyle,
+        inactive && !filledDisabled && (loading ? styles.busy : styles.subtleDisabled),
+        style,
+      ]}
+    >
       <Pressable
         testID={testID}
         accessibilityRole="button"
@@ -100,7 +115,11 @@ export function Button({
         }}
         hitSlop={size === "sm" ? 6 : 0}
       >
-        {variant === "primary" || variant === "danger" || variant === "felt" ? (
+        {filledDisabled ? (
+          <View style={[styles.base, shape, styles.filledDisabled]}>
+            {content}
+          </View>
+        ) : filled ? (
           <LinearGradient
             colors={variant === "primary" ? gradients.gold : variant === "danger" ? gradients.ruby : gradients.felt}
             start={{ x: 0, y: 0 }}
@@ -140,5 +159,11 @@ const styles = StyleSheet.create({
   },
   secondary: { backgroundColor: palette.surfaceHi, borderWidth: 1, borderColor: "rgba(233,196,106,0.45)" },
   ghost: { backgroundColor: "transparent" },
-  disabled: { opacity: 0.4 },
+  filledDisabled: {
+    backgroundColor: palette.surfaceHi,
+    borderWidth: 1,
+    borderColor: "rgba(233,196,106,0.25)",
+  },
+  subtleDisabled: { opacity: 0.45 },
+  busy: { opacity: 0.85 },
 });

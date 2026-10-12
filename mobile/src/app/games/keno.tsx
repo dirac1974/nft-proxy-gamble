@@ -5,7 +5,8 @@ import { useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { fonts, palette, radius, spacing } from "@/theme";
-import { AppText, Button, EmptyState, GameHeader, Screen, Toast, haptic, type ToastTone } from "@/components/ui";
+import { AppText, Button, EmptyState, FairnessBadge, GameHeader, Screen, Toast, haptic, type FairnessState, type ToastTone } from "@/components/ui";
+import { RESTRICTED_PLAY } from "@/config/compliance";
 import { WinOverlay, classifyWin, type WinTier } from "@/components/WinOverlay";
 import { useWalletStore } from "@/stores/walletStore";
 import { useUiStore } from "@/stores/uiStore";
@@ -14,6 +15,7 @@ import { balanceApi } from "@/services/api";
 import { kenoApi, type KenoPlayResult, type KenoSession } from "@/services/kenoApi";
 import { isKenoVerified, verifyKenoDraw } from "@/services/kenoFair";
 import { playSound, type SfxKey } from "@/services/soundService";
+import { formatCoins } from "@/config/brand";
 import { KenoBoard, BOARD_PAD, DIVIDER_H } from "@/components/keno/KenoBoard";
 import { PaytableStrip, ResultBanner } from "@/components/keno/KenoStrip";
 import { CardTabs, type TabInfo } from "@/components/keno/CardTabs";
@@ -282,6 +284,8 @@ export default function KenoScreen() {
     const tier = classifyWin(net, r.totalWagered);
     if (tier === "medium" || tier === "big") {
       const best = rd.cards.reduce((a, b) => (b.payout > a.payout ? b : a), rd.cards[0]!);
+      haptic("success");
+      sfx(tier === "big" ? "win_big" : "win_medium");
       setOverlay({ tier, title: `Catch ${best.catches} of ${best.spots.length}`, amount: net });
     } else {
       haptic("success");
@@ -323,9 +327,11 @@ export default function KenoScreen() {
     return () => sub.remove();
   }, [settle]);
 
+  // RESTRICTED_PLAY: the draw can't be skipped (min game cycle).
+  const canSkip = !RESTRICTED_PLAY;
   const onSkip = useCallback(() => {
-    if (phaseRef.current === "drawing") settle();
-  }, [settle]);
+    if (canSkip && phaseRef.current === "drawing") settle();
+  }, [canSkip, settle]);
 
   // ---- PLAY ----
   const wager = totalWager(cards, bet);
@@ -409,7 +415,8 @@ export default function KenoScreen() {
   }, []);
   const chrome = BOARD_PAD * 2 + 4;
   const cellW = area.w ? Math.floor((area.w - chrome) / BOARD_COLS) : 34;
-  const cellH = area.h ? Math.max(28, Math.min(44, Math.floor((area.h - chrome - DIVIDER_H) / BOARD_ROWS))) : 40;
+  // Cells grow to fill the available height (taller than wide on long phones).
+  const cellH = area.h ? Math.max(28, Math.min(Math.round(cellW * 1.6), Math.floor((area.h - chrome - DIVIDER_H) / BOARD_ROWS))) : 40;
 
   // ---- derived view ----
   const showDraw = (phase === "drawing" || phase === "settled") && round;
@@ -427,17 +434,18 @@ export default function KenoScreen() {
   });
   const liveCatches = showDraw && phase === "drawing" ? countCatches(cards[active]!, drawnSet) : null;
 
+  // Quad: summarise every card ("A 2/5 · B 1/5 …") + best pay; per-card detail lives on the tabs.
   const bannerDetail = useMemo(() => {
     if (!settled) return "";
-    const res = round!.cards.find((x) => x.cardIndex === active) ?? round!.cards[0];
-    if (!res) return "";
-    const copy = cardResultCopy(res.catches, res.spots.length, res.payout);
-    return quad ? `Card ${CARD_STYLES[res.cardIndex]!.letter} · ${copy}` : copy;
-  }, [settled, round, active, quad]);
+    if (quad) return quadSummary(round!.cards);
+    const res = round!.cards[0];
+    return res ? cardResultCopy(res.catches, res.spots.length, res.payout) : "";
+  }, [settled, round, quad]);
 
   const displayBalance = pendingDebit ? pendingDebit.before - pendingDebit.wager : balance;
   const lastRound = history[0] ?? null;
   const verified = isKenoVerified(lastRound?.verification);
+  const fairState: FairnessState = lastRound ? (verified ? "verified" : "failed") : session ? "sealed" : "pending";
   const identical = findIdentical(cards);
 
   const hideOverlay = useCallback(() => setOverlay(null), []);
@@ -476,7 +484,8 @@ export default function KenoScreen() {
     );
   }
 
-  const playText = phase === "requesting" ? "Drawing…" : phase === "drawing" ? "Tap board to skip" : playLabel(mode, cards, bet);
+  const playText =
+    phase === "requesting" || (phase === "drawing" && !canSkip) ? "Drawing…" : phase === "drawing" ? "Tap board to skip" : playLabel(mode, cards, bet);
 
   return (
     <Screen
@@ -525,7 +534,7 @@ export default function KenoScreen() {
           cellW={cellW}
           cellH={cellH}
           disabled={locked}
-          drawing={phase === "drawing"}
+          drawing={phase === "drawing" && canSkip}
           reduceMotion={reduceMotion}
           onToggle={onToggle}
           onSkip={onSkip}
@@ -551,9 +560,10 @@ export default function KenoScreen() {
           disabled={locked}
           style={[styles.qpCount, locked && styles.dim]}
           accessibilityRole="button"
-          accessibilityLabel={`Quick pick count ${qpCount}. Tap to change`}
+          accessibilityLabel={`Quick pick spots ${qpCount}. Tap to change`}
           testID="keno-qp-count"
         >
+          <AppText style={styles.qpCountLabel}>SPOTS</AppText>
           <AppText style={styles.qpCountText}>{qpCount}</AppText>
         </Pressable>
         <Ctl icon="shuffle" label="Quick Pick" onPress={onQuickPick} disabled={locked} testID="keno-qp" flex />
@@ -584,15 +594,18 @@ export default function KenoScreen() {
       <Button
         label={playText}
         onPress={phase === "drawing" ? onSkip : () => void onPlay()}
-        disabled={phase === "drawing" ? false : locked || block !== null}
+        disabled={phase === "drawing" ? !canSkip : locked || block !== null}
         loading={phase === "requesting"}
         variant={phase === "drawing" ? "secondary" : "primary"}
         haptic={false}
+        sound={false}
         fullWidth
         testID="keno-play"
         accessibilityLabel={
           phase === "drawing"
-            ? "Skip to result"
+            ? canSkip
+              ? "Skip to result"
+              : "Drawing"
             : block === "empty"
               ? "Pick numbers to play"
               : identical
@@ -602,24 +615,7 @@ export default function KenoScreen() {
       />
 
       <View style={styles.footer}>
-        <Pressable
-          onPress={() => setSheet("fair")}
-          style={styles.fairRow}
-          accessibilityRole="button"
-          accessibilityLabel={lastRound ? (verified ? "Fair draw verified. Check fairness" : "Fairness check failed. Open details") : "Seed committed. Check fairness"}
-          testID="keno-fairness"
-          hitSlop={8}
-        >
-          <Ionicons
-            name={lastRound && !verified ? "warning" : "shield-checkmark"}
-            size={12}
-            color={lastRound && !verified ? palette.danger : palette.emerald}
-          />
-          <AppText style={[styles.fairText, lastRound && !verified && { color: palette.danger }]}>
-            {lastRound ? (verified ? "Fair draw ✓" : "Verification failed") : "Seed committed ✓"}
-          </AppText>
-          <AppText style={styles.link}>Check fairness ›</AppText>
-        </Pressable>
+        <FairnessBadge state={fairState} onPress={() => setSheet("fair")} testID="keno-fairness" />
         <Pressable onPress={() => setSheet("history")} hitSlop={8} accessibilityRole="button" testID="keno-history">
           <AppText style={styles.link}>History ›</AppText>
         </Pressable>
@@ -661,9 +657,19 @@ export default function KenoScreen() {
         title={overlay?.title ?? ""}
         amount={overlay?.amount ?? 0}
         onDismiss={hideOverlay}
+        silent
       />
     </Screen>
   );
+}
+
+function quadSummary(cards: KenoRound["cards"]): string {
+  const parts = [...cards]
+    .sort((a, b) => a.cardIndex - b.cardIndex)
+    .map((c) => `${CARD_STYLES[c.cardIndex]!.letter} ${c.catches}/${c.spots.length}`);
+  const best = cards.reduce<KenoRound["cards"][number] | null>((a, b) => (b.payout > (a?.payout ?? 0) ? b : a), null);
+  const tail = best ? `Best ${CARD_STYLES[best.cardIndex]!.letter} pays ${formatCoins(best.payout)}` : "No card paid";
+  return `${parts.join(" · ")} — ${tail}`;
 }
 
 interface CtlProps {
@@ -707,16 +713,18 @@ const styles = StyleSheet.create({
   controls: { flexDirection: "row", alignItems: "center", gap: GAP, height: 44 },
   flex: { flex: 1 },
   qpCount: {
-    width: 44,
+    minWidth: 50,
     height: 44,
-    borderRadius: 22,
+    paddingHorizontal: 6,
+    borderRadius: radius.sm,
     borderWidth: 1.5,
     borderColor: palette.gold,
     backgroundColor: "#020414",
     alignItems: "center",
     justifyContent: "center",
   },
-  qpCountText: { fontFamily: fonts.heavy, fontSize: 16, color: palette.gold, fontVariant: ["tabular-nums"] },
+  qpCountLabel: { fontFamily: fonts.bold, fontSize: 9, lineHeight: 11, color: palette.textDim, letterSpacing: 0.8 },
+  qpCountText: { fontFamily: fonts.heavy, fontSize: 16, lineHeight: 19, color: palette.gold, fontVariant: ["tabular-nums"] },
   ctl: {
     height: 44,
     flexDirection: "row",
@@ -743,8 +751,6 @@ const styles = StyleSheet.create({
   },
   betText: { fontFamily: fonts.heavy, fontSize: 13, color: palette.goldInk, fontVariant: ["tabular-nums"] },
   dim: { opacity: 0.4 },
-  footer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", height: 18 },
-  fairRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  fairText: { fontFamily: fonts.semibold, fontSize: 11, color: palette.textDim },
-  link: { fontFamily: fonts.bold, fontSize: 11, color: palette.gold, marginLeft: 4 },
+  footer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", height: 28 },
+  link: { fontFamily: fonts.bold, fontSize: 13, color: palette.gold, marginLeft: 4 },
 });

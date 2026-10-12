@@ -1,10 +1,10 @@
-import React from "react";
+import React, { useState } from "react";
 import { ActivityIndicator, Linking, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useWalletStore } from "@/stores/walletStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useWalletConnect } from "@/hooks/useWalletConnect";
-import { E2E_WALLET_ENABLED, connectE2EWallet } from "@/services/walletService";
+import { CHAIN, E2E_WALLET_ENABLED, connectE2EWallet } from "@/services/walletService";
 import { AppText, Button, Sheet } from "@/components/ui";
 import { palette, radius, spacing } from "@/theme";
 
@@ -25,13 +25,20 @@ function friendlyConnectError(raw: string): string {
     return "We can't reach the server right now. Check your connection and try again.";
   }
   if (msg.includes("wrong network") || msg.includes("chain")) {
-    return "Your wallet is on the wrong network. Use the banner at the top to fix it.";
+    return `Your wallet is on the wrong network. Switch to ${CHAIN.name} to continue.`;
   }
   return "We couldn't sign you in. Check your wallet app and try again.";
 }
 
+export function isWrongNetwork(networkMismatch: boolean, connectionError: string | null): boolean {
+  const msg = connectionError?.toLowerCase() ?? "";
+  return networkMismatch || msg.includes("wrong network") || msg.includes("chain");
+}
+
 export function ConnectWalletSheet({ visible, onClose }: ConnectWalletSheetProps) {
-  const { openModal, retryAuth, isBusy } = useWalletConnect();
+  const { openModal, retryAuth, switchNetwork, isBusy } = useWalletConnect();
+  const networkMismatch = useWalletStore((s) => s.networkMismatch);
+  const [switching, setSwitching] = useState(false);
   const connectionStatus = useWalletStore((s) => s.connectionStatus);
   const connectionError = useWalletStore((s) => s.connectionError);
   const setConnectionError = useWalletStore((s) => s.setConnectionError);
@@ -48,6 +55,13 @@ export function ConnectWalletSheet({ visible, onClose }: ConnectWalletSheetProps
     closeAll();
     setConnectPending(true);
     setTimeout(openModal, 350);
+  };
+
+  const wrongNetwork = isWrongNetwork(networkMismatch, connectionError);
+
+  const handleSwitch = () => {
+    setSwitching(true);
+    switchNetwork().finally(() => setSwitching(false));
   };
 
   const handleE2EConnect = () => {
@@ -74,7 +88,17 @@ export function ConnectWalletSheet({ visible, onClose }: ConnectWalletSheetProps
         </AppText>
       </View>
 
-      {connectionError && !isBusy && (
+      {wrongNetwork && !isBusy && (
+        <View style={styles.warn} accessibilityRole="alert" testID="connect-wrong-network">
+          <Ionicons name="swap-horizontal" size={18} color={palette.warn} />
+          <AppText variant="bodySmall" style={styles.errorText}>
+            Your wallet is connected to a different network. Switch to {CHAIN.name} to sign in — your wallet app will
+            ask you to approve it.
+          </AppText>
+        </View>
+      )}
+
+      {connectionError && !isBusy && !wrongNetwork && (
         <View style={styles.error} accessibilityRole="alert">
           <Ionicons name="alert-circle" size={18} color={palette.danger} />
           <AppText variant="bodySmall" style={styles.errorText}>
@@ -89,6 +113,19 @@ export function ConnectWalletSheet({ visible, onClose }: ConnectWalletSheetProps
           <AppText variant="bodyStrong" align="center">
             {busyLabel}
           </AppText>
+        </View>
+      ) : wrongNetwork ? (
+        <View style={styles.actions}>
+          <Button
+            label={`Switch to ${CHAIN.name}`}
+            icon="swap-horizontal"
+            onPress={handleSwitch}
+            loading={switching}
+            fullWidth
+            size="lg"
+            testID="connect-switch-network"
+          />
+          <Button label="Use a different wallet" variant="ghost" onPress={handleConnect} fullWidth />
         </View>
       ) : connectionError ? (
         <View style={styles.actions}>
@@ -168,6 +205,16 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(229,72,77,0.1)",
     borderWidth: 1,
     borderColor: "rgba(229,72,77,0.35)",
+  },
+  warn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    padding: spacing.s12,
+    borderRadius: radius.md,
+    backgroundColor: "rgba(245,165,36,0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(245,165,36,0.35)",
   },
   errorText: { flex: 1, color: palette.text },
   busy: { alignItems: "center", gap: spacing.s12, paddingVertical: spacing.md },

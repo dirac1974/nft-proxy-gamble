@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useFocusEffect, router } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useQuery } from "@tanstack/react-query";
 import { AppText } from "@/components/ui";
@@ -18,6 +18,7 @@ import { BRAND } from "@/config/brand";
 import { palette, spacing } from "@/theme";
 
 const FEATURED = GAMES.find((g) => g.id === "slot") ?? GAMES.find((g) => g.id === "blackjack")!;
+const TAB_BAR_BASE = 56;
 const SECTIONS = [
   { id: "machines", title: "Machines" },
   { id: "tables", title: "Table games" },
@@ -30,6 +31,9 @@ export default function LobbyScreen() {
   const openIAP = useUiStore((s) => s.openIAP);
   const openConnect = useUiStore((s) => s.openConnect);
   const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
+  // The tab bar is absolutely positioned; reserve its full height (incl. gesture inset) so the last tile clears it.
+  const bottomPad = Math.max(tabBarHeight, TAB_BAR_BASE + insets.bottom) + spacing.lg;
 
   const { data: balanceData, refetch: refetchBalance } = useQuery({
     queryKey: ["balance"],
@@ -81,7 +85,7 @@ export default function LobbyScreen() {
       </SafeAreaView>
       <ScrollView
         style={styles.flex}
-        contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + spacing.lg }]}
+        contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]}
         showsVerticalScrollIndicator={false}
         testID="lobby-scroll"
       >
@@ -96,7 +100,7 @@ export default function LobbyScreen() {
             <AppText variant="overline" style={styles.sectionTitle}>
               {title}
             </AppText>
-            {GAMES.filter((g) => g.section === id).map((game) => (
+            {GAMES.filter((g) => g.section === id && g.id !== FEATURED.id).map((game) => (
               <GameTile key={game.id} game={game} onPress={() => openGame(game)} />
             ))}
           </View>

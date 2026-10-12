@@ -7,10 +7,13 @@ import { cab } from "./cabinet";
 
 type Tone = "yellow" | "red" | "blue";
 
-const FACES: Record<Tone, { lit: readonly [string, string]; dark: readonly [string, string]; ink: string; inkDark: string }> = {
-  yellow: { lit: ["#FFF27A", "#E8B800"], dark: ["#6B5A12", "#3D3208"], ink: cab.yellowInk, inkDark: "rgba(255,225,58,0.45)" },
-  red: { lit: ["#FF5A66", "#B00C22"], dark: ["#5C1018", "#33080E"], ink: cab.white, inkDark: "rgba(255,255,255,0.4)" },
-  blue: { lit: ["#4F7BFF", "#1736B8"], dark: ["#16245E", "#0B1440"], ink: cab.white, inkDark: "rgba(255,255,255,0.4)" },
+// inkIdle: unlit but selectable (inactive tab, un-held card) — must stay legible (≥4.5:1 on the dark face).
+// inkDark: disabled.
+type Face = { lit: readonly [string, string]; dark: readonly [string, string]; ink: string; inkIdle: string; inkDark: string };
+const FACES: Record<Tone, Face> = {
+  yellow: { lit: ["#FFF27A", "#E8B800"], dark: ["#6B5A12", "#3D3208"], ink: cab.yellowInk, inkIdle: "rgba(255,225,58,0.9)", inkDark: "rgba(255,225,58,0.45)" },
+  red: { lit: ["#FF5A66", "#B00C22"], dark: ["#5C1018", "#33080E"], ink: cab.white, inkIdle: "rgba(255,255,255,0.88)", inkDark: "rgba(255,255,255,0.4)" },
+  blue: { lit: ["#4F7BFF", "#1736B8"], dark: ["#1E2F78", "#111C52"], ink: cab.white, inkIdle: "rgba(255,255,255,0.88)", inkDark: "rgba(255,255,255,0.4)" },
 };
 
 interface CabinetButtonProps {
@@ -65,7 +68,7 @@ export function CabinetButton({
         ) : (
           <AppText
             numberOfLines={2}
-            style={[styles.label, { fontSize, lineHeight: fontSize + 2, color: lit ? face.ink : face.inkDark }]}
+            style={[styles.label, { fontSize, lineHeight: fontSize + 2, color: lit ? face.ink : disabled ? face.inkDark : face.inkIdle }]}
           >
             {label}
           </AppText>

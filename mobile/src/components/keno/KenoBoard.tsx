@@ -11,6 +11,8 @@ export const DIVIDER_H = 4;
 export const BOARD_PAD = 3;
 const HAIRLINE = "rgba(233,196,106,0.16)";
 const HIT_INK = palette.ink;
+const PIP = 12; // corner card glyph, inset inside the cell (clear of the grid lines)
+const PIP_INSET = 4;
 
 interface CellProps {
   n: number;
@@ -77,7 +79,7 @@ const Cell = memo(function Cell({ n, w, h, mode, markMask, activeCard, drawn, di
       </Animated.View>
       {single && hit ? (
         <View style={[styles.pip, styles.tl]} pointerEvents="none">
-          <CardGlyph glyph={CARD_STYLES[0]!.glyph} color={HIT_INK} size={6} />
+          <CardGlyph glyph={CARD_STYLES[0]!.glyph} color={HIT_INK} size={PIP} />
         </View>
       ) : null}
       {!single
@@ -85,7 +87,7 @@ const Cell = memo(function Cell({ n, w, h, mode, markMask, activeCard, drawn, di
             const cs = CARD_STYLES[i]!;
             return (
               <View key={i} style={[styles.pip, styles[cs.corner]]} pointerEvents="none">
-                <CardGlyph glyph={cs.glyph} color={hit && markedBy.length === 1 ? HIT_INK : cs.color} size={7} outline={hit ? HIT_INK : undefined} />
+                <CardGlyph glyph={cs.glyph} color={hit && markedBy.length === 1 ? HIT_INK : cs.color} size={PIP} outline={hit ? HIT_INK : undefined} />
               </View>
             );
           })
@@ -194,11 +196,11 @@ const styles = StyleSheet.create({
   ball: { position: "absolute" },
   drawnRing: { borderWidth: 1.5, borderColor: palette.ivory, backgroundColor: "rgba(251,248,241,0.08)" },
   markFill: { position: "absolute", borderWidth: 2, borderRadius: 6 },
-  num: { fontFamily: fonts.bold, fontSize: 15, lineHeight: 18, color: palette.ivory, fontVariant: ["tabular-nums"] },
+  num: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19, color: palette.ivory, fontVariant: ["tabular-nums"] },
   numDrawn: { color: palette.ivory },
   pip: { position: "absolute" },
-  tl: { top: 2, left: 2 },
-  tr: { top: 2, right: 2 },
-  bl: { bottom: 2, left: 2 },
-  br: { bottom: 2, right: 2 },
+  tl: { top: PIP_INSET, left: PIP_INSET },
+  tr: { top: PIP_INSET, right: PIP_INSET },
+  bl: { bottom: PIP_INSET, left: PIP_INSET },
+  br: { bottom: PIP_INSET, right: PIP_INSET },
 });

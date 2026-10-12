@@ -5,6 +5,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { fonts, palette, radius, shadows, spacing } from "@/theme";
 import { AppText } from "@/components/ui";
 import type { KenoMode } from "./kenoModel";
+import { STRIP_H } from "./KenoStrip";
 
 const key = (mode: KenoMode) => `keno.coach.v1.${mode}`;
 
@@ -61,14 +62,16 @@ interface CoachMarkProps {
   onSkip: () => void;
 }
 
-/** Non-blocking coach card; positions itself away from the region it describes. */
+/** Non-blocking coach card; positions itself away from the region it describes:
+ *  board / A–D tabs → docked at the bottom (over PLAY, directly under the tabs);
+ *  paytable strip → just below the strip. */
 export function CoachMark({ mode, step, onNext, onSkip }: CoachMarkProps) {
   const steps = COACH_STEPS[mode];
   const s = steps[step];
   if (!s) return null;
   const last = step === steps.length - 1;
   return (
-    <View style={[styles.host, s.anchor === "board" ? styles.bottom : styles.mid]} pointerEvents="box-none">
+    <View style={[styles.host, s.anchor === "strip" ? styles.belowStrip : styles.bottom]} pointerEvents="box-none">
       <Animated.View
         entering={FadeIn.duration(180)}
         exiting={FadeOut.duration(150)}
@@ -102,8 +105,8 @@ export function CoachMark({ mode, step, onNext, onSkip }: CoachMarkProps) {
 
 const styles = StyleSheet.create({
   host: { position: "absolute", left: spacing.s12, right: spacing.s12, zIndex: 40 },
-  bottom: { bottom: 64 },
-  mid: { top: "38%" },
+  bottom: { bottom: 0 },
+  belowStrip: { top: STRIP_H + 10 },
   card: {
     backgroundColor: palette.surfaceHi,
     borderRadius: radius.md,

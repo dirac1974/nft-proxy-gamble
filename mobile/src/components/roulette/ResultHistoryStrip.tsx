@@ -19,9 +19,11 @@ interface ResultHistoryStripProps {
   onPress?: () => void;
 }
 
+// Labelled strip: "HISTORY" · colour pills (latest ringed) · Stats button. Every pill carries its number,
+// so colour is never the only cue.
 export const ResultHistoryStrip = memo(function ResultHistoryStrip({
   numbers,
-  max = 10,
+  max = 6,
   pill = 20,
   onPress,
 }: ResultHistoryStripProps) {
@@ -33,49 +35,70 @@ export const ResultHistoryStrip = memo(function ResultHistoryStrip({
       style={styles.row}
       accessibilityRole="button"
       accessibilityLabel={
-        shown.length ? `Last numbers: ${shown.join(", ")}. Open statistics` : "No spins yet. Open statistics"
+        shown.length ? `History: ${shown.join(", ")}. Open statistics` : "History: no spins yet. Open statistics"
       }
       testID="roulette-history"
       hitSlop={6}
     >
-      {shown.length === 0 ? (
-        <AppText variant="caption" style={styles.empty}>
-          Recent numbers appear here
-        </AppText>
-      ) : (
-        shown.map((n, i) => (
-          <Animated.View
-            key={`${numbers.length - i}`}
-            entering={i === 0 ? FadeInLeft.duration(260) : undefined}
-            layout={LinearTransition.duration(200)}
-            style={[
-              styles.pill,
-              { width: pill, height: pill, borderRadius: pill / 2, backgroundColor: POCKET_UI[pocketColor(n)] },
-              i === 0 && styles.latest,
-              { opacity: 1 - Math.min(0.45, i * 0.05) },
-            ]}
-          >
-            <AppText style={[styles.num, { fontSize: pill * 0.48 }]}>{n}</AppText>
-          </Animated.View>
-        ))
-      )}
-      {onPress ? <Ionicons name="stats-chart" size={13} color={palette.gold} style={styles.icon} /> : null}
+      <AppText style={styles.label}>History</AppText>
+      <View style={styles.pills}>
+        {shown.length === 0 ? (
+          <AppText variant="caption" style={styles.empty} numberOfLines={1}>
+            No spins yet
+          </AppText>
+        ) : (
+          shown.map((n, i) => (
+            <Animated.View
+              key={`${numbers.length - i}`}
+              entering={i === 0 ? FadeInLeft.duration(260) : undefined}
+              layout={LinearTransition.duration(200)}
+              style={[
+                styles.pill,
+                { minWidth: pill + 4, height: pill, borderRadius: pill / 2, backgroundColor: POCKET_UI[pocketColor(n)] },
+                i === 0 && styles.latest,
+              ]}
+            >
+              <AppText style={[styles.num, { fontSize: pill * 0.5 }]}>{n}</AppText>
+            </Animated.View>
+          ))
+        )}
+      </View>
+      {onPress ? (
+        <View style={styles.stats}>
+          <Ionicons name="stats-chart" size={11} color={palette.gold} />
+          <AppText style={styles.statsText}>Stats</AppText>
+        </View>
+      ) : null}
     </Pressable>
   );
 });
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", gap: 3, minHeight: 22 },
-  empty: { flex: 1, color: palette.textFaint },
+  row: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 24 },
+  label: { fontFamily: fonts.bold, fontSize: 9.5, letterSpacing: 1.2, color: palette.goldLight, opacity: 0.75, textTransform: "uppercase" },
+  pills: { flex: 1, flexDirection: "row", alignItems: "center", gap: 3, overflow: "hidden" },
+  empty: { color: palette.textFaint },
   pill: {
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.25)",
+    paddingHorizontal: 4,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.22)",
   },
   latest: { borderWidth: 1.5, borderColor: palette.gold },
   num: { fontFamily: fonts.heavy, color: palette.ivory, includeFontPadding: false, fontVariant: ["tabular-nums"] },
-  icon: { marginLeft: 2 },
+  stats: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    height: 22,
+    paddingHorizontal: 8,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "rgba(233,196,106,0.45)",
+    backgroundColor: "rgba(0,0,0,0.3)",
+  },
+  statsText: { fontFamily: fonts.bold, fontSize: 10, color: palette.gold },
 });
 
 export function NumberPill({ n, size = 26 }: { n: number; size?: number }) {

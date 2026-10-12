@@ -156,3 +156,24 @@ describe("pokerData (mirrors backend pokerVariants.ts)", () => {
     expect(winningCardIndices([0, 1, 2, 3, 4], "LOSE", "jacks-or-better")).toEqual([]);
   });
 });
+
+describe("Cabinet polish", () => {
+  const { MeterBar } = require("@/components/videopoker/MeterBar");
+  const { PaytableGrid } = require("@/components/videopoker/PaytableGrid");
+
+  it("WIN meter shows 0 instead of blank", () => {
+    const { getByTestId } = render(<MeterBar win={0} bet={5} credit={100} showUsd={false} onToggleUnits={() => {}} />);
+    expect(getByTestId("meter-win").props.children).toBe("0");
+  });
+
+  it("states 1 credit = 1 coin in the pays sheet", () => {
+    const { getByTestId } = render(<PaytableModal visible betAmount={5} onClose={() => {}} />);
+    expect(getByTestId("credit-note")).toBeTruthy();
+  });
+
+  it("paytable hand names shrink to fit rather than truncate", () => {
+    const { getByText } = render(<PaytableGrid variant="jacks-or-better" bet={1} rowHeight={22} />);
+    const label = getByText("JACKS OR BETTER");
+    expect(label.props.adjustsFontSizeToFit).toBe(true);
+  });
+});

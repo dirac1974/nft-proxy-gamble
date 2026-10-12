@@ -11,6 +11,7 @@ jest.mock("@/services/soundService", () => ({
   playVoice: jest.fn(() => Promise.resolve()),
   playLoop: jest.fn(() => Promise.resolve()),
   stopLoop: jest.fn(() => Promise.resolve()),
+  stopSound: jest.fn(() => Promise.resolve()),
   duckLoops: jest.fn(),
 }));
 jest.mock("@/services/api", () => ({

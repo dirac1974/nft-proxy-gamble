@@ -37,7 +37,13 @@ export function GameHeader({ title, subtitle, balance, onAddCoins, onInfo, onBac
         <Ionicons name="chevron-back" size={22} color={palette.text} />
       </Pressable>
       <View style={styles.titleWrap}>
-        <AppText style={styles.title} numberOfLines={1}>
+        <AppText
+          style={styles.title}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.7}
+          testID="game-title"
+        >
           {title}
         </AppText>
         {subtitle ? (
@@ -47,7 +53,7 @@ export function GameHeader({ title, subtitle, balance, onAddCoins, onInfo, onBac
         ) : null}
       </View>
       {right}
-      <BalancePill amount={balance} onAdd={onAddCoins} />
+      <BalancePill amount={balance} onAdd={onAddCoins} compact />
       {onInfo && (
         <Pressable
           onPress={() => {
@@ -71,7 +77,7 @@ const styles = StyleSheet.create({
   bar: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
+    gap: 6,
     paddingHorizontal: spacing.s12,
     paddingVertical: spacing.sm,
   },
@@ -83,7 +89,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  titleWrap: { flex: 1 },
+  titleWrap: { flex: 1, minWidth: 0 },
   title: { fontFamily: fonts.display, fontSize: 18, color: palette.text, letterSpacing: 0.5 },
-  subtitle: { color: palette.goldLight, opacity: 0.8 },
+  subtitle: { color: palette.goldLight, opacity: 0.8, fontSize: 10, lineHeight: 13 },
 });

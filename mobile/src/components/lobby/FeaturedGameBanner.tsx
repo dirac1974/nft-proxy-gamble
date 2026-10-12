@@ -6,6 +6,8 @@ import { gradients, palette, radius, shadows, spacing } from "@/theme";
 import { GameArt } from "./GameArt";
 import type { GameInfo } from "./games";
 
+const ART_SIZE = 128;
+
 interface FeaturedGameBannerProps {
   game: GameInfo;
   onPress: () => void;
@@ -42,7 +44,7 @@ export function FeaturedGameBanner({ game, onPress }: FeaturedGameBannerProps) {
           <Button label="Play now" size="sm" onPress={onPress} style={styles.cta} />
         </View>
         <View style={styles.art}>
-          <GameArt game={game.id} size={150} />
+          <GameArt game={game.id} size={ART_SIZE} />
         </View>
       </LinearGradient>
     </Pressable>
@@ -73,5 +75,5 @@ const styles = StyleSheet.create({
   title: { color: palette.text },
   desc: { color: "rgba(245,241,232,0.8)" },
   cta: { alignSelf: "flex-start", marginTop: spacing.sm },
-  art: { width: 150, height: 180, alignItems: "center", justifyContent: "center", marginRight: -spacing.sm },
+  art: { width: ART_SIZE + spacing.md * 2, height: 180, alignItems: "center", justifyContent: "center" },
 });

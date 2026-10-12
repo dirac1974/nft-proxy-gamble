@@ -37,6 +37,7 @@ export type WinMode = "none" | "celebrate" | "ldw";
 
 interface WinLayerProps {
   cell: number;
+  cellH?: number;
   gap: number;
   grid: Grid | null;
   highlight: Set<string> | null;
@@ -45,7 +46,8 @@ interface WinLayerProps {
   reduceMotion: boolean;
 }
 
-export function WinLayer({ cell, gap, grid, highlight, mode, multiplier, reduceMotion }: WinLayerProps) {
+export function WinLayer({ cell, cellH: cellHProp, gap, grid, highlight, mode, multiplier, reduceMotion }: WinLayerProps) {
+  const cellH = cellHProp ?? cell;
   // ONE shared pulse drives every winning cell (1 animated node regardless of count).
   const pulse = useSharedValue(0);
   const active = mode === "celebrate" && !!highlight && highlight.size > 0;
@@ -64,8 +66,8 @@ export function WinLayer({ cell, gap, grid, highlight, mode, multiplier, reduceM
     for (let row = 0; row < ROWS; row++) {
       const key = posKey(reel, row);
       const left = reel * (cell + gap);
-      const top = row * cell;
-      const box = { left, top, width: cell, height: cell };
+      const top = row * cellH;
+      const box = { left, top, width: cell, height: cellH };
       const sym = grid[row]?.[reel];
       if (!highlight.has(key)) {
         cells.push(<View key={key} style={[styles.abs, box, styles.dimCell]} pointerEvents="none" />);
@@ -74,7 +76,7 @@ export function WinLayer({ cell, gap, grid, highlight, mode, multiplier, reduceM
       } else if (sym) {
         cells.push(
           <Animated.View key={key} style={[styles.abs, box, styles.winCell, pulseStyle]} pointerEvents="none">
-            <SymbolArt symbol={sym} size={Math.round(cell * 0.92)} />
+            <SymbolArt symbol={sym} size={Math.round(Math.min(cell, cellH) * 0.92)} />
             <View style={styles.winFrame} />
             {multiplier && multiplier > 1 && sym === "WILD" ? (
               <View style={styles.medallion} accessibilityLabel={`Multiplier ${multiplier}`}>
@@ -248,6 +250,11 @@ interface PickerProps {
   onPick: (id: FeatureOptionId) => void;
 }
 
+function volatilityLabel(v: string): string {
+  const t = v.replace(/[_-]/g, " ").trim();
+  return `${t.charAt(0).toUpperCase()}${t.slice(1)} vol.`;
+}
+
 export function FeaturePicker({ options, busy, onPick }: PickerProps) {
   return (
     <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={[StyleSheet.absoluteFill, styles.pickerRoot]} testID="slot-picker">
@@ -275,9 +282,14 @@ export function FeaturePicker({ options, busy, onPick }: PickerProps) {
               <AppText style={styles.optMain}>
                 {o.spins} games · {o.multipliers.length === 1 ? `×${o.multipliers[0]}` : `×${o.multipliers[0]}–${o.multipliers[o.multipliers.length - 1]}`}
               </AppText>
-              <AppText style={styles.optMeta}>
-                RTP {o.rtp.toFixed(1)}% · {o.volatility}
-              </AppText>
+              <View style={styles.optStats}>
+                <View style={styles.optChip}>
+                  <AppText style={styles.optChipText}>RTP {o.rtp.toFixed(1)}%</AppText>
+                </View>
+                <View style={[styles.optChip, styles.optChipVol]}>
+                  <AppText style={styles.optChipText}>{volatilityLabel(o.volatility)}</AppText>
+                </View>
+              </View>
               {isBusy ? <ActivityIndicator style={styles.optBusy} color={palette.gold} /> : null}
             </Pressable>
           );
@@ -329,7 +341,7 @@ export function FreeGamesOutro({ total, net, played, capped, onDone }: { total: 
 const styles = StyleSheet.create({
   abs: { position: "absolute" },
   center: { alignItems: "center", justifyContent: "center" },
-  dimCell: { backgroundColor: "rgba(4,5,16,0.65)" },
+  dimCell: { backgroundColor: "rgba(4,5,16,0.45)" }, // non-winners stay ~55% visible
   ldwCell: { borderWidth: 1, borderColor: "rgba(248,227,163,0.55)", borderRadius: 4 },
   winCell: { alignItems: "center", justifyContent: "center" },
   winFrame: {
@@ -403,7 +415,17 @@ const styles = StyleSheet.create({
   optDim: { opacity: 0.4 },
   optName: { fontFamily: fonts.displayBlack, fontSize: 16, color: palette.goldLight, letterSpacing: 1, marginTop: 2 },
   optMain: { fontFamily: fonts.bold, fontSize: 13, color: palette.text },
-  optMeta: { fontFamily: fonts.medium, fontSize: 11, color: palette.textDim, marginTop: 1 },
+  optStats: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 4, marginTop: 6, paddingHorizontal: 4 },
+  optChip: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    backgroundColor: "rgba(233,196,106,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(233,196,106,0.45)",
+  },
+  optChipVol: { backgroundColor: "rgba(122,31,48,0.55)", borderColor: "rgba(248,227,163,0.45)" },
+  optChipText: { fontFamily: fonts.bold, fontSize: 11.5, color: palette.goldLight, letterSpacing: 0.3 },
   optBusy: { position: "absolute", top: 8, right: 8 },
   pickerFoot: { fontFamily: fonts.regular, fontSize: 11.5, color: palette.textFaint, marginTop: spacing.md, textAlign: "center", maxWidth: 320 },
   retrig: {

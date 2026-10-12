@@ -9,7 +9,8 @@ export type KenoSpeed = "normal" | "fast" | "instant";
 // TODO(lead): hoist to a shared config constant when one exists.
 export { RESTRICTED_PLAY } from "@/config/compliance";
 import { RESTRICTED_PLAY } from "@/config/compliance";
-export const RESTRICTED_MIN_CYCLE_MS = 2500;
+export { MIN_CYCLE_MS as RESTRICTED_MIN_CYCLE_MS } from "@/config/compliance";
+import { MIN_CYCLE_MS as RESTRICTED_MIN_CYCLE_MS } from "@/config/compliance";
 
 export const BOARD_SIZE = 80;
 export const BOARD_COLS = 10;

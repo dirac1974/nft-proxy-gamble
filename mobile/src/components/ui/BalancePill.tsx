@@ -11,15 +11,26 @@ interface BalancePillProps {
   amount: number;
   onAdd?: () => void;
   testID?: string;
+  /** Smaller pill for crowded game headers: coin + number, tighter font. */
+  compact?: boolean;
 }
 
 // Balance that rolls to its new value instead of jumping.
-export function BalancePill({ amount, onAdd, testID = "balance-pill" }: BalancePillProps) {
+export function BalancePill({ amount, onAdd, testID = "balance-pill", compact = false }: BalancePillProps) {
   const shown = useRollingNumber(amount);
   return (
-    <View style={styles.pill} testID={testID} accessibilityLabel={`Balance ${formatCoins(amount)} coins`}>
-      <CoinIcon size={18} />
-      <AppText variant="money" style={styles.amount} testID="balance-amount">
+    <View
+      style={[styles.pill, compact && styles.pillCompact]}
+      testID={testID}
+      accessibilityLabel={`Balance ${formatCoins(amount)} coins`}
+    >
+      <CoinIcon size={compact ? 15 : 18} />
+      <AppText
+        variant="money"
+        style={[styles.amount, compact && styles.amountCompact]}
+        numberOfLines={1}
+        testID="balance-amount"
+      >
         {formatCoins(shown)}
       </AppText>
       {onAdd && (
@@ -31,10 +42,11 @@ export function BalancePill({ amount, onAdd, testID = "balance-pill" }: BalanceP
           style={styles.add}
           accessibilityRole="button"
           accessibilityLabel="Buy coins"
-          hitSlop={8}
+          // 32px button + 10 slop on every side = 52dp effective target (>= 48dp).
+          hitSlop={10}
           testID="buy-coins-button"
         >
-          <Ionicons name="add" size={16} color={palette.goldInk} />
+          <Ionicons name="add" size={compact ? 16 : 18} color={palette.goldInk} />
         </Pressable>
       )}
     </View>
@@ -75,14 +87,16 @@ const styles = StyleSheet.create({
     borderColor: "rgba(233,196,106,0.35)",
     borderRadius: radius.pill,
     paddingLeft: 8,
-    paddingRight: 4,
-    height: 34,
+    paddingRight: 3,
+    height: 38,
   },
+  pillCompact: { height: 36, gap: 4, paddingLeft: 6, paddingRight: 2 },
   amount: { fontSize: 15, marginRight: 4, minWidth: 24 },
+  amountCompact: { fontSize: 13, marginRight: 2, minWidth: 0 },
   add: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: palette.gold,
     alignItems: "center",
     justifyContent: "center",
