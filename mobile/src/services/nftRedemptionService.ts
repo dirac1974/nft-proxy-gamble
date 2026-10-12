@@ -3,7 +3,8 @@ import { createPublicClient, http, type Address } from "viem";
 import Constants from "expo-constants";
 
 const CONTRACT_ADDRESS = (
-  Constants.expoConfig?.extra?.contractAddress as string | undefined
+  process.env.EXPO_PUBLIC_CONTRACT_ADDRESS ??
+  (Constants.expoConfig?.extra?.contractAddress as string | undefined)
 ) as Address | undefined;
 
 const REDEEM_ABI = [

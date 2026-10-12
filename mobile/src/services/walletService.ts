@@ -52,6 +52,14 @@ export function clearWalletClient(): void {
 }
 
 export function getWalletClient(): WalletClient {
+  // DEBUG-ONLY: restore the local test signer after an app restart.
+  if (!_walletClient && E2E_WALLET_ENABLED && E2E_WALLET_PK && E2E_CHAIN) {
+    _walletClient = createWalletClient({
+      account: privateKeyToAccount(E2E_WALLET_PK as `0x${string}`),
+      chain: E2E_CHAIN,
+      transport: http(E2E_CHAIN_RPC),
+    });
+  }
   if (!_walletClient) throw new Error("Wallet not connected");
   return _walletClient;
 }

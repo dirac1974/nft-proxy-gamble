@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { Tabs } from "expo-router";
 import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
@@ -29,7 +29,7 @@ export default function TabsLayout() {
         tabBarStyle: styles.bar,
         tabBarBackground: () => (
           <View style={StyleSheet.absoluteFill}>
-            <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+            {Platform.OS === "ios" && <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />}
             <View style={[StyleSheet.absoluteFill, styles.barTint]} />
           </View>
         ),
@@ -68,7 +68,8 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     elevation: 0,
   },
-  barTint: { backgroundColor: "rgba(7,9,15,0.78)" },
+  // Android BlurView does not blur by default, so the bar is solid there.
+  barTint: { backgroundColor: Platform.OS === "ios" ? "rgba(7,9,15,0.78)" : "#07090F" },
   iconWrap: { alignItems: "center", justifyContent: "center", paddingTop: 4 },
   dot: { width: 4, height: 4, borderRadius: 2, marginTop: 3, backgroundColor: "transparent" },
   dotActive: { backgroundColor: palette.gold },

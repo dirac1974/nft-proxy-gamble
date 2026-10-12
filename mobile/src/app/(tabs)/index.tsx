@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
-import { router } from "expo-router";
+import { useFocusEffect, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useQuery } from "@tanstack/react-query";
@@ -31,7 +31,7 @@ export default function LobbyScreen() {
   const openConnect = useUiStore((s) => s.openConnect);
   const tabBarHeight = useBottomTabBarHeight();
 
-  const { data: balanceData } = useQuery({
+  const { data: balanceData, refetch: refetchBalance } = useQuery({
     queryKey: ["balance"],
     queryFn: balanceApi.get,
     enabled: isAuthenticated,
@@ -41,6 +41,13 @@ export default function LobbyScreen() {
   useEffect(() => {
     if (typeof balanceData === "number") setBalance(balanceData);
   }, [balanceData, setBalance]);
+
+  // Refresh the balance whenever this tab comes into view.
+  useFocusEffect(
+    useCallback(() => {
+      if (isAuthenticated) void refetchBalance();
+    }, [isAuthenticated, refetchBalance]),
+  );
 
   // Init IAP when user is authenticated; tear down on unmount
   useEffect(() => {

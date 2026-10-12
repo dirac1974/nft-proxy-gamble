@@ -3,7 +3,7 @@
 // Without this, iOS throws an uncaught NSException → abort() within ~1s of launch.
 import "@walletconnect/react-native-compat";
 import React, { useEffect } from "react";
-import { View } from "react-native";
+import { AppState, LogBox, View } from "react-native";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useFonts } from "expo-font";
@@ -16,7 +16,7 @@ import {
   Inter_800ExtraBold,
 } from "@expo-google-fonts/inter";
 import { StatusBar } from "expo-status-bar";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, focusManager } from "@tanstack/react-query";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { WalletConnectModal } from "@walletconnect/modal-react-native";
@@ -29,14 +29,23 @@ import { GlobalSheets } from "@/components/GlobalSheets";
 import { AgeGateModal } from "@/components/AgeGateModal";
 import { NetworkBanner } from "@/components/NetworkBanner";
 import { BRAND } from "@/config/brand";
+import { E2E_WALLET_ENABLED } from "@/services/walletService";
 
 SplashScreen.preventAutoHideAsync().catch(() => null);
+// Debug E2E runs only: dev warning toasts would cover on-screen controls.
+if (E2E_WALLET_ENABLED) LogBox.ignoreAllLogs(true);
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { staleTime: 30_000, retry: 2 },
     mutations: { retry: 0 },
   },
+});
+// Balance is money: never serve it from cache, and refetch when the app returns to the foreground.
+queryClient.setQueryDefaults(["balance"], { staleTime: 0, refetchOnWindowFocus: true });
+focusManager.setEventListener((handleFocus) => {
+  const sub = AppState.addEventListener("change", (state) => handleFocus(state === "active"));
+  return () => sub.remove();
 });
 
 // Project ID from WalletConnect Cloud (set via app.config.js extra.walletConnectProjectId)

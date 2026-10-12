@@ -21,7 +21,10 @@ function friendlyConnectError(raw: string): string {
   if (msg.includes("reject") || msg.includes("denied") || msg.includes("cancel")) {
     return "Sign-in was cancelled in your wallet app. Try again when you're ready.";
   }
-  if (msg.includes("network") || msg.includes("chain")) {
+  if (msg.includes("network request failed") || msg.includes("failed to fetch") || msg.includes("timeout")) {
+    return "We can't reach the server right now. Check your connection and try again.";
+  }
+  if (msg.includes("wrong network") || msg.includes("chain")) {
     return "Your wallet is on the wrong network. Use the banner at the top to fix it.";
   }
   return "We couldn't sign you in. Check your wallet app and try again.";
@@ -51,7 +54,10 @@ export function ConnectWalletSheet({ visible, onClose }: ConnectWalletSheetProps
     setConnectionError(null);
     connectE2EWallet()
       .then(closeAll)
-      .catch((e: unknown) => setConnectionError(e instanceof Error ? e.message : "Test wallet failed"));
+      .catch((e: unknown) => {
+        console.warn("[e2e-wallet]", e instanceof Error ? e.message : e);
+        setConnectionError(e instanceof Error ? e.message : "Test wallet failed");
+      });
   };
 
   return (

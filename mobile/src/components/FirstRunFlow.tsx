@@ -53,7 +53,7 @@ const SLIDES: { key: string; title: string; body: string; art: React.ReactNode }
   {
     key: "play",
     title: "Buy coins, play games.",
-    body: "Video poker, blackjack and roulette. Every bet is in coins.",
+    body: "Slots, keno, video poker, blackjack and roulette. Every bet is in coins.",
     art: (
       <View style={{ flexDirection: "row", alignItems: "flex-end" }}>
         <View style={{ transform: [{ rotate: "-8deg" }], marginRight: -18 }}>

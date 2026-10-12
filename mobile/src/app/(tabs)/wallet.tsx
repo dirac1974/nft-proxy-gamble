@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect } from "react";
 import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, View } from "react-native";
+import { useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -23,7 +24,7 @@ export default function WalletScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const qc = useQueryClient();
 
-  const { data: balanceData } = useQuery({
+  const { data: balanceData, refetch: refetchBalance } = useQuery({
     queryKey: ["balance"],
     queryFn: balanceApi.get,
     enabled: isAuthenticated,
@@ -32,6 +33,13 @@ export default function WalletScreen() {
   useEffect(() => {
     if (typeof balanceData === "number") setBalance(balanceData);
   }, [balanceData, setBalance]);
+
+  // Refresh the balance whenever this tab comes into view.
+  useFocusEffect(
+    useCallback(() => {
+      if (isAuthenticated) void refetchBalance();
+    }, [isAuthenticated, refetchBalance]),
+  );
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["nfts"],

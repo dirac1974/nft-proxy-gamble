@@ -3,7 +3,10 @@ import { useWalletStore } from "@/stores/walletStore";
 import { verifyAndExtractBalance, type SignedBalanceResponse } from "./balanceVerification";
 import { getAttestationHeaders } from "./deviceAttestationService";
 
+// Bundle-time env wins over the config embedded at native build time, so a
+// rebuilt JS bundle always talks to the backend it was bundled for.
 const BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL ??
   (Constants.expoConfig?.extra?.apiUrl as string | undefined) ??
   "http://localhost:3000";
 

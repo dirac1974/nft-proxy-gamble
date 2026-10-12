@@ -48,7 +48,8 @@ export function VoucherCard({ item, walletAddress, onRedeemed }: VoucherCardProp
       await waitForRedemption(txHash);
       setRedeemStatus("confirmed");
       onRedeemed();
-    } catch {
+    } catch (e) {
+      if (__DEV__) console.warn("[redeem]", e instanceof Error ? e.message : e);
       setRedeemStatus("failed");
     }
   }, [item.tokenId, walletAddress, onRedeemed]);
