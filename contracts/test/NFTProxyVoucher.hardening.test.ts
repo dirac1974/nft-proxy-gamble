@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import hre, { ethers } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 
@@ -340,6 +340,9 @@ describe("NFTProxyVoucher — 2026-10 hardening", function () {
   });
 
   it("gas report: mint and redeem within 150k / 80k budgets", async function () {
+    // solidity-coverage instruments the bytecode and inflates gas; budgets only
+    // apply to the real build (same guard as the gas snapshot in NFTProxyVoucher.test.ts).
+    if ((hre as unknown as { __SOLIDITY_COVERAGE_RUNNING?: boolean }).__SOLIDITY_COVERAGE_RUNNING) this.skip();
     const r1 = await (await v.connect(minter).mint(user.address, 500, GAME, next())).wait();
     const r2 = await (await v.connect(user).redeem(0)).wait();
     console.log(`      mint gas ${r1.gasUsed}, redeem gas ${r2.gasUsed}`);

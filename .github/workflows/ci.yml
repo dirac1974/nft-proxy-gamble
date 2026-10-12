@@ -143,10 +143,12 @@ jobs:
         run: npx prisma generate
       - name: Type-check
         run: npx tsc --noEmit
+      # Some unit tests drive real routes whose middleware (e.g. the
+      # responsible-gaming gate) reads the DB, so the schema must exist first.
+      - name: Push DB schema
+        run: npx prisma db push --force-reset --skip-generate
       - name: Unit tests
         run: npm run test:unit
-      - name: Push DB schema (integration tests)
-        run: npx prisma db push --force-reset --skip-generate
       - name: Integration tests
         run: npm run test:integration
 
