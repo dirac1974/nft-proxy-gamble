@@ -107,6 +107,8 @@ export default function RootLayout() {
             <Stack.Screen name="games/video-poker" options={{ animation: "slide_from_right" }} />
             <Stack.Screen name="games/blackjack" options={{ animation: "slide_from_right" }} />
             <Stack.Screen name="games/roulette" options={{ animation: "slide_from_right" }} />
+            <Stack.Screen name="games/keno" options={{ animation: "slide_from_right" }} />
+            <Stack.Screen name="games/slot" options={{ animation: "slide_from_right" }} />
           </Stack>
           <NetworkBanner />
           <WalletConnectModal

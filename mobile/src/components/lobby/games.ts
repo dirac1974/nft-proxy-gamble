@@ -22,6 +22,17 @@ export interface GameInfo {
 }
 
 export const GAMES: GameInfo[] = [
+  // Slot: backend/src/services/slots.ts — RTP 95.49–95.51% (all free-game options), 25–500 coins.
+  {
+    id: "slot",
+    title: "Lion Lantern Night",
+    description: "243 ways to win. Free games with wild multipliers.",
+    route: "/games/slot",
+    section: "machines",
+    rtp: "Pays back about 95.5%",
+    betRange: "Bet 25–500 coins",
+    isNew: true,
+  },
   {
     id: "video-poker",
     title: "Video Poker",

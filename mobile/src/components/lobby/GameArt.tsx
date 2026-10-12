@@ -1,4 +1,5 @@
 import { KenoTileArt } from "@/components/keno";
+import { SlotTileArt } from "@/components/slot";
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import Svg, { Circle, Defs, G, Path, RadialGradient, Stop } from "react-native-svg";
@@ -118,6 +119,7 @@ function RouletteWheel({ size }: { size: number }) {
 }
 
 export function GameArt({ game, size }: { game: GameId; size: number }) {
+  if (game === "slot") return <SlotTileArt size={size} />;
   if (game === "keno") return <KenoTileArt size={size} variant="single" />;
   if (game === "keno-quad") return <KenoTileArt size={size} variant="quad" />;
   if (game === "video-poker") return <PokerFan size={size} />;
