@@ -17,6 +17,7 @@ import { AppText, EmptyState, FairnessBadge, GameHeader, Screen, Toast, haptic, 
 import { useWalletStore } from "@/stores/walletStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useRgBlock } from "@/components/shell/RgBlockNotice";
 import { balanceApi } from "@/services/api";
 import { FALLBACK_PAYTABLE, slotApi, type SlotSession, type SlotSpin, type SlotSpinResult } from "@/services/slotApi";
 import { isSlotVerified, verifySlotRound, type MultiplierSet } from "@/services/slotFair";
@@ -229,6 +230,7 @@ export default function SlotScreen() {
   }, []);
 
   const showToast = useCallback((message: string, tone: ToastTone = "warn") => setToast({ message, tone }), []);
+  const { intercept: rgIntercept, notice: rgNotice } = useRgBlock();
   const hideToast = useCallback(() => setToast(null), []);
 
   useEffect(() => {
@@ -252,11 +254,11 @@ export default function SlotScreen() {
     } catch (e) {
       if (!mounted.current) return;
       setSessionState("error");
-      showToast(humanize(e), "danger");
+      if (!rgIntercept(e)) showToast(humanize(e), "danger");
     } finally {
       sessionLoading.current = false;
     }
-  }, [showToast, qc]);
+  }, [showToast, rgIntercept, qc]);
 
   useEffect(() => {
     if (isAuthenticated && !session && sessionState === "idle") void ensureSession();
@@ -475,7 +477,7 @@ export default function SlotScreen() {
       setBanner(IDLE_BANNER);
       setPendingDebit(null);
       haptic("error");
-      showToast(humanize(e), "danger");
+      if (!rgIntercept(e)) showToast(humanize(e), "danger");
       void qc.invalidateQueries({ queryKey: ["balance"] });
       sessionLoading.current = false;
       void ensureSession();
@@ -535,6 +537,7 @@ export default function SlotScreen() {
     level,
     ensureSession,
     showToast,
+    rgIntercept,
     openIAP,
     resetPresentation,
     count,
@@ -900,6 +903,7 @@ export default function SlotScreen() {
               />
             ) : null}
             <Toast message={toast?.message ?? null} tone={toast?.tone} onHide={hideToast} />
+            {rgNotice}
           </View>
 
           <SlotRulesSheet

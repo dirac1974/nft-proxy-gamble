@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireCanWager } from "../middleware/responsibleGaming.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { signBalance } from "../services/balanceSigning.js";
 import { recordAnalyticsEvent } from "../services/analyticsService.js";
@@ -57,7 +58,7 @@ const startSchema = z.object({
   clientSeed: z.string().regex(CLIENT_SEED_RE, "clientSeed must match [A-Za-z0-9_-]{1,64}").optional(),
 });
 
-router.post("/start-session", requireAuth, async (req, res, next) => {
+router.post("/start-session", requireAuth, requireCanWager, async (req, res, next) => {
   try {
     const { mode, clientSeed: clientSeedOverride } = parseOr400(startSchema, req.body);
     const userId = req.user!.userId;
@@ -90,7 +91,7 @@ const playSchema = z.object({
     .max(MAX_CARDS.quad),
 });
 
-router.post("/play", requireAuth, async (req, res, next) => {
+router.post("/play", requireAuth, requireCanWager, async (req, res, next) => {
   try {
     const { sessionId, cards } = parseOr400(playSchema, req.body);
     const userId = req.user!.userId;

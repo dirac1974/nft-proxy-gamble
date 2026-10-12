@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireCanWager } from "../middleware/responsibleGaming.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { requireAllowedJurisdiction } from "../middleware/jurisdictionBlock.js";
 import { moneyPathRateLimit } from "../middleware/attestationRateLimit.js";
@@ -37,7 +38,7 @@ const startSchema = z.object({
   variant: z.enum(["jacks-or-better", "bonus-poker", "deuces-wild"]).optional(),
 });
 
-router.post("/start-session", requireAuth, async (req, res, next) => {
+router.post("/start-session", requireAuth, requireCanWager, async (req, res, next) => {
   try {
     const { betAmount, clientSeed: clientSeedOverride, variant } = startSchema.parse(req.body);
     const userId = req.user!.userId;
@@ -78,7 +79,7 @@ router.post("/start-session", requireAuth, async (req, res, next) => {
 });
 
 // POST /game/deal
-router.post("/deal", requireAuth, async (req, res, next) => {
+router.post("/deal", requireAuth, requireCanWager, async (req, res, next) => {
   try {
     const { sessionId } = z.object({ sessionId: z.string() }).parse(req.body);
     const userId = req.user!.userId;

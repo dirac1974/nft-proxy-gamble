@@ -14,6 +14,7 @@ import blackjackRoutes from "./routes/blackjack.js";
 import nftRoutes from "./routes/nfts.js";
 import walletRoutes from "./routes/wallet.js";
 import adminRoutes from "./routes/admin.js";
+import rgRoutes from "./routes/rg.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { config } from "./config/index.js";
 import { getPendingBatchSize } from "./services/purchaseCommitmentService.js";
@@ -67,6 +68,7 @@ export function createApp(): express.Application {
   app.use("/nfts", gameLimiter, nftRoutes);
   app.use("/wallet", gameLimiter, walletRoutes);
   app.use("/admin", gameLimiter, adminRoutes);
+  app.use("/rg", gameLimiter, rgRoutes);
 
   app.use(errorHandler);
 

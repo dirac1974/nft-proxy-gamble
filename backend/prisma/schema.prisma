@@ -54,29 +54,44 @@ enum RiskLevel {
 }
 
 model User {
-  id                 String          @id @default(cuid())
-  walletAddress      String          @unique
-  coinBalance        Int             @default(0)
-  ageConfirmed       Boolean         @default(false)
+  id                            String          @id @default(cuid())
+  walletAddress                 String          @unique
+  coinBalance                   Int             @default(0)
+  ageConfirmed                  Boolean         @default(false)
   // Server-side admin authority (FABLE-2026-07 H-3). Admin access is decided by
   // this column, NEVER by a self-asserted JWT claim. Defaults false; granted only
   // out-of-band (DB/ops), so a forged or leaked token cannot self-elevate.
-  isAdmin            Boolean         @default(false)
+  isAdmin                       Boolean         @default(false)
   // Per-user provably-fair server-seed chain (FABLE-2026-07 H-2). nextServerSeed
   // is the secret pre-image consumed by the NEXT session; nextServerSeedHash is
   // its published commitment. Committing the seed before the next clientSeed is
   // known removes the operator's ability to grind the deck. Nullable until the
   // chain is initialized (account creation or first session).
-  nextServerSeed     String?
-  nextServerSeedHash String?
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
-  sessions           GameSession[]
-  nftVouchers        NFTVoucher[]
-  iapReceipts        IAPReceipt[]
-  transactions       Transaction[]
-  analytics          UserAnalytics?
-  adminActions       AdminAuditLog[]
+  nextServerSeed                String?
+  nextServerSeedHash            String?
+  // Responsible gaming (RG) controls — see services/responsibleGaming.ts.
+  // Limits are whole coins per UTC day; null = no limit. Decreases apply
+  // immediately; increases/removals are queued in the pending* columns and
+  // take effect at limitChangePendingAt (now + 24h).
+  dailyDepositLimitCoins        Int?
+  dailyLossLimitCoins           Int?
+  pendingDepositLimitChange     Boolean         @default(false)
+  pendingDailyDepositLimitCoins Int? // null + pendingDepositLimitChange = removal
+  pendingLossLimitChange        Boolean         @default(false)
+  pendingDailyLossLimitCoins    Int? // null + pendingLossLimitChange = removal
+  limitChangePendingAt          DateTime?
+  coolOffUntil                  DateTime?
+  // Permanent self-exclusion = 9999-12-31. Can only be extended, never shortened.
+  selfExcludedUntil             DateTime?
+  createdAt                     DateTime        @default(now())
+  updatedAt                     DateTime        @updatedAt
+  rgEvents                      RgEvent[]
+  sessions                      GameSession[]
+  nftVouchers                   NFTVoucher[]
+  iapReceipts                   IAPReceipt[]
+  transactions                  Transaction[]
+  analytics                     UserAnalytics?
+  adminActions                  AdminAuditLog[]
 }
 
 // Append-only audit trail of privileged admin actions (FABLE-2026-07 H-3).
@@ -243,4 +258,17 @@ model WorkerLease {
   holder    String
   expiresAt DateTime
   updatedAt DateTime @updatedAt
+}
+
+// Append-only responsible-gaming audit trail: every limit change (requested,
+// applied, queued), cool-off, self-exclusion and RG block is recorded here.
+model RgEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String // LIMIT_DECREASE | LIMIT_INCREASE_QUEUED | LIMIT_APPLIED | COOL_OFF | SELF_EXCLUDE | DEPOSIT_BLOCKED
+  payload   Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }

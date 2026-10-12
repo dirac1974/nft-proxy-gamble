@@ -19,6 +19,7 @@ import {
   type ToastTone,
 } from "@/components/ui";
 import { WinOverlay, classifyWin, type WinTier } from "@/components/WinOverlay";
+import { useRgBlock } from "@/components/shell/RgBlockNotice";
 import { useWalletStore } from "@/stores/walletStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -148,6 +149,7 @@ function BlackjackTable() {
   }, []);
 
   const showToast = useCallback((message: string, tone: ToastTone = "danger") => setToast({ message, tone }), []);
+  const rg = useRgBlock();
   const hideToast = useCallback(() => setToast(null), []);
 
   // ---- Session: commit a fresh shoe before any bet (one round per session).
@@ -167,7 +169,7 @@ function BlackjackTable() {
     },
     onError: (e) => {
       setNeedSession(false);
-      showToast(humanError(e));
+      if (!rg.intercept(e)) showToast(humanError(e));
     },
   });
   const startSession = startMutation.mutate;
@@ -256,19 +258,25 @@ function BlackjackTable() {
       openingRef.current = r.hands[0]?.cards.slice(0, 2) ?? null;
       onRound(r, 0);
     },
-    onError: (e) => showToast(humanError(e)),
+    onError: (e) => {
+      if (!rg.intercept(e)) showToast(humanError(e));
+    },
   });
   const actionMutation = useMutation({
     mutationFn: (v: { sessionId: string; action: BlackjackActionName; prevWagered: number }) =>
       blackjackApi.action(v.sessionId, v.action),
     onSuccess: (r, v) => onRound(r, v.prevWagered),
-    onError: (e) => showToast(humanError(e)),
+    onError: (e) => {
+      if (!rg.intercept(e)) showToast(humanError(e));
+    },
   });
   const insuranceMutation = useMutation({
     mutationFn: (v: { sessionId: string; take: boolean; prevWagered: number }) =>
       blackjackApi.insurance(v.sessionId, v.take),
     onSuccess: (r, v) => onRound(r, v.prevWagered),
-    onError: (e) => showToast(humanError(e)),
+    onError: (e) => {
+      if (!rg.intercept(e)) showToast(humanError(e));
+    },
   });
 
   const pending = dealMutation.isPending || actionMutation.isPending || insuranceMutation.isPending;
@@ -528,6 +536,7 @@ function BlackjackTable() {
         }}
       >
         <Toast message={toast?.message ?? null} tone={toast?.tone} onHide={hideToast} />
+        {rg.notice}
 
         <View style={styles.topRow}>
           <AppText variant="overline" style={styles.zoneLabel}>

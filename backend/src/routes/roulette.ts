@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireCanWager } from "../middleware/responsibleGaming.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { signBalance } from "../services/balanceSigning.js";
 import { recordAnalyticsEvent } from "../services/analyticsService.js";
@@ -31,7 +32,7 @@ const startSchema = z.object({
   clientSeed: z.string().regex(CLIENT_SEED_RE, CLIENT_SEED_MESSAGE).optional(),
 });
 
-router.post("/start-session", requireAuth, async (req, res, next) => {
+router.post("/start-session", requireAuth, requireCanWager, async (req, res, next) => {
   try {
     const { clientSeed: clientSeedOverride } = startSchema.parse(req.body);
     const userId = req.user!.userId;
@@ -82,7 +83,7 @@ const spinSchema = z.object({
   bets: z.array(betSchema).min(1).max(MAX_BETS_PER_SPIN),
 });
 
-router.post("/spin", requireAuth, async (req, res, next) => {
+router.post("/spin", requireAuth, requireCanWager, async (req, res, next) => {
   try {
     const { sessionId, bets } = spinSchema.parse(req.body);
     const userId = req.user!.userId;

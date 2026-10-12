@@ -29,6 +29,7 @@ import {
 } from "@/components/ui";
 import { MIN_CYCLE_MS, RESTRICTED_PLAY } from "@/config/compliance";
 import { WinOverlay, classifyWin, type WinTier } from "@/components/WinOverlay";
+import { useRgBlock } from "@/components/shell/RgBlockNotice";
 import { useWalletStore } from "@/stores/walletStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -155,6 +156,7 @@ export default function RouletteScreen() {
   }, []);
 
   const showToast = useCallback((message: string, tone: ToastTone = "warn") => setToast({ message, tone }), []);
+  const { intercept: rgIntercept, notice: rgNotice } = useRgBlock();
   const hideToast = useCallback(() => setToast(null), []);
 
   // --- provably-fair session: committed BEFORE bets are placed --------------
@@ -170,11 +172,11 @@ export default function RouletteScreen() {
     } catch (e) {
       if (!mounted.current) return;
       setSessionState("error");
-      showToast(humanizeError(e), "danger");
+      if (!rgIntercept(e)) showToast(humanizeError(e), "danger");
     } finally {
       sessionLoading.current = false;
     }
-  }, [showToast]);
+  }, [showToast, rgIntercept]);
 
   useEffect(() => {
     if (isAuthenticated && !session && sessionState === "idle") void ensureSession();
@@ -410,7 +412,7 @@ export default function RouletteScreen() {
       setPhase("betting");
       setPendingDebit(null);
       haptic("error");
-      showToast(humanizeError(e), "danger");
+      if (!rgIntercept(e)) showToast(humanizeError(e), "danger");
       void qc.invalidateQueries({ queryKey: ["balance"] });
     } finally {
       sessionLoading.current = false;
@@ -430,6 +432,7 @@ export default function RouletteScreen() {
     setExpanded,
     settle,
     showToast,
+    rgIntercept,
     qc,
   ]);
 
@@ -651,6 +654,7 @@ export default function RouletteScreen() {
         ) : null}
 
         <Toast message={toast?.message ?? null} tone={toast?.tone} onHide={hideToast} />
+        {rgNotice}
       </View>
 
       {overlay ? (

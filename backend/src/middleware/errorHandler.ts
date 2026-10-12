@@ -2,7 +2,8 @@ import type { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
 
 export class AppError extends Error {
-  constructor(public statusCode: number, message: string) {
+  // `extra` is merged into the JSON body (e.g. machine-readable RG `code`/`until`).
+  constructor(public statusCode: number, message: string, public extra?: Record<string, unknown>) {
     super(message);
     this.name = "AppError";
   }
@@ -15,7 +16,7 @@ export function errorHandler(
   _next: NextFunction,
 ): void {
   if (err instanceof AppError) {
-    res.status(err.statusCode).json({ error: err.message });
+    res.status(err.statusCode).json({ ...err.extra, error: err.message });
     return;
   }
   // Request-body validation failure (schema.parse in a route). A client error,

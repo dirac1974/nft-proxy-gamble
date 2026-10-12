@@ -8,6 +8,7 @@ import { fonts, palette, radius, spacing } from "@/theme";
 import { AppText, Button, EmptyState, FairnessBadge, GameHeader, Screen, Toast, haptic, type FairnessState, type ToastTone } from "@/components/ui";
 import { RESTRICTED_PLAY } from "@/config/compliance";
 import { WinOverlay, classifyWin, type WinTier } from "@/components/WinOverlay";
+import { useRgBlock } from "@/components/shell/RgBlockNotice";
 import { useWalletStore } from "@/stores/walletStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -150,6 +151,7 @@ export default function KenoScreen() {
   }, []);
 
   const showToast = useCallback((message: string, tone: ToastTone = "warn") => setToast({ message, tone }), []);
+  const { intercept: rgIntercept, notice: rgNotice } = useRgBlock();
   const hideToast = useCallback(() => setToast(null), []);
 
   // ---- provably-fair session: committed before numbers are picked; prefetched after each play ----
@@ -162,7 +164,7 @@ export default function KenoScreen() {
         return s;
       })
       .catch((e: unknown) => {
-        if (mounted.current) showToast(humanizeKenoError(e), "danger");
+        if (mounted.current && !rgIntercept(e)) showToast(humanizeKenoError(e), "danger");
         return null;
       })
       .finally(() => {
@@ -170,7 +172,7 @@ export default function KenoScreen() {
       });
     sessionPromise.current = p;
     return p;
-  }, [mode, showToast]);
+  }, [mode, showToast, rgIntercept]);
 
   useEffect(() => {
     if (isAuthenticated && !session) void ensureSession();
@@ -401,12 +403,12 @@ export default function KenoScreen() {
       phaseRef.current = "idle";
       setPendingDebit(null);
       haptic("error");
-      showToast(humanizeKenoError(e), "danger");
+      if (!rgIntercept(e)) showToast(humanizeKenoError(e), "danger");
       void qc.invalidateQueries({ queryKey: ["balance"] });
     } finally {
       if (mounted.current) void ensureSession();
     }
-  }, [locked, block, balanceData, balance, wager, cards, bet, session, mode, ensureSession, startDraw, clearTimers, showToast, qc]);
+  }, [locked, block, balanceData, balance, wager, cards, bet, session, mode, ensureSession, startDraw, clearTimers, showToast, rgIntercept, qc]);
 
   // ---- layout: fit the board in whatever height is left (375×667 without scrolling) ----
   const onArea = useCallback((e: LayoutChangeEvent) => {
@@ -503,6 +505,7 @@ export default function KenoScreen() {
       }
     >
       <Toast message={toast?.message ?? null} tone={toast?.tone ?? "warn"} onHide={hideToast} />
+      {rgNotice}
 
       {settled ? (
         <ResultBanner

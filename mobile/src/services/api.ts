@@ -57,7 +57,15 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
     }
     const body = await res.json().catch(() => ({}));
     const msg = (body as { error?: string }).error ?? `HTTP ${res.status}`;
-    throw new Error(msg);
+    // Message unchanged for existing callers; machine-readable fields (e.g. RG
+    // `code`/`until`) ride along for screens that need them (see ApiError).
+    const { code, until } = body as { code?: unknown; until?: unknown };
+    throw Object.assign(new Error(msg), {
+      status: res.status,
+      ...(typeof code === "string" ? { code } : {}),
+      ...(typeof until === "string" ? { until } : {}),
+      body,
+    });
   }
   return res.json() as Promise<T>;
 }
@@ -348,4 +356,44 @@ export const iapApi = {
     const newBalance = extractVerifiedBalance(resp);
     return { coinsGranted: resp.coinsGranted, newBalance };
   },
+};
+
+/** Shape of errors thrown by `request` (an Error with optional server fields). */
+export type ApiError = Error & { status?: number; code?: string; until?: string; body?: unknown };
+
+// Responsible gaming (GET/POST /rg). Limits are whole coins per UTC day; null = no limit.
+export interface RgLimits {
+  dailyDepositLimitCoins: number | null;
+  dailyLossLimitCoins: number | null;
+}
+
+export interface RgStatus {
+  limits: RgLimits;
+  /** Queued increases/removals; a key is present only for a limit that is changing. */
+  pending: (Partial<RgLimits> & { effectiveAt: string }) | null;
+  coolOffUntil: string | null;
+  selfExcludedUntil: string | null;
+  selfExclusionPermanent: boolean;
+  today: { depositsCoins: number; netLossCoins: number; resetsAt: string };
+  options: { coolOffHours: number[]; selfExcludeMonths: number[] };
+}
+
+export type CoolOffHours = 24 | 72 | 168 | 720;
+export type SelfExcludeMonths = 6 | 12 | 60 | "permanent";
+export const SELF_EXCLUDE_CONFIRM = "SELF-EXCLUDE";
+
+export const rgApi = {
+  get: () => request<RgStatus>("/rg"),
+  setLimits: (limits: Partial<RgLimits>) =>
+    request<RgStatus & { applied: string[]; queued: string[] }>("/rg/limits", {
+      method: "POST",
+      body: JSON.stringify(limits),
+    }),
+  coolOff: (hours: CoolOffHours) =>
+    request<RgStatus>("/rg/cool-off", { method: "POST", body: JSON.stringify({ hours }) }),
+  selfExclude: (months: SelfExcludeMonths) =>
+    request<RgStatus>("/rg/self-exclude", {
+      method: "POST",
+      body: JSON.stringify({ months, confirm: SELF_EXCLUDE_CONFIRM }),
+    }),
 };

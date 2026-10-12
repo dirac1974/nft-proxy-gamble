@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireCanWager } from "../middleware/responsibleGaming.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { signBalance } from "../services/balanceSigning.js";
 import { recordAnalyticsEvent } from "../services/analyticsService.js";
@@ -45,7 +46,7 @@ function readState(session: { hands: unknown }): BlackjackState | null {
 // ---------------------------------------------------------------------------
 const startSchema = z.object({ clientSeed: z.string().regex(CLIENT_SEED_RE, CLIENT_SEED_MESSAGE).optional() });
 
-router.post("/start-session", requireAuth, async (req, res, next) => {
+router.post("/start-session", requireAuth, requireCanWager, async (req, res, next) => {
   try {
     const { clientSeed: clientSeedOverride } = startSchema.parse(req.body);
     const userId = req.user!.userId;
@@ -191,7 +192,7 @@ const dealSchema = z.object({
   bet: z.number().int().min(BJ_MIN_BET).max(BJ_MAX_BET),
 });
 
-router.post("/deal", requireAuth, async (req, res, next) => {
+router.post("/deal", requireAuth, requireCanWager, async (req, res, next) => {
   try {
     const { sessionId, bet } = dealSchema.parse(req.body);
     const userId = req.user!.userId;

@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fonts, motion, spacing } from "@/theme";
 import { AppText, Button, CARD_RATIO, EmptyState, FairnessBadge, PlayingCard, Toast, haptic, type FairnessState, type ToastTone } from "@/components/ui";
 import { WinOverlay } from "@/components/WinOverlay";
+import { useRgBlock } from "@/components/shell/RgBlockNotice";
 import { PaytableModal } from "@/components/PaytableModal";
 import { ProvablyFairModal, isVerified, verifyVideoPokerHand } from "@/components/ProvablyFairModal";
 import { PAYTABLE_MIN_ROW, PaytableGrid } from "@/components/videopoker/PaytableGrid";
@@ -92,6 +93,7 @@ export default function VideoPokerScreen() {
   const [paytableOpen, setPaytableOpen] = useState(false);
   const [fairOpen, setFairOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
+  const rg = useRgBlock();
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [dealKey, setDealKey] = useState(0);
   const [dealDelays, setDealDelays] = useState<number[]>([0, 0, 0, 0, 0]);
@@ -149,7 +151,7 @@ export default function VideoPokerScreen() {
     },
     onError: (err) => {
       haptic("error");
-      setToast({ message: friendlyError(err), tone: "danger" });
+      if (!rg.intercept(err)) setToast({ message: friendlyError(err), tone: "danger" });
       qc.invalidateQueries({ queryKey: ["balance"] });
     },
   });
@@ -175,7 +177,7 @@ export default function VideoPokerScreen() {
     },
     onError: (err) => {
       haptic("error");
-      setToast({ message: friendlyError(err), tone: "danger" });
+      if (!rg.intercept(err)) setToast({ message: friendlyError(err), tone: "danger" });
     },
   });
 
@@ -418,6 +420,7 @@ export default function VideoPokerScreen() {
         ) : (
           <View style={styles.body} onLayout={(e) => setBodyH(e.nativeEvent.layout.height)}>
             <Toast message={toast?.message ?? null} tone={toast?.tone ?? "danger"} onHide={hideToast} />
+            {rg.notice}
 
             <View style={styles.gameSelect} accessibilityRole="tablist">
               {VARIANTS.map((v) => (

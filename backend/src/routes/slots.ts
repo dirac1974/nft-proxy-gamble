@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { GameSession } from "@prisma/client";
 import { prisma } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireCanWager } from "../middleware/responsibleGaming.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { signBalance } from "../services/balanceSigning.js";
 import { recordAnalyticsEvent } from "../services/analyticsService.js";
@@ -192,7 +193,7 @@ const startSchema = z.object({
   clientSeed: z.string().regex(CLIENT_SEED_RE, "clientSeed must match /^[A-Za-z0-9_-]{1,64}$/").optional(),
 });
 
-router.post("/start-session", requireAuth, async (req, res, next) => {
+router.post("/start-session", requireAuth, requireCanWager, async (req, res, next) => {
   try {
     const { clientSeed: clientSeedOverride } = parse(startSchema, req.body);
     const userId = req.user!.userId;
@@ -243,7 +244,7 @@ const spinSchema = z.object({
   betLevel: z.number().int().refine((v) => BET_LEVELS.includes(v), { message: `betLevel must be one of ${BET_LEVELS.join(",")}` }),
 });
 
-router.post("/spin", requireAuth, async (req, res, next) => {
+router.post("/spin", requireAuth, requireCanWager, async (req, res, next) => {
   try {
     const { sessionId, betLevel } = parse(spinSchema, req.body);
     const userId = req.user!.userId;
