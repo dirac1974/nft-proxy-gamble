@@ -26,6 +26,12 @@ const VOLUME: Partial<Record<SfxKey, number>> = {
   count_tick: 0.3,
   lose: 0.5,
   card_hold: 0.6,
+  vp_deal: 0.55,
+  vp_draw: 0.55,
+  vp_credit_tick: 0.4,
+  vp_hold: 0.55,
+  vp_unhold: 0.45,
+  vp_game_over: 0.5,
 };
 
 const sfx: Partial<Record<SfxKey, Audio.Sound>> = {};
@@ -72,6 +78,12 @@ export async function playSound(key: SoundKey): Promise<void> {
   } catch {
     // Swallow audio errors.
   }
+}
+
+/** Classic cabinet BET ONE beep — pitch rises with the coin count (1–5). */
+export function playBetBeep(coins: number): Promise<void> {
+  const n = Math.min(5, Math.max(1, Math.round(coins)));
+  return playSound(`vp_bet${n}` as SfxKey);
 }
 
 export async function stopSound(key: SfxKey): Promise<void> {

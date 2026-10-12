@@ -18,6 +18,19 @@ export const SFX_ASSETS = {
   lose: require("./lose.wav") as number,
   roulette_spin: require("./roulette_spin.wav") as number,
   ball_drop: require("./ball_drop.wav") as number,
+  vp_bet1: require("./vp_bet1.wav") as number,
+  vp_bet2: require("./vp_bet2.wav") as number,
+  vp_bet3: require("./vp_bet3.wav") as number,
+  vp_bet4: require("./vp_bet4.wav") as number,
+  vp_bet5: require("./vp_bet5.wav") as number,
+  vp_deal: require("./vp_deal.wav") as number,
+  vp_draw: require("./vp_draw.wav") as number,
+  vp_hold: require("./vp_hold.wav") as number,
+  vp_unhold: require("./vp_unhold.wav") as number,
+  vp_credit_tick: require("./vp_credit_tick.wav") as number,
+  vp_game_over: require("./vp_game_over.wav") as number,
+  vp_win: require("./vp_win.wav") as number,
+  vp_win_big: require("./vp_win_big.wav") as number,
 } as const;
 
 export const VOICE_ASSETS: Record<"vo_welcome" | "vo_good_luck" | "vo_place_bets" | "vo_no_more_bets" | "vo_blackjack" | "vo_dealer_bj" | "vo_insurance" | "vo_dealer_bust" | "vo_push" | "vo_royal" | "vo_straight_flush" | "vo_four_kind" | "vo_four_deuces", number | undefined> = {

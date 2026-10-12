@@ -1,41 +1,26 @@
 import React from "react";
 import { StyleSheet, View, type ViewStyle } from "react-native";
-import { colors, radius, spacing } from "@/theme";
+import { palette, radius, shadows, spacing } from "@/theme";
 
 interface GlassCardProps {
   children: React.ReactNode;
   style?: ViewStyle;
+  /** Gold accent border (kept as `neonBorder` for existing call sites). */
   neonBorder?: boolean;
 }
 
 export function GlassCard({ children, style, neonBorder = false }: GlassCardProps) {
-  return (
-    <View
-      style={[
-        styles.card,
-        neonBorder && styles.neonBorder,
-        style,
-      ]}
-    >
-      {children}
-    </View>
-  );
+  return <View style={[styles.card, neonBorder && styles.accent, style]}>{children}</View>;
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: palette.surface,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.hairline,
     padding: spacing.lg,
+    ...shadows.e1,
   },
-  neonBorder: {
-    borderColor: colors.neonGreen,
-    shadowColor: colors.neonGreen,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 8,
-  },
+  accent: { borderColor: "rgba(233,196,106,0.55)", ...shadows.goldGlow },
 });

@@ -1,218 +1,164 @@
 import React from "react";
+import { StyleSheet, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { fonts, palette, radius, spacing } from "@/theme";
+import { AppText, Sheet } from "@/components/ui";
+import { formatCoins } from "@/config/brand";
+import type { PokerVariant } from "@/services/api";
 import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { colors, radius, spacing, typography } from "@/theme";
+  BET_LEVELS,
+  MAX_BET,
+  PAYTABLES,
+  normalizeRank,
+  rowPayout,
+  variantInfo,
+} from "@/components/videopoker/pokerData";
+import { cab } from "@/components/videopoker/cabinet";
 
 interface PaytableModalProps {
   visible: boolean;
   betAmount: number;
   onClose: () => void;
+  variant?: PokerVariant;
+  highlightRank?: string | null;
 }
 
-const PAYTABLE = [
-  { rank: "Royal Flush",     base: 250, desc: "A K Q J 10 of same suit" },
-  { rank: "Straight Flush",  base: 50,  desc: "5 sequential, same suit" },
-  { rank: "Four of a Kind",  base: 25,  desc: "4 cards same rank" },
-  { rank: "Full House",      base: 9,   desc: "3 of a kind + a pair" },
-  { rank: "Flush",           base: 6,   desc: "5 cards same suit" },
-  { rank: "Straight",        base: 4,   desc: "5 sequential cards" },
-  { rank: "Three of a Kind", base: 3,   desc: "3 cards same rank" },
-  { rank: "Two Pair",        base: 2,   desc: "Two different pairs" },
-  { rank: "Jacks or Better", base: 1,   desc: "Pair of Jacks or higher" },
-];
+// Strategy tips verified for these exact paytables only. Variants without a
+// verified list show none rather than risk wrong advice.
+const STRATEGY_TIPS: Partial<Record<PokerVariant, string[]>> = {
+  "jacks-or-better": [
+    "Never break a straight or better, except to hold 4 to a Royal over a flush or straight.",
+    "4 to a Royal beats a high pair.",
+    "A high pair (Jacks or better) beats 3 to a Royal or 4 to a flush.",
+    "3 to a Royal beats 4 to a flush and any low pair.",
+    "4 to a flush beats a low pair (2s through 10s).",
+    "A low pair beats 4 to an open-ended straight.",
+    "Never hold a kicker with a pair.",
+  ],
+  "deuces-wild": ["Never discard a deuce."],
+};
 
-export function PaytableModal({ visible, betAmount, onClose }: PaytableModalProps) {
+export function PaytableModal({ visible, betAmount, onClose, variant = "jacks-or-better", highlightRank }: PaytableModalProps) {
+  const info = variantInfo(variant);
+  const rows = PAYTABLES[variant];
+  const win = highlightRank ? normalizeRank(highlightRank) : null;
+  const royal = rows.find((r) => r.royalBonus);
+  const tips = STRATEGY_TIPS[variant];
+
   return (
-    <Modal
+    <Sheet
       visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-      accessibilityViewIsModal
+      onClose={onClose}
+      title={`${info.name} paytable`}
+      subtitle={`${info.spec} · Bet ${betAmount} · ${info.rtp} return with optimal play at max bet`}
+      testID="paytable-sheet"
     >
-      <Pressable
-        style={styles.backdrop}
-        onPress={onClose}
-        accessibilityRole="button"
-        accessibilityLabel="Close paytable"
-      />
-      <View style={styles.sheet}>
-        <View style={styles.header}>
-          <Text style={styles.title}>PAYTABLE</Text>
-          <Text style={styles.subtitle}>9/6 Jacks or Better · Bet {betAmount}</Text>
-          <Pressable
-            onPress={onClose}
-            style={styles.closeButton}
-            accessibilityRole="button"
-            accessibilityLabel="Close paytable modal"
-          >
-            <Text style={styles.closeText}>✕</Text>
-          </Pressable>
-        </View>
-
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-          {/* Column headers */}
-          <View style={styles.tableRow}>
-            <Text style={[styles.cellHand, styles.headerCell]}>HAND</Text>
-            {[1, 2, 3, 4, 5].map((b) => (
-              <Text
-                key={b}
-                style={[styles.cellPayout, styles.headerCell, b === betAmount && styles.activeBetCol]}
-              >
-                {b}
-              </Text>
-            ))}
-          </View>
-
-          <View style={styles.divider} />
-
-          {PAYTABLE.map(({ rank, base, desc }) => (
-            <View key={rank}>
-              <View style={styles.tableRow}>
-                <Text style={styles.cellHand}>{rank}</Text>
-                {[1, 2, 3, 4, 5].map((b) => {
-                  // Royal Flush at max bet pays 4000 instead of 1250
-                  const payout =
-                    rank === "Royal Flush" && b === 5 ? 4000 : base * b;
-                  const isActive = b === betAmount;
-                  return (
-                    <Text
-                      key={b}
-                      style={[
-                        styles.cellPayout,
-                        isActive && styles.activePayout,
-                      ]}
-                    >
-                      {payout}
-                    </Text>
-                  );
-                })}
-              </View>
-              <Text style={styles.handDesc}>{desc}</Text>
+      <View style={styles.table}>
+        <View style={[styles.row, styles.headRow]}>
+          <AppText style={[styles.hand, styles.head]}>Hand</AppText>
+          {BET_LEVELS.map((b) => (
+            <View key={b} style={[styles.cell, b === betAmount && styles.cellActive]}>
+              <AppText style={[styles.head, styles.num, b === betAmount && styles.headActive]}>{b}</AppText>
             </View>
           ))}
-
-          {/* Max bet bonus note */}
-          <View style={styles.bonusNote}>
-            <Text style={styles.bonusTitle}>★ Max Bet Bonus</Text>
-            <Text style={styles.bonusBody}>
-              Royal Flush pays 4,000 coins at 5-coin bet (vs 1,250 otherwise).
-              Always play max bet for the best RTP of 99.54%.
-            </Text>
-          </View>
-
-          {/* Strategy tips */}
-          <View style={styles.tipSection}>
-            <Text style={styles.tipTitle}>BASIC STRATEGY</Text>
-            {STRATEGY_TIPS.map((tip, i) => (
-              <Text key={i} style={styles.tipRow}>• {tip}</Text>
-            ))}
-          </View>
-        </ScrollView>
+        </View>
+        {rows.map((row, i) => {
+          const isWin = row.code === win;
+          return (
+            <View
+              key={row.code}
+              style={[styles.row, i % 2 === 1 && styles.zebra, isWin && styles.rowWin]}
+              accessible
+              accessibilityLabel={`${row.label}: ${row.desc}. Pays ${formatCoins(rowPayout(row, betAmount))} at bet ${betAmount}`}
+            >
+              <View style={styles.hand}>
+                <AppText style={[styles.handLabel, isWin && styles.winText]}>{row.label}</AppText>
+                <AppText variant="caption" numberOfLines={1}>
+                  {row.desc}
+                </AppText>
+              </View>
+              {BET_LEVELS.map((b) => (
+                <View key={b} style={[styles.cell, b === betAmount && styles.cellActive]}>
+                  <AppText style={[styles.num, b === betAmount && styles.numActive, isWin && styles.winText]}>
+                    {formatCoins(rowPayout(row, b))}
+                  </AppText>
+                </View>
+              ))}
+            </View>
+          );
+        })}
       </View>
-    </Modal>
+
+      {royal && (
+        <View style={styles.bonus}>
+          <Ionicons name="star" size={16} color={palette.gold} />
+          <View style={styles.flex}>
+            <AppText variant="bodyStrong" tone="gold">
+              Max bet bonus
+            </AppText>
+            <AppText variant="bodySmall">
+              {royal.label} pays {formatCoins(rowPayout(royal, MAX_BET))} at {MAX_BET} coins, versus{" "}
+              {formatCoins(rowPayout(royal, MAX_BET - 1))} at {MAX_BET - 1}. Play {MAX_BET} coins for the full return.
+            </AppText>
+          </View>
+        </View>
+      )}
+
+      {variant === "deuces-wild" && (
+        <AppText variant="bodySmall">Every 2 is wild and counts as any card. The lowest paying hand is Three of a Kind.</AppText>
+      )}
+
+      {tips && (
+        <View style={styles.tips} testID="strategy-tips">
+          <AppText variant="overline">Strategy tips</AppText>
+          {tips.map((t) => (
+            <View key={t} style={styles.tipRow}>
+              <View style={styles.dot} />
+              <AppText variant="bodySmall" style={styles.flex}>
+                {t}
+              </AppText>
+            </View>
+          ))}
+        </View>
+      )}
+
+      <AppText variant="caption">Payouts include your bet. Results are settled by the server.</AppText>
+    </Sheet>
   );
 }
 
-const STRATEGY_TIPS = [
-  "Always hold a winning hand — never break a made hand.",
-  "Hold four to a Royal Flush over any made hand.",
-  "Hold four to a Straight Flush over anything except a made hand.",
-  "Never hold a kicker with a pair.",
-  "Hold low pair over four to a Flush.",
-  "Discard everything for a Royal Flush draw (3 to Royal beats a pair).",
-];
-
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
-  },
-  sheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    maxHeight: "85%",
-  },
-  header: {
-    padding: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  title: { ...typography.heading2, color: colors.neonGreen },
-  subtitle: { ...typography.bodySmall, marginTop: 2 },
-  closeButton: {
-    position: "absolute",
-    right: spacing.lg,
-    top: spacing.lg,
-    width: 32,
-    height: 32,
-    borderRadius: radius.full,
-    backgroundColor: colors.surfaceElevated,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  closeText: { ...typography.body, color: colors.textSecondary },
-
-  scroll: { flexGrow: 0 },
-  scrollContent: { padding: spacing.lg, gap: spacing.sm },
-
-  tableRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 4,
-  },
-  cellHand: {
-    flex: 3,
-    ...typography.bodySmall,
-  },
-  cellPayout: {
-    flex: 1,
-    ...typography.bodySmall,
-    textAlign: "center",
-    color: colors.textMuted,
-  },
-  headerCell: {
-    ...typography.caption,
-    fontWeight: "700",
-    letterSpacing: 1,
-    color: colors.textMuted,
-  },
-  activeBetCol: { color: colors.neonGreen },
-  activePayout: { color: colors.neonGreen, fontWeight: "700" },
-  handDesc: {
-    ...typography.caption,
-    color: colors.textMuted,
-    paddingBottom: spacing.xs,
-    marginLeft: 2,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: spacing.xs,
-  },
-
-  bonusNote: {
-    backgroundColor: `${colors.neonGreen}11`,
+  flex: { flex: 1 },
+  table: {
     borderRadius: radius.md,
-    padding: spacing.md,
     borderWidth: 1,
-    borderColor: `${colors.neonGreen}33`,
-    gap: 4,
-    marginTop: spacing.sm,
+    borderColor: cab.rule,
+    backgroundColor: cab.panel,
+    overflow: "hidden",
   },
-  bonusTitle: { ...typography.bodySmall, color: colors.neonGreen, fontWeight: "700" },
-  bonusBody: { ...typography.caption, color: colors.textSecondary, lineHeight: 18 },
-
-  tipSection: { gap: spacing.xs, marginTop: spacing.sm },
-  tipTitle: { ...typography.caption, letterSpacing: 2, color: colors.textMuted, marginBottom: 4 },
-  tipRow: { ...typography.caption, color: colors.textSecondary, lineHeight: 18 },
+  row: { flexDirection: "row", alignItems: "stretch", minHeight: 40 },
+  headRow: { minHeight: 28, borderBottomWidth: 1, borderBottomColor: cab.rule },
+  zebra: { backgroundColor: "rgba(255,255,255,0.03)" },
+  rowWin: { backgroundColor: "rgba(255,225,58,0.28)" },
+  hand: { flex: 2.6, justifyContent: "center", paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  handLabel: { fontFamily: fonts.heavy, fontSize: 13, color: cab.yellow, textTransform: "uppercase", letterSpacing: 0.4 },
+  head: { fontFamily: fonts.bold, fontSize: 10, letterSpacing: 1.2, color: palette.textFaint, textTransform: "uppercase" },
+  headActive: { color: palette.text },
+  cell: { flex: 1, justifyContent: "center", alignItems: "flex-end", paddingRight: spacing.xs },
+  cellActive: { backgroundColor: cab.red },
+  num: { fontFamily: fonts.bold, fontSize: 12, color: cab.yellow, fontVariant: ["tabular-nums"] },
+  numActive: { fontFamily: fonts.heavy, color: palette.text },
+  winText: { color: cab.white },
+  bonus: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    padding: spacing.s12,
+    borderRadius: radius.md,
+    backgroundColor: "rgba(233,196,106,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(233,196,106,0.3)",
+  },
+  tips: { gap: spacing.sm },
+  tipRow: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start" },
+  dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: palette.gold, marginTop: 8 },
 });

@@ -170,6 +170,56 @@ const FALLBACK = {
   ball_drop: () => mix(1.3, ...[0, 0.18, 0.32, 0.43, 0.52, 0.6, 0.66].map((at, i) => [clack(3400 - i * 150), at, 1 - i * 0.12]), [noiseBurst(0.3, 0.005, 0.08, 200, 2000), 0.75, 0.3]),
 };
 
+// ---------- classic video-poker cabinet set (always synthesised) ----------
+// Genre-convention electronic tones, ORIGINAL compositions — no vendor audio.
+function tone(freq, dur, { wave = "square", attack = 0.002, decay = 0.08, amp = 1, glideTo = null } = {}) {
+  const n = len(dur);
+  const nyq = 8000;
+  let phase = 0;
+  return Array.from({ length: n }, (_, i) => {
+    const t = i / SR;
+    const f = glideTo ? freq + (glideTo - freq) * (t / dur) : freq;
+    phase += (2 * Math.PI * f) / SR;
+    let v = 0;
+    if (wave === "square") {
+      for (let h = 1; h * f < nyq && h <= 15; h += 2) v += Math.sin(phase * h) / h;
+      v *= 0.8;
+    } else if (wave === "triangle") {
+      for (let h = 1, k = 0; h * f < nyq && h <= 15; h += 2, k++) v += ((k % 2 ? -1 : 1) * Math.sin(phase * h)) / (h * h);
+    } else v = Math.sin(phase);
+    const env = Math.min(1, t / attack) * Math.exp(-t / decay);
+    return amp * v * env;
+  });
+}
+const NOTE = (semis) => 440 * Math.pow(2, semis / 12); // semis from A4
+const C6 = NOTE(15), D6 = NOTE(17), E6 = NOTE(19), G6 = NOTE(22), A6 = NOTE(24), C7 = NOTE(27);
+const CABINET = {
+  vp_bet1: () => tone(C6, 0.07, { decay: 0.03, amp: 0.7 }),
+  vp_bet2: () => tone(D6, 0.07, { decay: 0.03, amp: 0.7 }),
+  vp_bet3: () => tone(E6, 0.07, { decay: 0.03, amp: 0.7 }),
+  vp_bet4: () => tone(G6, 0.07, { decay: 0.03, amp: 0.7 }),
+  vp_bet5: () => mix(0.16, [tone(A6, 0.07, { decay: 0.03, amp: 0.7 }), 0], [tone(C7, 0.09, { decay: 0.04, amp: 0.7 }), 0.06]),
+  vp_deal: () => mix(0.04, [tone(1760, 0.03, { decay: 0.006, amp: 0.8 }), 0], [noiseBurst(0.02, 0.0003, 0.003, 2000, 9000), 0, 0.25]),
+  vp_draw: () => mix(0.04, [tone(1480, 0.03, { decay: 0.006, amp: 0.8 }), 0], [noiseBurst(0.02, 0.0003, 0.003, 2000, 9000), 0, 0.25]),
+  vp_hold: () => tone(1046.5, 0.07, { decay: 0.04, amp: 0.7, glideTo: 1568 }),
+  vp_unhold: () => tone(1568, 0.06, { decay: 0.03, amp: 0.55, glideTo: 1046.5 }),
+  vp_credit_tick: () => tone(2349, 0.03, { wave: "triangle", decay: 0.008, amp: 0.8 }),
+  vp_game_over: () => mix(0.32, [tone(NOTE(3), 0.14, { wave: "triangle", decay: 0.06 }), 0], [tone(NOTE(-2), 0.2, { wave: "triangle", decay: 0.09 }), 0.11]),
+  // Original 5-note figure: G5 C6 E6 G6 (hold) C7
+  vp_win: () => mix(0.8,
+    ...[NOTE(10), C6, E6, G6].map((f, i) => [tone(f, 0.12, { decay: 0.06, amp: 0.6 }), i * 0.075]),
+    [tone(C7, 0.45, { decay: 0.2, amp: 0.6 }), 0.3], [tone(C7 / 2, 0.45, { wave: "triangle", decay: 0.2, amp: 0.5 }), 0.3]),
+  // Original longer fanfare: rising arpeggio run, trill, resolving chord.
+  vp_win_big: () => {
+    const run = [NOTE(3), NOTE(7), NOTE(10), C6, E6, G6, C7, G6, C7, E6 * 2];
+    const parts = run.map((f, i) => [tone(f, 0.11, { decay: 0.06, amp: 0.55 }), i * 0.07]);
+    for (let i = 0; i < 10; i++) parts.push([tone(i % 2 ? C7 : NOTE(29), 0.06, { decay: 0.04, amp: 0.45 }), 0.75 + i * 0.06]);
+    for (const f of [C6, E6, G6, C7]) parts.push([tone(f, 0.9, { decay: 0.4, amp: 0.4 }), 1.4]);
+    parts.push([tone(C6 / 4, 0.9, { wave: "triangle", decay: 0.4, amp: 0.6 }), 1.4]);
+    return mix(2.4, ...parts);
+  },
+};
+
 async function main() {
   mkdirSync(OUT, { recursive: true });
   const failures = [];
@@ -203,6 +253,12 @@ async function main() {
     }
   }
 
+  for (const [key, synth] of Object.entries(CABINET)) {
+    if (existing(key) && !FORCE) continue;
+    writeFileSync(join(OUT, `${key}.wav`), wav(synth()));
+    console.log(`cab  ${key}.wav`);
+  }
+
   if (KEY && !SFX_FALLBACK_ONLY) {
     const lines = { ...VOICE };
     for (let n = 0; n <= 36; n++) lines[`vo_n${n}`] = numberLine(n);
@@ -231,7 +287,7 @@ async function main() {
 function writeManifest() {
   const files = new Set(readdirSync(OUT));
   const pick = (base) => (files.has(`${base}.mp3`) ? `${base}.mp3` : files.has(`${base}.wav`) ? `${base}.wav` : null);
-  const sfxLines = Object.keys(SFX).map((k) => {
+  const sfxLines = [...Object.keys(SFX), ...Object.keys(CABINET)].map((k) => {
     const f = pick(k);
     return f ? `  ${k}: require("./${f}") as number,` : null;
   }).filter(Boolean);

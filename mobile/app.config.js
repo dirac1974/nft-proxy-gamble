@@ -12,7 +12,7 @@ const PINNING_ENABLED =
 /** @type {import('@expo/config').ExpoConfig} */
 module.exports = {
   expo: {
-    name: "NFT Proxy Gamble",
+    name: "Aurum",
     slug: "nft-proxy-gamble",
     version: "0.1.0",
     orientation: "portrait",
@@ -22,7 +22,7 @@ module.exports = {
     splash: {
       image: "./assets/splash.png",
       resizeMode: "contain",
-      backgroundColor: "#1a0033",
+      backgroundColor: "#07090F",
     },
     assetBundlePatterns: ["**/*"],
     ios: {
@@ -51,7 +51,7 @@ module.exports = {
     android: {
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
-        backgroundColor: "#1a0033",
+        backgroundColor: "#07090F",
       },
       package: "com.nftproxygamble.app",
     },

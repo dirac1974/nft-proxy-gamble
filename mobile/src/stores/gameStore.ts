@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { PokerVariant } from "@/services/api";
 
 export type GamePhase = "idle" | "session_started" | "dealt" | "drawn" | "cashed_out";
 
@@ -28,9 +29,11 @@ interface GameState {
   dealt: DealtState | null;
   result: DrawResult | null;
   betAmount: number;
+  variant: PokerVariant;
 
   setBalance: (balance: number) => void;
   setBetAmount: (amount: number) => void;
+  setVariant: (variant: PokerVariant) => void;
   setSession: (session: GameSession) => void;
   setDealt: (cards: number[]) => void;
   toggleHold: (index: number) => void;
@@ -38,12 +41,13 @@ interface GameState {
   reset: () => void;
 }
 
-const INITIAL: Pick<GameState, "phase" | "session" | "dealt" | "result" | "betAmount"> = {
+const INITIAL: Pick<GameState, "phase" | "session" | "dealt" | "result" | "betAmount" | "variant"> = {
   phase: "idle",
   session: null,
   dealt: null,
   result: null,
   betAmount: 1,
+  variant: "jacks-or-better",
 };
 
 export const useGameStore = create<GameState>((set) => ({
@@ -53,6 +57,10 @@ export const useGameStore = create<GameState>((set) => ({
   setBalance: (balance) => set({ coinBalance: balance }),
 
   setBetAmount: (amount) => set({ betAmount: Math.min(5, Math.max(1, amount)) }),
+
+  // Variant is locked mid-hand; switching only applies between hands.
+  setVariant: (variant) =>
+    set((state) => (state.phase === "dealt" ? state : { variant })),
 
   setSession: (session) =>
     set({ session, phase: "session_started", dealt: null, result: null }),
@@ -74,5 +82,6 @@ export const useGameStore = create<GameState>((set) => ({
   setResult: (result, newBalance) =>
     set({ result, phase: "drawn", coinBalance: newBalance }),
 
-  reset: () => set(INITIAL),
+  // Keeps bet size, variant and balance — only the hand state is cleared.
+  reset: () => set({ phase: "idle", session: null, dealt: null, result: null }),
 }));

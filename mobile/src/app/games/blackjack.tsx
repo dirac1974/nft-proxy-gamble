@@ -1,296 +1,674 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
+import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { colors, radius, spacing } from "@/theme";
-import { useWalletStore } from "@/stores/walletStore";
+import { fonts, palette, radius, spacing, typography } from "@/theme";
 import {
-  balanceApi,
-  blackjackApi,
-  type BlackjackActionName,
-  type BlackjackRound,
-} from "@/services/api";
+  AppText,
+  Badge,
+  Button,
+  ChipGraphic,
+  EmptyState,
+  GameHeader,
+  Screen,
+  Toast,
+  haptic,
+  type ToastTone,
+} from "@/components/ui";
+import { WinOverlay, classifyWin, type WinTier } from "@/components/WinOverlay";
+import { useWalletStore } from "@/stores/walletStore";
+import { useUiStore } from "@/stores/uiStore";
+import { useSettingsStore } from "@/stores/settingsStore";
+import { playSound, playVoice, winSoundFor } from "@/services/soundService";
+import { balanceApi, blackjackApi, type BlackjackActionName, type BlackjackRound } from "@/services/api";
 import { verifyBlackjackDeal, type BlackjackVerificationResult } from "@/services/provablyFair";
+import { formatCoins } from "@/config/brand";
+import {
+  BET_CHIPS,
+  BJ_MIN_BET,
+  betRejectionMessage,
+  handValue,
+  humanError,
+  isNatural,
+  resultView,
+  roundVoice,
+  tryRaiseBet,
+  type Shown,
+  type Step,
+} from "@/components/blackjack/bjLogic";
+import { useDealTimeline } from "@/components/blackjack/useDealTimeline";
+import { CardFan, type FanCard } from "@/components/blackjack/CardFan";
+import { HandValueBadge } from "@/components/blackjack/HandValueBadge";
+import { BetCircle } from "@/components/blackjack/BetCircle";
+import { TablePrint } from "@/components/blackjack/TablePrint";
+import { ActionBar } from "@/components/blackjack/ActionBar";
+import { InsurancePanel } from "@/components/blackjack/InsurancePanel";
+import { FairPill, FairnessSheet, type FairStatus } from "@/components/blackjack/FairnessSheet";
+import { RulesSheet } from "@/components/blackjack/RulesSheet";
 
-const CHIPS = [5, 25, 100, 250];
+type Session = {
+  sessionId: string;
+  serverSeedHash: string;
+  clientSeed: string;
+  numDecks: number;
+  dealerHitsSoft17: boolean;
+};
 
-type Session = { sessionId: string; serverSeedHash: string; clientSeed: string; numDecks: number };
+type ToastState = { message: string; tone: ToastTone } | null;
+type WinState = { tier: WinTier; title: string; amount: number } | null;
 
-const RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"];
-const SUITS = ["♣", "♦", "♥", "♠"];
+const SESSION_TAIL_MS = 900;
 
-function cardLabel(card: number): { rank: string; suit: string; red: boolean } {
-  const rank = RANKS[card % 13];
-  const suitIdx = Math.floor(card / 13) % 4;
-  return { rank, suit: SUITS[suitIdx], red: suitIdx === 1 || suitIdx === 2 };
-}
+export default function BlackjackScreen() {
+  const { isAuthenticated } = useWalletStore();
+  const openConnect = useUiStore((s) => s.openConnect);
 
-function Card({ card, hidden }: { card?: number; hidden?: boolean }) {
-  if (hidden || card === undefined) {
+  if (!isAuthenticated) {
     return (
-      <View style={[styles.card, styles.cardBack]}>
-        <Text style={styles.cardBackText}>★</Text>
-      </View>
+      <Screen variant="felt" header={<BareHeader />}>
+        <View style={styles.center}>
+          <EmptyState
+            icon="wallet-outline"
+            title="Connect your wallet to start playing"
+            body="Your coins and every hand you play are tied to your wallet."
+            cta={{ label: "Connect wallet", onPress: openConnect, testID: "bj-connect" }}
+            testID="bj-not-connected"
+          />
+        </View>
+      </Screen>
     );
   }
-  const { rank, suit, red } = cardLabel(card);
+  return <BlackjackTable />;
+}
+
+function BareHeader() {
   return (
-    <View style={styles.card}>
-      <Text style={[styles.cardText, red ? styles.cardRed : styles.cardBlack]}>{rank}</Text>
-      <Text style={[styles.cardSuit, red ? styles.cardRed : styles.cardBlack]}>{suit}</Text>
+    <View style={styles.bareHeader}>
+      <Pressable
+        onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+        style={styles.backBtn}
+        accessibilityRole="button"
+        accessibilityLabel="Back to lobby"
+        hitSlop={8}
+        testID="game-back"
+      >
+        <Ionicons name="chevron-back" size={22} color={palette.text} />
+      </Pressable>
+      <AppText style={styles.bareTitle}>Blackjack</AppText>
     </View>
   );
 }
 
-const ACTION_LABEL: Record<BlackjackActionName, string> = {
-  hit: "Hit",
-  stand: "Stand",
-  double: "Double",
-  split: "Split",
-};
-
-export default function BlackjackScreen() {
+function BlackjackTable() {
   const qc = useQueryClient();
-  const { isAuthenticated } = useWalletStore();
-  const { data: balance } = useQuery({ queryKey: ["balance"], queryFn: balanceApi.get, enabled: isAuthenticated });
+  const { width: screenW, height: screenH } = useWindowDimensions();
+  const compact = screenH < 760;
+  const bigCard = compact ? 56 : 64;
+  const reduceMotion = useSettingsStore((s) => s.reduceMotion);
+  const openIAP = useUiStore((s) => s.openIAP);
+  const { data: balanceData } = useQuery({ queryKey: ["balance"], queryFn: balanceApi.get });
+  const balance = balanceData ?? 0;
 
   const [session, setSession] = useState<Session | null>(null);
-  const [chip, setChip] = useState(25);
+  const [needSession, setNeedSession] = useState(true);
+  const [rules, setRules] = useState({ numDecks: 6, dealerHitsSoft17: true });
   const [round, setRound] = useState<BlackjackRound | null>(null);
   const [verification, setVerification] = useState<BlackjackVerificationResult | null>(null);
+  const [bet, setBet] = useState(0);
+  const [lastBet, setLastBet] = useState(0);
+  const [toast, setToast] = useState<ToastState>(null);
+  const [win, setWin] = useState<WinState>(null);
+  const [fairOpen, setFairOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
 
+  const openingRef = useRef<number[] | null>(null);
+  const roundBetRef = useRef(0);
+  const pendingBalanceRef = useRef<number | null>(null);
+  const tailTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const insuranceVoiced = useRef<string | null>(null);
+
+  useEffect(() => () => {
+    if (tailTimer.current) clearTimeout(tailTimer.current);
+  }, []);
+
+  const showToast = useCallback((message: string, tone: ToastTone = "danger") => setToast({ message, tone }), []);
+  const hideToast = useCallback(() => setToast(null), []);
+
+  // ---- Session: commit a fresh shoe before any bet (one round per session).
   const startMutation = useMutation({
     mutationFn: () => blackjackApi.startSession(),
-    onSuccess: (d) =>
-      setSession({ sessionId: d.sessionId, serverSeedHash: d.serverSeedHash, clientSeed: d.clientSeed, numDecks: d.numDecks }),
+    onSuccess: (d) => {
+      setSession({
+        sessionId: d.sessionId,
+        serverSeedHash: d.serverSeedHash,
+        clientSeed: d.clientSeed,
+        numDecks: d.numDecks,
+        dealerHitsSoft17: d.dealerHitsSoft17,
+      });
+      setRules({ numDecks: d.numDecks, dealerHitsSoft17: d.dealerHitsSoft17 });
+      setNeedSession(false);
+      void playSound("shuffle");
+    },
+    onError: (e) => {
+      setNeedSession(false);
+      showToast(humanError(e));
+    },
   });
-  const startRound = startMutation.mutate;
-
-  // Commit a fresh session before the bet exists (provably fair).
+  const startSession = startMutation.mutate;
   useEffect(() => {
-    if (isAuthenticated && !session && !startMutation.isPending) startRound();
-  }, [isAuthenticated, session, startMutation.isPending, startRound]);
+    if (needSession && !session && !startMutation.isPending) startSession();
+  }, [needSession, session, startMutation.isPending, startSession]);
 
-  // Verify the round on-device once it settles + the serverSeed is revealed.
-  const onRound = useCallback(
-    (r: BlackjackRound) => {
-      setRound(r);
-      qc.invalidateQueries({ queryKey: ["balance"] });
-      if (r.phase === "settled" && r.serverSeed && r.numDecks && session) {
-        setVerification(
-          verifyBlackjackDeal(
-            r.serverSeed,
-            r.serverSeedHash,
-            r.clientSeed,
-            r.numDecks,
-            r.hands[0]?.cards ?? [],
-            r.dealer,
-          ),
-        );
+  // ---- Presentation timeline
+  const onStep = useCallback(
+    (step: Step, r: BlackjackRound, s: Shown) => {
+      switch (step.kind) {
+        case "player": {
+          void playSound("card_deal");
+          const i = step.hand ?? 0;
+          const h = r.hands[i];
+          if (h && s.hands[i] === h.cards.length && handValue(h.cards).total > 21) haptic("warning");
+          break;
+        }
+        case "dealer":
+          void playSound("card_deal");
+          break;
+        case "reveal":
+          void playSound("card_flip");
+          break;
+        case "outcome": {
+          if (pendingBalanceRef.current !== null) {
+            qc.setQueryData(["balance"], pendingBalanceRef.current);
+            pendingBalanceRef.current = null;
+          }
+          const net = r.netProfit ?? 0;
+          const base = roundBetRef.current || r.hands[0]?.bet || 0;
+          void playSound(winSoundFor(net, base));
+          const voice = roundVoice(r);
+          if (voice) void playVoice(voice);
+          const natural = (r.results ?? []).some((x) => x.outcome === "blackjack");
+          if (natural) haptic("success");
+          const tier = classifyWin(net, base);
+          if (tier === "medium" || tier === "big") {
+            setWin({ tier, title: natural ? "Blackjack" : "Big win", amount: net });
+          }
+          setBet(0);
+          if (tailTimer.current) clearTimeout(tailTimer.current);
+          tailTimer.current = setTimeout(() => setNeedSession(true), reduceMotion ? 250 : SESSION_TAIL_MS);
+          break;
+        }
       }
     },
-    [qc, session],
+    [qc, reduceMotion],
+  );
+  const { shown, animating } = useDealTimeline(round, reduceMotion, onStep);
+
+  // ---- Round responses
+  const onRound = useCallback(
+    (r: BlackjackRound, prevWagered: number) => {
+      if (r.phase === "settled") {
+        // Hold the credited balance until the outcome is on the felt; show the debit now.
+        const delta = r.totalWagered - prevWagered;
+        qc.setQueryData<number>(["balance"], (b) => (b ?? r.newBalance) - delta);
+        pendingBalanceRef.current = r.newBalance;
+        setSession(null);
+        if (r.serverSeed && r.numDecks) {
+          setVerification(
+            verifyBlackjackDeal(
+              r.serverSeed,
+              r.serverSeedHash,
+              r.clientSeed,
+              r.numDecks,
+              openingRef.current ?? r.hands[0]?.cards ?? [],
+              r.dealer,
+            ),
+          );
+        }
+      } else {
+        qc.setQueryData(["balance"], r.newBalance);
+      }
+      setRound(r);
+    },
+    [qc],
   );
 
   const dealMutation = useMutation({
-    mutationFn: () => blackjackApi.deal(session!.sessionId, chip),
-    onSuccess: onRound,
+    mutationFn: (v: { sessionId: string; bet: number }) => blackjackApi.deal(v.sessionId, v.bet),
+    onSuccess: (r) => {
+      openingRef.current = r.hands[0]?.cards.slice(0, 2) ?? null;
+      onRound(r, 0);
+    },
+    onError: (e) => showToast(humanError(e)),
   });
   const actionMutation = useMutation({
-    mutationFn: (action: BlackjackActionName) => blackjackApi.action(session!.sessionId, action),
-    onSuccess: onRound,
+    mutationFn: (v: { sessionId: string; action: BlackjackActionName; prevWagered: number }) =>
+      blackjackApi.action(v.sessionId, v.action),
+    onSuccess: (r, v) => onRound(r, v.prevWagered),
+    onError: (e) => showToast(humanError(e)),
   });
   const insuranceMutation = useMutation({
-    mutationFn: (take: boolean) => blackjackApi.insurance(session!.sessionId, take),
-    onSuccess: onRound,
+    mutationFn: (v: { sessionId: string; take: boolean; prevWagered: number }) =>
+      blackjackApi.insurance(v.sessionId, v.take),
+    onSuccess: (r, v) => onRound(r, v.prevWagered),
+    onError: (e) => showToast(humanError(e)),
   });
 
-  const newRound = useCallback(() => {
-    setRound(null);
-    setVerification(null);
-    setSession(null); // triggers a fresh committed session
-  }, []);
+  const pending = dealMutation.isPending || actionMutation.isPending || insuranceMutation.isPending;
+  const settledShown = round?.phase === "settled" && shown.settled;
+  const betting = !round || settledShown;
+  const roundId = round ? `${round.serverSeedHash}:${round.clientSeed}` : null;
 
-  if (!isAuthenticated) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.muted}>Connect your wallet to play blackjack.</Text>
-      </View>
+  useEffect(() => {
+    if (round?.phase === "insurance" && !animating && roundId && insuranceVoiced.current !== roundId) {
+      insuranceVoiced.current = roundId;
+      void playVoice("vo_insurance");
+    }
+  }, [round?.phase, animating, roundId]);
+
+  // ---- Betting controls
+  const clearTable = useCallback(() => {
+    if (round && settledShown) {
+      setRound(null);
+      setVerification(null);
+      openingRef.current = null;
+    }
+  }, [round, settledShown]);
+
+  const applyBet = useCallback(
+    (next: number): boolean => {
+      const res = tryRaiseBet(next, balance);
+      if (res.bet === null) {
+        haptic("warning");
+        showToast(betRejectionMessage(res.reason!), "warn");
+        return false;
+      }
+      clearTable();
+      setBet(res.bet);
+      return true;
+    },
+    [balance, clearTable, showToast],
+  );
+
+  const addChip = (v: number) => {
+    if (applyBet(bet + v)) {
+      haptic("light");
+      void playSound("chip_place");
+    }
+  };
+
+  const onDeal = () => {
+    if (!session) {
+      if (!startMutation.isPending) setNeedSession(true);
+      showToast("Shuffling a fresh shoe. Try again in a moment.", "info");
+      return;
+    }
+    if (bet < BJ_MIN_BET) return;
+    if (bet > balance) {
+      showToast(betRejectionMessage("balance"), "warn");
+      return;
+    }
+    if (round) {
+      setRound(null);
+      setVerification(null);
+      openingRef.current = null;
+    }
+    roundBetRef.current = bet;
+    setLastBet(bet);
+    dealMutation.mutate({ sessionId: session.sessionId, bet });
+  };
+
+  const onAction = (action: BlackjackActionName) => {
+    if (!round || !session) return;
+    actionMutation.mutate({ sessionId: session.sessionId, action, prevWagered: round.totalWagered });
+  };
+
+  const onInsurance = (take: boolean) => {
+    if (!round || !session) return;
+    insuranceMutation.mutate({ sessionId: session.sessionId, take, prevWagered: round.totalWagered });
+  };
+
+  // ---- Derived view
+  const contentW = screenW - spacing.md * 2;
+  const dealerCards: FanCard[] = useMemo(() => {
+    if (!round) return [];
+    return Array.from({ length: shown.dealer }, (_, j) =>
+      j === 1
+        ? { key: "d1", card: shown.hole ? round.dealer[1] : undefined, faceDown: !shown.hole }
+        : { key: `d${j}`, card: round.dealer[j] },
     );
-  }
+  }, [round, shown.dealer, shown.hole]);
+  const dealerVisible = round
+    ? shown.hole
+      ? round.dealer.slice(0, shown.dealer)
+      : round.dealer.slice(0, Math.min(1, shown.dealer))
+    : [];
+  const dealerTotal = handValue(dealerVisible);
 
-  const busy = dealMutation.isPending || actionMutation.isPending || insuranceMutation.isPending;
-  const inRound = round !== null && round.phase !== "settled";
-  const settled = round?.phase === "settled";
+  const hands = round?.hands ?? [];
+  const nHands = hands.length;
+  const cardW = nHands <= 1 ? bigCard : nHands === 2 ? 52 : 44;
+  const colW = nHands <= 1 ? contentW * 0.8 : (contentW - (nHands - 1) * spacing.sm) / nHands;
+
+  const activeHand = round && round.phase === "player" ? hands[round.active] : undefined;
+  const extraCost = activeHand?.bet ?? 0;
+  const inPlay = round ? round.totalWagered : 0;
+
+  const fairStatus: FairStatus =
+    round?.phase === "settled" && shown.settled
+      ? verification && verification.seedHashMatches && verification.cardsMatch
+        ? "verified"
+        : "failed"
+      : "sealed";
+  const fairDetails = round
+    ? {
+        serverSeedHash: round.serverSeedHash,
+        clientSeed: round.clientSeed,
+        serverSeed: shown.settled ? round.serverSeed : undefined,
+        numDecks: round.numDecks ?? rules.numDecks,
+      }
+    : session
+      ? { serverSeedHash: session.serverSeedHash, clientSeed: session.clientSeed, numDecks: session.numDecks }
+      : null;
+
+  const statusText = (() => {
+    if (!round) return "";
+    if (round.phase === "settled") return shown.settled ? "" : "Dealer's turn";
+    if (animating) return "Dealing";
+    if (round.phase === "insurance") return "Insurance offered";
+    if (pending) return "";
+    return nHands > 1 ? `Hand ${round.active + 1} of ${nHands} · Your move` : "Your move";
+  })();
+
+  const net = round?.netProfit ?? 0;
+  const showNet = settledShown && (nHands > 1 || (round?.insurance ?? 0) > 0);
+  const insuranceOpen = round?.phase === "insurance" && !animating;
+  const dealerNatural = !!round && shown.hole && isNatural(round.dealer.slice(0, 2)) && shown.dealer === 2;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ padding: spacing.md }}>
-      <View style={styles.headerRow}>
-        <Text style={styles.balance}>Balance: {balance ?? "—"} coins</Text>
-        {session ? (
-          <Text style={styles.commit} numberOfLines={1}>
-            Seed: {session.serverSeedHash.slice(0, 12)}…
-          </Text>
-        ) : (
-          <ActivityIndicator color={colors.neonGreen} />
-        )}
-      </View>
-
-      {/* Dealer */}
-      <Text style={styles.label}>Dealer {round ? `(${round.dealerHoleHidden ? "?" : round.dealerValue})` : ""}</Text>
-      <View style={styles.cardRow}>
-        {round ? (
-          <>
-            {round.dealer.map((c, i) => (
-              <Card key={i} card={c} />
-            ))}
-            {round.dealerHoleHidden && <Card hidden />}
-          </>
-        ) : (
-          <Text style={styles.muted}>—</Text>
-        )}
-      </View>
-
-      {/* Player hands */}
-      {round?.hands.map((h, i) => (
-        <View key={i} style={[styles.handBlock, i === round.active && inRound && styles.handActive]}>
-          <Text style={styles.label}>
-            Hand {round.hands.length > 1 ? i + 1 : ""} ({h.value}
-            {h.soft ? " soft" : ""}) · bet {h.bet}
-            {h.busted ? " · BUST" : ""}
-          </Text>
-          <View style={styles.cardRow}>
-            {h.cards.map((c, j) => (
-              <Card key={j} card={c} />
-            ))}
-          </View>
-          {settled && round.results?.[i] && (
-            <Text style={round.results[i].ret >= round.results[i].bet ? styles.win : styles.lose}>
-              {round.results[i].outcome.toUpperCase()}
-            </Text>
+    <Screen
+      variant="felt"
+      edges={["top", "bottom"]}
+      contentStyle={styles.content}
+      header={
+        <GameHeader
+          title="Blackjack"
+          subtitle={`${rules.numDecks} decks · ${rules.dealerHitsSoft17 ? "Dealer hits soft 17" : "Dealer stands on 17"}`}
+          balance={balance}
+          onAddCoins={openIAP}
+          onInfo={() => setRulesOpen(true)}
+        />
+      }
+      footer={
+        <View style={styles.deck}>
+          {betting ? (
+            <>
+              <View style={styles.chipRow}>
+                {BET_CHIPS.map((v) => {
+                  const disabled = pending || bet + v > balance;
+                  return (
+                    <Pressable
+                      key={v}
+                      onPress={() => addChip(v)}
+                      disabled={pending}
+                      style={({ pressed }) => [styles.chipBtn, disabled && styles.dim, pressed && styles.pressed]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Add ${v} coins to bet`}
+                      testID={`chip-${v}`}
+                    >
+                      <ChipGraphic value={v} size={52} />
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <View style={styles.utilRow}>
+                <View style={styles.flex}>
+                  <Button
+                    label="Clear"
+                    variant="ghost"
+                    size="sm"
+                    fullWidth
+                    disabled={pending || bet === 0}
+                    onPress={() => {
+                      setBet(0);
+                      void playSound("chip_collect");
+                    }}
+                    testID="bj-clear"
+                  />
+                </View>
+                <View style={styles.flex}>
+                  <Button
+                    label="Rebet"
+                    sublabel={lastBet > 0 ? formatCoins(lastBet) : undefined}
+                    variant="secondary"
+                    size="sm"
+                    fullWidth
+                    disabled={pending || lastBet === 0 || bet === lastBet}
+                    onPress={() => {
+                      if (applyBet(lastBet)) void playSound("chip_place");
+                    }}
+                    testID="bj-rebet"
+                  />
+                </View>
+                <View style={styles.flex}>
+                  <Button
+                    label="2×"
+                    variant="secondary"
+                    size="sm"
+                    fullWidth
+                    disabled={pending || bet === 0}
+                    onPress={() => {
+                      if (applyBet(bet * 2)) void playSound("chip_place");
+                    }}
+                    testID="bj-2x"
+                    accessibilityLabel="Double the bet"
+                  />
+                </View>
+              </View>
+              <Button
+                label="Deal"
+                size="lg"
+                fullWidth
+                haptic="medium"
+                loading={dealMutation.isPending || (!session && startMutation.isPending)}
+                disabled={bet < BJ_MIN_BET || dealMutation.isPending}
+                onPress={onDeal}
+                testID="bj-deal"
+              />
+            </>
+          ) : (
+            <>
+              <View style={styles.statusRow}>
+                <AppText variant="overline" tone="gold" testID="bj-status">
+                  {statusText}
+                </AppText>
+                <View style={styles.inPlay}>
+                  <AppText variant="caption">In play</AppText>
+                  <AppText style={styles.inPlayAmount}>{formatCoins(inPlay)}</AppText>
+                </View>
+              </View>
+              <ActionBar
+                legal={round?.legalActions ?? []}
+                enabled={round?.phase === "player" && !animating && !pending}
+                extraCost={extraCost}
+                balance={balance}
+                onAction={onAction}
+              />
+            </>
           )}
         </View>
-      ))}
+      }
+    >
+      <View style={styles.table}>
+        <Toast message={toast?.message ?? null} tone={toast?.tone} onHide={hideToast} />
 
-      {/* Betting / actions */}
-      {!round && (
-        <View style={styles.panel}>
-          <Text style={styles.label}>Chip</Text>
-          <View style={styles.chipRow}>
-            {CHIPS.map((c) => (
-              <Pressable key={c} style={[styles.chip, chip === c && styles.chipActive]} onPress={() => setChip(c)}>
-                <Text style={[styles.chipText, chip === c && styles.chipTextActive]}>{c}</Text>
-              </Pressable>
-            ))}
-          </View>
-          <Pressable
-            style={[styles.primaryBtn, (!session || busy) && styles.btnDisabled]}
-            disabled={!session || busy}
-            onPress={() => dealMutation.mutate()}
-          >
-            <Text style={styles.primaryBtnText}>Deal ({chip})</Text>
-          </Pressable>
+        <View style={styles.topRow}>
+          <AppText variant="overline" style={styles.zoneLabel}>
+            Dealer
+          </AppText>
+          {fairDetails && <FairPill status={fairStatus} onPress={() => setFairOpen(true)} />}
         </View>
-      )}
 
-      {round?.phase === "insurance" && (
-        <View style={styles.panel}>
-          <Text style={styles.label}>Dealer shows an Ace — insurance?</Text>
-          <View style={styles.actionRow}>
-            <Pressable style={[styles.actionBtn, busy && styles.btnDisabled]} disabled={busy} onPress={() => insuranceMutation.mutate(true)}>
-              <Text style={styles.actionBtnText}>Take insurance</Text>
-            </Pressable>
-            <Pressable style={[styles.actionBtn, busy && styles.btnDisabled]} disabled={busy} onPress={() => insuranceMutation.mutate(false)}>
-              <Text style={styles.actionBtnText}>No</Text>
-            </Pressable>
+        <View style={styles.dealerZone}>
+          <View style={[styles.dealerCards, { minHeight: bigCard * 1.4 }]}>
+            {dealerCards.length > 0 ? (
+              <CardFan cards={dealerCards} width={bigCard} maxWidth={contentW * 0.75} reduceMotion={reduceMotion} testID="bj-dealer-cards" />
+            ) : (
+              <View style={{ height: bigCard * 1.4 }} />
+            )}
+          </View>
+          <View style={styles.badgeSlot}>
+            {dealerVisible.length > 0 && (
+              <HandValueBadge
+                total={dealerTotal.total}
+                soft={shown.hole && dealerTotal.soft}
+                blackjack={dealerNatural}
+                testID="bj-dealer-total"
+              />
+            )}
           </View>
         </View>
-      )}
 
-      {round?.phase === "player" && (
-        <View style={styles.actionRow}>
-          {round.legalActions.map((a) => (
-            <Pressable
-              key={a}
-              style={[styles.actionBtn, busy && styles.btnDisabled]}
-              disabled={busy}
-              onPress={() => actionMutation.mutate(a)}
-            >
-              <Text style={styles.actionBtnText}>{ACTION_LABEL[a]}</Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
+        {insuranceOpen ? (
+          <View style={styles.insuranceWrap}>
+            <InsurancePanel
+              cost={Math.floor((hands[0]?.bet ?? 0) / 2)}
+              balance={balance}
+              busy={pending}
+              reduceMotion={reduceMotion}
+              onDecide={onInsurance}
+            />
+          </View>
+        ) : (
+          <View style={styles.printWrap}>
+            <TablePrint width={contentW} dealerHitsSoft17={rules.dealerHitsSoft17} />
+          </View>
+        )}
 
-      {settled && (
-        <View style={styles.panel}>
-          <Text style={round!.netProfit! >= 0 ? styles.win : styles.lose}>
-            {round!.netProfit! >= 0 ? `+${round!.netProfit}` : `${round!.netProfit}`} coins
-          </Text>
-          {verification && (
-            <Text style={verification.seedHashMatches && verification.cardsMatch ? styles.verifyOk : styles.verifyBad}>
-              {verification.seedHashMatches && verification.cardsMatch
-                ? "✓ Provably fair: verified on-device"
-                : "✗ Verification FAILED — do not trust this result"}
-            </Text>
+        <View style={styles.playerZone}>
+          {round && nHands > 0 ? (
+            <View style={styles.handsRow}>
+              {hands.map((h, i) => {
+                const count = shown.hands[i] ?? 0;
+                const cards = h.cards.slice(0, count);
+                const v = handValue(cards);
+                const natural = nHands === 1 && isNatural(cards);
+                const isActive = round.phase === "player" && round.active === i && nHands > 1 && !animating;
+                const result = shown.settled ? round.results?.[i] : undefined;
+                const rv = result ? resultView(result) : null;
+                return (
+                  <View key={i} style={[styles.handCol, { width: nHands > 1 ? colW : undefined }]}>
+                    <View style={[styles.handFrame, isActive && styles.handActive]}>
+                      <CardFan
+                        cards={cards.map((c, j) => ({ key: `h${i}c${j}`, card: c }))}
+                        width={cardW}
+                        maxWidth={colW - spacing.sm}
+                        reduceMotion={reduceMotion}
+                        dimmed={nHands > 1 && round.phase === "player" && !isActive && !animating}
+                        testID={`bj-hand-${i}`}
+                      />
+                    </View>
+                    <View style={styles.handMeta}>
+                      {count > 0 && <HandValueBadge total={v.total} soft={v.soft} blackjack={natural} testID={`bj-hand-total-${i}`} />}
+                      {nHands > 1 && <AppText style={styles.handBet}>{formatCoins(h.bet)}</AppText>}
+                    </View>
+                    <View style={styles.resultSlot}>
+                      {rv && <Badge label={rv.label} tone={rv.tone} testID={`bj-result-${i}`} />}
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={{ height: bigCard * 1.4 + 56 }} />
           )}
-          <Pressable style={styles.primaryBtn} onPress={newRound}>
-            <Text style={styles.primaryBtnText}>New round</Text>
-          </Pressable>
         </View>
+
+        <View style={[styles.betZone, insuranceOpen && styles.hidden]}>
+          {showNet ? (
+            <View style={styles.netRow} testID="bj-net">
+              {(round?.insurance ?? 0) > 0 && (
+                <Badge
+                  label={dealerNatural ? `Insurance +${round!.insurance * 2}` : "Insurance lost"}
+                  tone={dealerNatural ? "success" : "neutral"}
+                />
+              )}
+              <Badge
+                label={net > 0 ? `Net +${formatCoins(net)}` : net < 0 ? `Net −${formatCoins(-net)}` : "Even"}
+                tone={net > 0 ? "success" : net < 0 ? "danger" : "neutral"}
+              />
+            </View>
+          ) : (
+            <BetCircle amount={betting ? bet : roundBetRef.current} reduceMotion={reduceMotion} />
+          )}
+        </View>
+
+      </View>
+
+      <FairnessSheet visible={fairOpen} onClose={() => setFairOpen(false)} status={fairStatus} details={fairDetails} />
+      <RulesSheet
+        visible={rulesOpen}
+        onClose={() => setRulesOpen(false)}
+        numDecks={rules.numDecks}
+        dealerHitsSoft17={rules.dealerHitsSoft17}
+      />
+      {win && (
+        <WinOverlay visible tier={win.tier} title={win.title} amount={win.amount} onDismiss={() => setWin(null)} />
       )}
-    </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.md },
-  balance: { color: colors.neonGreen, fontSize: 16, fontWeight: "700" },
-  commit: { color: colors.textMuted, fontSize: 12, maxWidth: "50%" },
-  muted: { color: colors.textMuted },
-  label: { color: colors.textSecondary, fontSize: 13, marginTop: spacing.sm, marginBottom: spacing.xs },
-  cardRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
-  card: {
-    width: 46,
-    height: 64,
-    backgroundColor: "#fff",
-    borderRadius: radius.sm,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  cardBack: { backgroundColor: colors.surfaceElevated, borderColor: colors.neonGreenDim },
-  cardBackText: { color: colors.neonGreenDim, fontSize: 20 },
-  cardText: { fontSize: 18, fontWeight: "800" },
-  cardSuit: { fontSize: 16 },
-  cardRed: { color: "#d11" },
-  cardBlack: { color: "#111" },
-  handBlock: { padding: spacing.sm, borderRadius: radius.md, marginTop: spacing.sm },
-  handActive: { borderWidth: 1, borderColor: colors.neonGreen, backgroundColor: colors.surface },
-  panel: { backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.md, marginTop: spacing.md, alignItems: "center" },
-  chipRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.md },
-  chip: {
-    width: 52,
-    height: 52,
-    borderRadius: radius.full,
-    borderWidth: 2,
-    borderColor: colors.border,
+  content: { paddingBottom: 0 },
+  center: { flex: 1, justifyContent: "center" },
+  bareHeader: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.s12, paddingVertical: spacing.sm },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(0,0,0,0.3)",
     alignItems: "center",
     justifyContent: "center",
   },
-  chipActive: { borderColor: colors.neonGreen, backgroundColor: colors.surfaceElevated },
-  chipText: { color: colors.textSecondary, fontWeight: "700" },
-  chipTextActive: { color: colors.neonGreen },
-  actionRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.md, justifyContent: "center" },
-  actionBtn: { backgroundColor: colors.surfaceElevated, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, borderRadius: radius.md, borderWidth: 1, borderColor: colors.neonGreenDim },
-  actionBtnText: { color: colors.neonGreen, fontWeight: "700" },
-  primaryBtn: { backgroundColor: colors.neonGreen, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, borderRadius: radius.md, marginTop: spacing.sm },
-  primaryBtnText: { color: colors.background, fontWeight: "800" },
-  btnDisabled: { opacity: 0.4 },
-  win: { color: colors.win, fontWeight: "800", fontSize: 16 },
-  lose: { color: colors.lose, fontWeight: "800", fontSize: 16 },
-  verifyOk: { color: colors.win, marginTop: spacing.sm, fontSize: 12 },
-  verifyBad: { color: colors.lose, marginTop: spacing.sm, fontSize: 12 },
+  bareTitle: { fontFamily: fonts.display, fontSize: 18, color: palette.text, letterSpacing: 0.5 },
+  table: { flex: 1, position: "relative" },
+  topRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 28, marginTop: spacing.xs },
+  zoneLabel: { color: palette.goldLight, opacity: 0.7 },
+  dealerZone: { alignItems: "center", marginTop: spacing.sm, gap: spacing.sm },
+  dealerCards: { alignItems: "center", justifyContent: "center" },
+  badgeSlot: { height: 24, justifyContent: "center" },
+  printWrap: { flex: 1, minHeight: 0, justifyContent: "center", overflow: "hidden" },
+  playerZone: { alignItems: "center" },
+  handsRow: { flexDirection: "row", justifyContent: "center", gap: spacing.sm },
+  handCol: { alignItems: "center", gap: spacing.sm },
+  handFrame: { padding: spacing.xs, borderRadius: radius.sm, borderWidth: 1, borderColor: "transparent" },
+  handActive: { borderColor: palette.gold, backgroundColor: "rgba(233,196,106,0.08)" },
+  handMeta: { flexDirection: "row", alignItems: "center", gap: spacing.sm, minHeight: 24 },
+  handBet: { ...typography.caption, color: palette.goldLight, fontVariant: ["tabular-nums"] },
+  resultSlot: { minHeight: 22, alignItems: "center" },
+  betZone: { alignItems: "center", justifyContent: "center", minHeight: 84, marginTop: spacing.sm, marginBottom: spacing.sm },
+  netRow: { flexDirection: "row", gap: spacing.sm, alignItems: "center" },
+  insuranceWrap: { flex: 1, justifyContent: "center", paddingVertical: spacing.sm },
+  hidden: { display: "none" },
+  deck: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.s12,
+    paddingBottom: spacing.sm,
+    gap: spacing.sm,
+    minHeight: 196,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(4,16,12,0.55)",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(248,227,163,0.16)",
+  },
+  chipRow: { flexDirection: "row", justifyContent: "space-around", alignItems: "center" },
+  chipBtn: { borderRadius: 30, padding: 2 },
+  dim: { opacity: 0.35 },
+  pressed: { transform: [{ translateY: -3 }] },
+  utilRow: { flexDirection: "row", gap: spacing.sm },
+  flex: { flex: 1 },
+  statusRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", minHeight: 24, marginBottom: spacing.xs },
+  inPlay: { flexDirection: "row", alignItems: "baseline", gap: spacing.xs },
+  inPlayAmount: { fontFamily: fonts.heavy, fontSize: 15, color: palette.text, fontVariant: ["tabular-nums"] },
 });
