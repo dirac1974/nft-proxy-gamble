@@ -5,7 +5,7 @@ import { prisma } from "./db/client.js";
 import { startChainWorker } from "./services/chainWorker.js";
 
 const app = createApp();
-let stopChainWorker: (() => void) | null = null;
+let stopChainWorker: (() => Promise<void>) | null = null;
 
 const server = app.listen(config.PORT, async () => {
   await prisma.$connect();
@@ -16,7 +16,8 @@ const server = app.listen(config.PORT, async () => {
 
 const shutdown = async () => {
   // Jobs are durable DB rows (NFTVoucher / IAPReceipt); nothing to flush.
-  stopChainWorker?.();
+  // Finish any in-flight chain send, then hand the minter lease to the next instance.
+  await stopChainWorker?.();
   server.close(async () => {
     await prisma.$disconnect();
     process.exit(0);

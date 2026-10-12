@@ -34,17 +34,27 @@ export async function acquireLease(holder: string = HOLDER): Promise<boolean> {
   return rows.length === 1 && rows[0].holder === holder;
 }
 
+/** Give up the lease (only if we hold it) so a successor can send immediately. */
+export async function releaseLease(holder: string = HOLDER): Promise<void> {
+  await prisma.$executeRaw`DELETE FROM "WorkerLease" WHERE "name" = ${LEASE_NAME} AND "holder" = ${holder}`;
+}
+
 let running = false;
 let rerun = false;
+let stopping = false;
+let inFlight: Promise<void> | null = null;
 
 export async function runChainWorkerTick(): Promise<void> {
   const chain = getMinterChain();
   if (!chain) return; // minter not configured (dev/test): vouchers stay PENDING
+  if (stopping) return;
   if (running) {
     rerun = true;
     return;
   }
   running = true;
+  let done!: () => void;
+  inFlight = new Promise<void>((r) => (done = r));
   try {
     do {
       rerun = false;
@@ -52,9 +62,11 @@ export async function runChainWorkerTick(): Promise<void> {
       const keep = () => acquireLease();
       await runMintPass(chain, keep);
       await runCommitPass(chain, keep);
-    } while (rerun);
+    } while (rerun && !stopping);
   } finally {
     running = false;
+    inFlight = null;
+    done();
   }
 }
 
@@ -64,9 +76,20 @@ export function kickChainWorker(): void {
   });
 }
 
-export function startChainWorker(): () => void {
+/**
+ * Starts the worker. The returned stop function halts new ticks, waits for any
+ * in-flight send to finish (so a successor can never race it on the same nonce),
+ * then releases the lease so a rolling deploy doesn't pause minting for a TTL.
+ */
+export function startChainWorker(): () => Promise<void> {
+  stopping = false;
   kickChainWorker();
   const timer = setInterval(kickChainWorker, config.MINT_WORKER_INTERVAL_MS);
   timer.unref?.();
-  return () => clearInterval(timer);
+  return async () => {
+    stopping = true;
+    clearInterval(timer);
+    if (inFlight) await inFlight;
+    await releaseLease().catch((err) => console.error("[chainWorker] lease release failed", err));
+  };
 }
