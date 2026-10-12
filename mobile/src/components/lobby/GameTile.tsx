@@ -45,6 +45,7 @@ export function GameTile({ game, onPress }: GameTileProps) {
             {game.description}
           </AppText>
           <View style={styles.badges}>
+            {game.isNew ? <Badge label="New" tone="success" /> : null}
             <Badge label={game.rtp} tone="gold" />
             <Badge label={game.betRange} />
           </View>

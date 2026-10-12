@@ -59,6 +59,7 @@ export const VOICE = {
   vo_straight_flush: "Straight flush.",
   vo_four_kind: "Four of a kind.",
   vo_four_deuces: "Four deuces.",
+  vo_free_games: "Free games.",
 };
 
 const RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
@@ -92,7 +93,7 @@ async function eleven(path, body, outFile) {
 }
 
 // ---------- procedural fallback synth (mono 16-bit 44.1k WAV) ----------
-const SR = 44100;
+const SR = 22050;
 const len = (s) => Math.floor(s * SR);
 function wav(samples) {
   const h = Buffer.alloc(44);
@@ -220,6 +221,126 @@ const CABINET = {
   },
 };
 
+// ---------- keno + slot sets (always synthesised; original) ----------
+function karplus(freq, dur, { decay = 0.996, bright = 0.5, amp = 1 } = {}) {
+  const n = len(dur);
+  const period = Math.max(2, Math.round(SR / freq));
+  const buf = Array.from({ length: period }, () => rnd() * amp);
+  const out = new Array(n);
+  let idx = 0;
+  for (let i = 0; i < n; i++) {
+    const a = buf[idx];
+    const b = buf[(idx + 1) % period];
+    out[i] = a;
+    buf[idx] = decay * (bright * a + (1 - bright) * b);
+    idx = (idx + 1) % period;
+  }
+  return out;
+}
+function gongHit(base, dur, amp = 1) {
+  const partials = [[1, 1, 0], [1.48, 0.7, 0.05], [2.01, 0.55, 0.12], [2.66, 0.4, 0.2], [3.2, 0.3, 0.25], [4.1, 0.2, 0.3]];
+  const n = len(dur);
+  return Array.from({ length: n }, (_, i) => {
+    const t = i / SR;
+    let v = 0;
+    for (const [m, a, swell] of partials) {
+      const env = (1 - Math.exp(-t / (0.01 + swell))) * Math.exp(-t / (dur * 0.45));
+      v += a * env * Math.sin(2 * Math.PI * base * m * t + m);
+    }
+    return amp * v;
+  });
+}
+function drum(f0, f1, dur, { noise = 0.3, decay = 0.18, amp = 1 } = {}) {
+  const n = len(dur);
+  let ph = 0;
+  const skin = noiseBurst(dur, 0.001, 0.02, 200, 3000);
+  return Array.from({ length: n }, (_, i) => {
+    const t = i / SR;
+    const f = f1 + (f0 - f1) * Math.exp(-t / 0.05);
+    ph += (2 * Math.PI * f) / SR;
+    return amp * (Math.sin(ph) * Math.exp(-t / decay) + noise * skin[i]);
+  });
+}
+// Mix events into exactly `total` seconds, wrapping overflow to the start → seamless loop.
+function circularMix(total, parts) {
+  const N = len(total);
+  const out = new Array(N).fill(0);
+  for (const [sig, at, gain = 1] of parts) {
+    const o = len(at);
+    sig.forEach((v, i) => { out[(o + i) % N] += v * gain; });
+  }
+  return out;
+}
+const PENTA = [261.63, 293.66, 329.63, 392.0, 440.0, 523.25, 587.33, 659.25, 783.99, 880.0, 1046.5];
+const ballPop = (f) => mix(0.1, [tone(f, 0.06, { wave: "sine", decay: 0.02, amp: 0.8, glideTo: f * 0.7 }), 0], [noiseBurst(0.02, 0.0003, 0.003, 2000, 9000), 0, 0.3]);
+const reelStop = (f0, chime) => mix(0.3, [drum(f0, 45 + (f0 - 120) * 0.3, 0.28, { noise: 0.25, decay: 0.08 }), 0], [bell(chime, 0.15, 0.04, 0.08), 0]);
+
+const KENO_SLOT = {
+  keno_mark: () => mix(0.07, [tone(1318.5, 0.05, { wave: "triangle", decay: 0.012, amp: 0.7 }), 0], [noiseBurst(0.03, 0.0003, 0.004, 1500, 7000), 0, 0.3]),
+  keno_unmark: () => mix(0.07, [tone(880, 0.05, { wave: "triangle", decay: 0.012, amp: 0.6 }), 0], [noiseBurst(0.03, 0.0003, 0.004, 1200, 6000), 0, 0.25]),
+  keno_quickpick: () => mix(0.45, ...Array.from({ length: 8 }, (_, i) => [tone(PENTA[2 + (i % 6)] * 2, 0.05, { wave: "triangle", decay: 0.012, amp: 0.5 }), i * 0.045])),
+  keno_clear: () => mix(0.3, [noiseBurst(0.28, 0.08, 0.06, 800, 6000), 0, 0.6]),
+  keno_max_spots: () => mix(0.16, [tone(220, 0.07, { decay: 0.04, amp: 0.5 }), 0], [tone(196, 0.08, { decay: 0.05, amp: 0.5 }), 0.07]),
+  keno_play: () => mix(0.6, [noiseBurst(0.5, 0.15, 0.12, 300, 4000), 0, 0.7], [drum(110, 55, 0.4, { noise: 0.1, decay: 0.12 }), 0.12, 0.8]),
+  keno_ball_1: () => ballPop(740),
+  keno_ball_2: () => ballPop(830),
+  keno_ball_3: () => ballPop(660),
+  ...Object.fromEntries(Array.from({ length: 10 }, (_, i) => [
+    `keno_hit_${i + 1}`,
+    () => mix(0.6, [bell(PENTA[Math.min(PENTA.length - 1, i)] * 2, 0.55, 0.22, 0.8), 0]),
+  ])),
+  slot_stop_1: () => reelStop(120, 1568),
+  slot_stop_2: () => reelStop(130, 1760),
+  slot_stop_3: () => reelStop(140, 1975.5),
+  slot_stop_4: () => reelStop(150, 2093),
+  slot_stop_5: () => reelStop(160, 2349),
+  slot_scatter_chime: () => mix(0.9, [bell(1046.5, 0.85, 0.3, 0.6), 0], [bell(1568, 0.8, 0.3, 0.45), 0.06]),
+  slot_gong: () => gongHit(146.8, 3.0),
+  slot_anticipation: () => mix(1.0, ...Array.from({ length: 22 }, (_, i) => [drum(95 + i * 2, 42, 0.12, { noise: 0.35, decay: 0.05, amp: 0.25 + i * 0.03 }), i * (0.06 - i * 0.0012)])),
+  slot_win_small: () => mix(0.9, ...[0, 2, 4, 7].map((k, i) => [karplus(PENTA[k] * 2, 0.6, { decay: 0.995, amp: 0.7 }), i * 0.07])),
+  slot_win_medium: () => mix(2.0,
+    ...[0, 2, 4, 5, 7, 9, 10].map((k, i) => [karplus(PENTA[k] * 2, 0.9, { decay: 0.996, amp: 0.65 }), i * 0.08]),
+    [bell(2093, 1.2, 0.4, 0.25), 0.6], [noiseBurst(0.6, 0.002, 0.15, 4000, 12000), 0.6, 0.15]),
+  slot_win_big: () => {
+    const parts = [];
+    [0, 2, 4, 5, 7, 9, 10, 9, 10].forEach((k, i) => parts.push([karplus(PENTA[k] * 2, 1.0, { decay: 0.996, amp: 0.6 }), i * 0.09]));
+    parts.push([gongHit(110, 3.5, 0.9), 0.85]);
+    for (let i = 0; i < 26; i++) parts.push([noiseBurst(0.03, 0.0005, 0.006, 1500, 12000), 1.0 + Math.abs(rnd()) * 1.6, 0.5]);
+    for (let i = 0; i < 18; i++) parts.push([clack(2300 + (i % 4) * 280), 1.4 + i * 0.09 + rnd() * 0.03, 0.35]);
+    return mix(4.4, ...parts);
+  },
+  slot_fg_intro: () => {
+    const parts = [];
+    for (let i = 0; i < 12; i++) parts.push([drum(i % 4 === 0 ? 90 : 140, 45, 0.25, { noise: 0.3, decay: 0.09, amp: 0.4 + i * 0.04 }), i * 0.22]);
+    for (let i = 0; i < 10; i++) parts.push([noiseBurst(0.12, 0.002, 0.05, 3000, 12000), 0.11 + i * 0.22, 0.25]);
+    parts.push([gongHit(130.8, 2.5, 1), 2.7]);
+    return mix(5.0, ...parts);
+  },
+  slot_count_tick: () => mix(0.05, [bell(2793, 0.04, 0.008, 0.5), 0]),
+  slot_returned: () => mix(0.12, [noiseBurst(0.1, 0.001, 0.015, 300, 2500), 0, 0.6]),
+  slot_spin_loop: () => {
+    const total = 1.2;
+    const parts = [];
+    for (let i = 0; i < 18; i++) {
+      parts.push([mix(0.04, [noiseBurst(0.03, 0.0005, 0.004, 900, 5000), 0], [tone(1200 + (i % 3) * 120, 0.02, { wave: "triangle", decay: 0.004, amp: 0.3 }), 0]), i * (total / 18), 0.7]);
+    }
+    for (let i = 0; i < 12; i++) parts.push([karplus(PENTA[[4, 5, 4, 3][i % 4]] * 2, 0.3, { decay: 0.99, amp: 0.18 }), i * (total / 12)]);
+    return circularMix(total, parts);
+  },
+  slot_fg_loop: () => {
+    const beat = 0.6;
+    const total = beat * 16; // 100 BPM, 4 bars = 9.6 s exactly
+    const parts = [];
+    for (let b = 0; b < 16; b++) {
+      parts.push([drum(b % 4 === 0 ? 85 : 120, 45, 0.3, { noise: 0.25, decay: 0.1, amp: b % 4 === 0 ? 0.6 : 0.35 }), b * beat]);
+      parts.push([noiseBurst(0.06, 0.001, 0.02, 5000, 12000), b * beat + beat / 2, 0.15]);
+    }
+    [4, 5, 7, 5, 4, 2, 4, 0, 4, 5, 7, 9, 7, 5, 4, 2].forEach((k, i) => parts.push([karplus(PENTA[k] * 2, 0.8, { decay: 0.995, amp: 0.35 }), i * beat]));
+    [0, 0, 3, 4].forEach((k, i) => parts.push([karplus(PENTA[k], 2.2, { decay: 0.998, amp: 0.3 }), i * beat * 4]));
+    return circularMix(total, parts);
+  },
+};
+
 async function main() {
   mkdirSync(OUT, { recursive: true });
   const failures = [];
@@ -253,7 +374,7 @@ async function main() {
     }
   }
 
-  for (const [key, synth] of Object.entries(CABINET)) {
+  for (const [key, synth] of Object.entries({ ...CABINET, ...KENO_SLOT })) {
     if (existing(key) && !FORCE) continue;
     writeFileSync(join(OUT, `${key}.wav`), wav(synth()));
     console.log(`cab  ${key}.wav`);
@@ -287,7 +408,7 @@ async function main() {
 function writeManifest() {
   const files = new Set(readdirSync(OUT));
   const pick = (base) => (files.has(`${base}.mp3`) ? `${base}.mp3` : files.has(`${base}.wav`) ? `${base}.wav` : null);
-  const sfxLines = [...Object.keys(SFX), ...Object.keys(CABINET)].map((k) => {
+  const sfxLines = [...Object.keys(SFX), ...Object.keys(CABINET), ...Object.keys(KENO_SLOT)].map((k) => {
     const f = pick(k);
     return f ? `  ${k}: require("./${f}") as number,` : null;
   }).filter(Boolean);

@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useWalletStore } from "@/stores/walletStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useWalletConnect } from "@/hooks/useWalletConnect";
+import { E2E_WALLET_ENABLED, connectE2EWallet } from "@/services/walletService";
 import { AppText, Button, Sheet } from "@/components/ui";
 import { palette, radius, spacing } from "@/theme";
 
@@ -44,6 +45,13 @@ export function ConnectWalletSheet({ visible, onClose }: ConnectWalletSheetProps
     closeAll();
     setConnectPending(true);
     setTimeout(openModal, 350);
+  };
+
+  const handleE2EConnect = () => {
+    setConnectionError(null);
+    connectE2EWallet()
+      .then(closeAll)
+      .catch((e: unknown) => setConnectionError(e instanceof Error ? e.message : "Test wallet failed"));
   };
 
   return (
@@ -90,6 +98,15 @@ export function ConnectWalletSheet({ visible, onClose }: ConnectWalletSheetProps
           size="lg"
           testID="connect-wallet-button"
           accessibilityLabel="Connect wallet"
+        />
+      )}
+      {E2E_WALLET_ENABLED && (
+        <Button
+          label="Use test wallet (debug build)"
+          variant="secondary"
+          onPress={handleE2EConnect}
+          fullWidth
+          testID="connect-e2e-wallet"
         />
       )}
 

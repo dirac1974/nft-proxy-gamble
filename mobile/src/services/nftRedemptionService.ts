@@ -49,7 +49,7 @@ export async function redeemVoucher(
   const contractAddress = getContractAddress();
 
   const txHash = await client.writeContract({
-    account: walletAddress,
+    account: client.account ?? walletAddress,
     address: contractAddress,
     abi: REDEEM_ABI,
     functionName: "redeem",
@@ -74,7 +74,7 @@ export async function transferVoucher(
   const contractAddress = getContractAddress();
 
   const txHash = await client.writeContract({
-    account: fromAddress,
+    account: client.account ?? fromAddress,
     address: contractAddress,
     abi: TRANSFER_ABI,
     functionName: "safeTransferFrom",

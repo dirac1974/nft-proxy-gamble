@@ -17,7 +17,11 @@ import { initIAP, teardownIAP } from "@/services/iapService";
 import { BRAND } from "@/config/brand";
 import { palette, spacing } from "@/theme";
 
-const FEATURED = GAMES.find((g) => g.id === "blackjack")!;
+const FEATURED = GAMES.find((g) => g.id === "slot") ?? GAMES.find((g) => g.id === "blackjack")!;
+const SECTIONS = [
+  { id: "machines", title: "Machines" },
+  { id: "tables", title: "Table games" },
+] as const;
 
 export default function LobbyScreen() {
   const isAuthenticated = useWalletStore((s) => s.isAuthenticated);
@@ -80,14 +84,16 @@ export default function LobbyScreen() {
 
         <FeaturedGameBanner game={FEATURED} onPress={() => openGame(FEATURED)} />
 
-        <View style={styles.section}>
-          <AppText variant="overline" style={styles.sectionTitle}>
-            Table games
-          </AppText>
-          {GAMES.map((game) => (
-            <GameTile key={game.id} game={game} onPress={() => openGame(game)} />
-          ))}
-        </View>
+        {SECTIONS.map(({ id, title }) => (
+          <View key={id} style={styles.section}>
+            <AppText variant="overline" style={styles.sectionTitle}>
+              {title}
+            </AppText>
+            {GAMES.filter((g) => g.section === id).map((game) => (
+              <GameTile key={game.id} game={game} onPress={() => openGame(game)} />
+            ))}
+          </View>
+        ))}
 
         {!isAuthenticated && (
           <AppText variant="caption" align="center" style={styles.hint}>
