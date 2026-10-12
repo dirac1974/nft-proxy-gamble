@@ -16,6 +16,8 @@ export { EmptyState } from "./EmptyState";
 export { ListSection, ListRow } from "./ListRow";
 export { GameHeader } from "./GameHeader";
 export { Toast } from "./Toast";
+export { FairnessBadge } from "./FairnessBadge";
+export type { FairnessState } from "./FairnessBadge";
 export type { ToastTone } from "./Toast";
 export { haptic } from "./haptics";
 export type { HapticKind } from "./haptics";

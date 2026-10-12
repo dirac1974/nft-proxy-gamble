@@ -32,7 +32,8 @@ export const COINS_PER_LEVEL = 25;
 export const BET_LEVELS: readonly number[] = [1, 2, 5, 10, 20];
 export const MAX_WIN = 500_000;
 // Jurisdiction flag (v2 GLOBAL): true disables turbo/autoplay and enforces a 2.5s min cycle.
-export const RESTRICTED_PLAY = false;
+export { RESTRICTED_PLAY } from "@/config/compliance";
+import { RESTRICTED_PLAY } from "@/config/compliance";
 
 // SYNC: backend STRIPS. stops[r] = strip index shown in the TOP row; rows go
 // top→bottom as strip[stop], strip[stop+1], strip[stop+2] (mod length).

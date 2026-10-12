@@ -7,7 +7,8 @@ export type KenoSpeed = "normal" | "fast" | "instant";
 
 // Jurisdiction flag (v2 GLOBAL): disables Instant and enforces a 2.5s minimum draw cycle.
 // TODO(lead): hoist to a shared config constant when one exists.
-export const RESTRICTED_PLAY = false;
+export { RESTRICTED_PLAY } from "@/config/compliance";
+import { RESTRICTED_PLAY } from "@/config/compliance";
 export const RESTRICTED_MIN_CYCLE_MS = 2500;
 
 export const BOARD_SIZE = 80;

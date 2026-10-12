@@ -6,7 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { gradients, palette, radius, shadows, typography, motion } from "@/theme";
 import { AppText } from "./AppText";
 import { haptic, type HapticKind } from "./haptics";
-import { playSound } from "@/services/soundService";
+import { playSound, type SfxKey } from "@/services/soundService";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "felt";
 export type ButtonSize = "sm" | "md" | "lg";
@@ -25,6 +25,8 @@ interface ButtonProps {
   testID?: string;
   accessibilityLabel?: string;
   sublabel?: string;
+  /** Click sound; pass false for game actions that play their own semantic sound. */
+  sound?: SfxKey | false;
 }
 
 const HEIGHTS: Record<ButtonSize, number> = { sm: 36, md: 48, lg: 60 };
@@ -44,6 +46,7 @@ export function Button({
   testID,
   accessibilityLabel,
   sublabel,
+  sound = "ui_tap",
 }: ButtonProps) {
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -92,7 +95,7 @@ export function Button({
         }}
         onPress={() => {
           if (hapticKind) haptic(hapticKind);
-          void playSound("ui_tap");
+          if (sound) void playSound(sound);
           onPress?.();
         }}
         hitSlop={size === "sm" ? 6 : 0}
