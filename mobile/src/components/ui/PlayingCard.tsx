@@ -315,6 +315,7 @@ export function PlayingCard({
     <Pressable
       testID={testID}
       onPress={disabled ? undefined : onPress}
+      disabled={disabled}
       style={styles.slot}
       accessibilityRole="button"
       accessibilityLabel={label}

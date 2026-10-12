@@ -541,6 +541,7 @@ export default function VideoPokerScreen() {
         title={overlay?.title ?? ""}
         amount={overlay?.amount ?? 0}
         onDismiss={dismissOverlay}
+        silent
       />
     </View>
   );

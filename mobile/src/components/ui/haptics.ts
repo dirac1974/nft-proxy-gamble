@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import * as Haptics from "expo-haptics";
+import { useSettingsStore } from "@/stores/settingsStore";
 
 export type HapticKind = "light" | "medium" | "heavy" | "success" | "warning" | "error" | "select";
 
@@ -8,7 +9,7 @@ export type HapticKind = "light" | "medium" | "heavy" | "success" | "warning" | 
  * error so callers never need to guard. Safe to call from press handlers.
  */
 export function haptic(kind: HapticKind = "light"): void {
-  if (Platform.OS === "web") return;
+  if (Platform.OS === "web" || !useSettingsStore.getState().hapticsOn) return;
   try {
     switch (kind) {
       case "light":

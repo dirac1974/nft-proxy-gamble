@@ -7,7 +7,7 @@ const BASE_URL =
   (Constants.expoConfig?.extra?.apiUrl as string | undefined) ??
   "http://localhost:3000";
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = useWalletStore.getState().jwtToken;
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
@@ -38,7 +38,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 // Verify a signed balance response and extract the coin balance.
 // Throws if signature is invalid or expired — prevents showing untrusted balance.
-function extractVerifiedBalance(response: SignedBalanceResponse): number {
+export function extractVerifiedBalance(response: SignedBalanceResponse): number {
   const balance = verifyAndExtractBalance(response);
   if (balance === null) {
     throw new Error("Balance signature verification failed — please reconnect.");

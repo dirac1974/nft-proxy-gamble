@@ -4,6 +4,7 @@ jest.mock("expo-av", () => {
     replayAsync: jest.fn(() => Promise.resolve()),
     stopAsync: jest.fn(() => Promise.resolve()),
     unloadAsync: jest.fn(() => Promise.resolve()),
+    setVolumeAsync: jest.fn(() => Promise.resolve()),
   };
   return {
     Audio: {

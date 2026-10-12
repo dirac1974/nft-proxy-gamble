@@ -34,7 +34,16 @@ const VOLUME: Partial<Record<SfxKey, number>> = {
   vp_game_over: 0.5,
 };
 
+// Rapid-fire keys get a small pool so overlapping plays don't cut each other off.
+const POOLED = /^(keno_ball|keno_hit|slot_stop|count_tick|vp_credit_tick|vp_deal|vp_draw|chip_place)/;
+const POOL_SIZE = 3;
+const MAX_VOICES = 6;
+
 const sfx: Partial<Record<SfxKey, Audio.Sound>> = {};
+const pools: Partial<Record<SfxKey, { sounds: Audio.Sound[]; next: number }>> = {};
+const loops = new Map<SfxKey, { sound: Audio.Sound; volume: number }>();
+let activeVoices = 0;
+let ducked = false;
 const voices = new Map<string, Audio.Sound>();
 let initPromise: Promise<void> | null = null;
 let currentVoice: Audio.Sound | null = null;
@@ -59,6 +68,14 @@ export function initSounds(): Promise<void> {
             volume: VOLUME[key] ?? 0.8,
           });
           sfx[key] = sound;
+          if (POOLED.test(key)) {
+            const extra = await Promise.all(
+              Array.from({ length: POOL_SIZE - 1 }, () =>
+                Audio.Sound.createAsync(asset, { shouldPlay: false, volume: VOLUME[key] ?? 0.8 }).then((r) => r.sound),
+              ),
+            );
+            pools[key] = { sounds: [sound, ...extra], next: 0 };
+          }
         } catch {
           // Missing/unsupported asset — game works silently.
         }
@@ -71,12 +88,65 @@ export function initSounds(): Promise<void> {
 export async function playSound(key: SoundKey): Promise<void> {
   if (!useSettingsStore.getState().soundOn) return;
   const resolved: SfxKey = key in LEGACY ? LEGACY[key as LegacySoundKey] : (key as SfxKey);
-  const sound = sfx[resolved];
-  if (!sound) return;
+  const pool = pools[resolved];
+  let sound = sfx[resolved];
+  if (pool) {
+    sound = pool.sounds[pool.next];
+    pool.next = (pool.next + 1) % pool.sounds.length;
+  }
+  if (!sound || activeVoices >= MAX_VOICES) return;
+  activeVoices++;
+  // Fire-and-forget: callers never wait on audio latency.
+  sound
+    .replayAsync()
+    .catch(() => null)
+    .finally(() => {
+      setTimeout(() => {
+        activeVoices = Math.max(0, activeVoices - 1);
+      }, 250);
+    });
+}
+
+/** Start a seamless loop (e.g. reel spin, free-games music). */
+export async function playLoop(key: SfxKey, volume = 0.7): Promise<void> {
+  if (!useSettingsStore.getState().soundOn) return;
+  const asset = SFX_ASSETS[key];
+  if (!asset || loops.has(key)) return;
   try {
-    await sound.replayAsync();
+    const { sound } = await Audio.Sound.createAsync(asset, {
+      shouldPlay: true,
+      isLooping: true,
+      volume: ducked ? volume * 0.4 : volume,
+    });
+    loops.set(key, { sound, volume });
   } catch {
-    // Swallow audio errors.
+    // Optional audio.
+  }
+}
+
+/** Stop a loop with a short fade to avoid clicks. */
+export async function stopLoop(key: SfxKey, fadeMs = 80): Promise<void> {
+  const loop = loops.get(key);
+  if (!loop) return;
+  loops.delete(key);
+  const steps = 4;
+  try {
+    for (let i = steps - 1; i >= 0; i--) {
+      await loop.sound.setVolumeAsync((loop.volume * i) / steps);
+      await new Promise((r) => setTimeout(r, fadeMs / steps));
+    }
+    await loop.sound.stopAsync();
+    await loop.sound.unloadAsync();
+  } catch {
+    // ignore
+  }
+}
+
+/** Lower running loops under a win cue (0.4×), restore afterwards. */
+export function duckLoops(on: boolean): void {
+  ducked = on;
+  for (const { sound, volume } of loops.values()) {
+    sound.setVolumeAsync(on ? volume * 0.4 : volume).catch(() => null);
   }
 }
 
@@ -116,9 +186,12 @@ export function playRouletteNumber(n: number): Promise<void> {
 }
 
 export async function unloadSounds(): Promise<void> {
-  const all = [...Object.values(sfx), ...voices.values()];
+  for (const k of [...loops.keys()]) await stopLoop(k, 0);
+  const pooled = Object.values(pools).flatMap((p) => p?.sounds.slice(1) ?? []);
+  const all = [...Object.values(sfx), ...pooled, ...voices.values()];
   await Promise.all(all.map((s) => s?.unloadAsync().catch(() => null)));
   for (const k of Object.keys(sfx)) delete sfx[k as SfxKey];
+  for (const k of Object.keys(pools)) delete pools[k as SfxKey];
   voices.clear();
   currentVoice = null;
   initPromise = null;
