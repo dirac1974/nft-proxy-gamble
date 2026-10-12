@@ -11,6 +11,8 @@ jest.mock("expo-router", () => ({
 }));
 jest.mock("expo-blur", () => ({ BlurView: () => null }));
 jest.mock("@/services/soundService", () => ({
+  preloadGroup: jest.fn(() => Promise.resolve()),
+  preloadRouletteNumber: jest.fn(() => Promise.resolve()),
   playSound: jest.fn(() => Promise.resolve()),
   winSoundFor: jest.fn(() => "lose"),
 }));

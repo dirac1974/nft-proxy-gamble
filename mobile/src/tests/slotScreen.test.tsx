@@ -7,6 +7,8 @@ jest.mock("react-native-reanimated", () => require("react-native-reanimated/mock
 jest.mock("expo-router", () => ({ router: { back: jest.fn(), canGoBack: () => true, replace: jest.fn() } }));
 jest.mock("expo-blur", () => ({ BlurView: () => null }));
 jest.mock("@/services/soundService", () => ({
+  preloadGroup: jest.fn(() => Promise.resolve()),
+  preloadRouletteNumber: jest.fn(() => Promise.resolve()),
   playSound: jest.fn(() => Promise.resolve()),
   playVoice: jest.fn(() => Promise.resolve()),
   playLoop: jest.fn(() => Promise.resolve()),

@@ -17,6 +17,8 @@ jest.mock("react-native-safe-area-context", () => {
   };
 });
 jest.mock("@/services/soundService", () => ({
+  preloadGroup: jest.fn(() => Promise.resolve()),
+  preloadRouletteNumber: jest.fn(() => Promise.resolve()),
   playSound: jest.fn(() => Promise.resolve()),
   playVoice: jest.fn(() => Promise.resolve()),
   winSoundFor: jest.fn(() => "win_small"),
