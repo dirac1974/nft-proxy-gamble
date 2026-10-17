@@ -1,269 +1,339 @@
-import React from "react";
-import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { useIAPStore } from "@/stores/iapStore";
+import React, { useEffect, useMemo, useRef } from "react";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIAPStore, type CoinProduct } from "@/stores/iapStore";
+import { useGameStore } from "@/stores/gameStore";
 import { purchaseProduct } from "@/services/iapService";
-import { colors, radius, shadows, spacing, typography } from "@/theme";
+import { rgApi } from "@/services/api";
+import { useWalletStore } from "@/stores/walletStore";
+import { RG_QUERY_KEY } from "@/components/shell/ResponsibleGamingSection";
+import { PROFILE_ROUTE, formatRgTime } from "@/components/shell/RgBlockNotice";
+import { playSound } from "@/services/soundService";
+import { AppText, CoinIcon, Sheet, haptic } from "@/components/ui";
+import { BRAND, formatCoins } from "@/config/brand";
+import { fonts, gradients, palette, radius, shadows, spacing } from "@/theme";
 
 interface IAPSheetProps {
   visible: boolean;
   onClose: () => void;
+  /** Fired once per successful, server-verified purchase (after the sheet closes). */
+  onPurchased?: (coins: number) => void;
 }
 
-export function IAPSheet({ visible, onClose }: IAPSheetProps) {
-  const { products, purchaseStatus, purchaseError, pendingProductId } = useIAPStore();
+function priceValue(p: CoinProduct): number {
+  const n = parseFloat(p.localizedPrice.replace(/[^0-9.,]/g, "").replace(",", "."));
+  return Number.isFinite(n) && n > 0 ? n : NaN;
+}
+
+function bestValueId(products: CoinProduct[]): string | null {
+  if (products.length < 2) return null;
+  const rates = products.map((p) => ({ id: p.productId, rate: p.coins / priceValue(p), coins: p.coins }));
+  if (rates.some((r) => !Number.isFinite(r.rate))) {
+    return products.reduce((a, b) => (b.coins > a.coins ? b : a)).productId;
+  }
+  return rates.reduce((a, b) => (b.rate > a.rate ? b : a)).id;
+}
+
+function CoinStack({ count }: { count: number }) {
+  return (
+    <View style={[styles.stack, { width: 30 + (count - 1) * 10 }]}>
+      {Array.from({ length: count }, (_, i) => (
+        <View key={i} style={[styles.stackCoin, { left: i * 10, top: 6 - i * 2 }]}>
+          <CoinIcon size={30} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function CoinPackCard({
+  product,
+  tier,
+  best,
+  pending,
+  dimmed,
+  disabled,
+  note,
+  onPress,
+}: {
+  product: CoinProduct;
+  tier: number;
+  best: boolean;
+  pending: boolean;
+  dimmed: boolean;
+  disabled: boolean;
+  /** Why the pack is unavailable (e.g. over today's deposit limit). */
+  note?: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      testID={`coin-pack-${product.coins}`}
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={`Buy ${product.coins} coins for ${product.localizedPrice}${best ? ", best value" : ""}${note ? `. ${note}` : ""}`}
+      accessibilityState={{ busy: pending, disabled }}
+      style={({ pressed }) => [
+        styles.pack,
+        best && styles.packBest,
+        pending && styles.packActive,
+        dimmed && styles.dimmed,
+        pressed && styles.pressed,
+      ]}
+    >
+      {best && (
+        <LinearGradient colors={gradients.gold} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.ribbon}>
+          <AppText style={styles.ribbonText}>BEST VALUE</AppText>
+        </LinearGradient>
+      )}
+      <CoinStack count={tier + 1} />
+      <View style={styles.packInfo}>
+        <View style={styles.packAmountRow}>
+          <AppText variant="money" style={styles.packCoins}>
+            {formatCoins(product.coins)}
+          </AppText>
+          <AppText variant="bodySmall">coins</AppText>
+        </View>
+        {product.bonus ? (
+          <AppText variant="caption" tone="win">
+            {product.bonus.replace(/BONUS/i, "bonus")}
+          </AppText>
+        ) : (
+          <AppText variant="caption">Starter pack</AppText>
+        )}
+        {note ? (
+          <AppText variant="caption" testID={`coin-pack-note-${product.coins}`}>
+            {note}
+          </AppText>
+        ) : null}
+      </View>
+      <View style={styles.price}>
+        {pending ? (
+          <ActivityIndicator color={palette.gold} />
+        ) : (
+          <AppText variant="bodyStrong" style={styles.priceText}>
+            {product.localizedPrice}
+          </AppText>
+        )}
+      </View>
+    </Pressable>
+  );
+}
+
+export function IAPSheet({ visible, onClose, onPurchased }: IAPSheetProps) {
+  const { products, purchaseStatus, purchaseError, pendingProductId, history } = useIAPStore();
+  const balance = useGameStore((s) => s.coinBalance);
   const isBusy = purchaseStatus === "loading" || purchaseStatus === "verifying";
+  const best = useMemo(() => bestValueId(products), [products]);
+  const sorted = useMemo(() => [...products].sort((a, b) => a.coins - b.coins), [products]);
+  const handled = useRef<number | null>(null);
+  const qc = useQueryClient();
+  const isAuthenticated = useWalletStore((s) => s.isAuthenticated);
+  const rg = useQuery({ queryKey: RG_QUERY_KEY, queryFn: rgApi.get, enabled: visible && isAuthenticated });
+  const depositLimit = rg.data?.limits.dailyDepositLimitCoins ?? null;
+  const usedToday = rg.data?.today.depositsCoins ?? 0;
+  const remaining = depositLimit === null ? Infinity : Math.max(0, depositLimit - usedToday);
+  const pausedUntil = rg.data?.selfExcludedUntil ?? rg.data?.coolOffUntil ?? null;
+  const rgNotice = purchaseError && /deposit limit|break|self-exclu/i.test(purchaseError) ? purchaseError : null;
+  const openLimits = () => {
+    onClose();
+    router.push(PROFILE_ROUTE);
+  };
+
+  // Auto-close on a verified purchase and celebrate once.
+  useEffect(() => {
+    if (purchaseStatus !== "success" || !visible) return;
+    const latest = history[0];
+    const stamp = latest?.timestamp ?? Date.now();
+    if (handled.current === stamp) return;
+    handled.current = stamp;
+    haptic("success");
+    void playSound("chip_collect");
+    void qc.invalidateQueries({ queryKey: RG_QUERY_KEY });
+    const t = setTimeout(() => {
+      onClose();
+      onPurchased?.(latest?.coins ?? 0);
+    }, 700);
+    return () => clearTimeout(t);
+  }, [purchaseStatus, visible, history, onClose, onPurchased, qc]);
 
   const onBuy = async (productId: string) => {
     if (isBusy) return;
     await purchaseProduct(productId);
   };
 
-  const statusMessage =
-    purchaseStatus === "loading" ? "Processing purchase…"
-    : purchaseStatus === "verifying" ? "Verifying receipt…"
-    : purchaseStatus === "success" ? "Coins added to your balance!"
-    : null;
-
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-      accessibilityViewIsModal
-    >
-      <Pressable
-        style={styles.backdrop}
-        onPress={isBusy ? undefined : onClose}
-        accessibilityRole="button"
-        accessibilityLabel="Dismiss purchase sheet"
-      />
-      <View style={styles.sheet}>
-        <View style={styles.header}>
-          <Text style={styles.title}>BUY COINS</Text>
-          <Text style={styles.subtitle}>
-            Coins are used to place bets. 100 coins can be cashed out as an NFT voucher.
-          </Text>
-          {!isBusy && (
-            <Pressable
-              onPress={onClose}
-              style={styles.closeButton}
-              accessibilityRole="button"
-              accessibilityLabel="Close purchase sheet"
-            >
-              <Text style={styles.closeText}>✕</Text>
-            </Pressable>
-          )}
-        </View>
-
-        {/* Status / error banner */}
-        {statusMessage && (
-          <View
-            style={[
-              styles.statusBanner,
-              purchaseStatus === "success" ? styles.successBanner : styles.loadingBanner,
-            ]}
-            accessibilityRole="alert"
-          >
-            {isBusy && <ActivityIndicator color={colors.neonGreen} size="small" />}
-            <Text style={[
-              styles.statusText,
-              purchaseStatus === "success" && styles.successText,
-            ]}>
-              {statusMessage}
-            </Text>
-          </View>
-        )}
-
-        {purchaseError && (
-          <View style={styles.errorBanner} accessibilityRole="alert">
-            <Text style={styles.errorText}>{purchaseError}</Text>
-          </View>
-        )}
-
-        <ScrollView contentContainerStyle={styles.productsContainer}>
-          {products.map((product) => {
-            const isPending = pendingProductId === product.productId && isBusy;
-            return (
-              <Pressable
-                key={product.productId}
-                style={({ pressed }) => [
-                  styles.productCard,
-                  isPending && styles.productCardActive,
-                  pressed && styles.productCardPressed,
-                  isBusy && !isPending && styles.productCardDimmed,
-                ]}
-                onPress={() => onBuy(product.productId)}
-                disabled={isBusy}
-                accessibilityRole="button"
-                accessibilityLabel={`Buy ${product.coins} coins for ${product.localizedPrice}`}
-                accessibilityState={{ busy: isPending, disabled: isBusy && !isPending }}
-              >
-                <View style={styles.productLeft}>
-                  <Text style={styles.productCoins}>{product.coins.toLocaleString()}</Text>
-                  <Text style={styles.productCoinsLabel}>COINS</Text>
-                  {product.bonus && (
-                    <View style={styles.bonusBadge}>
-                      <Text style={styles.bonusBadgeText}>{product.bonus}</Text>
-                    </View>
-                  )}
-                </View>
-
-                <View style={styles.productRight}>
-                  {isPending ? (
-                    <ActivityIndicator color={colors.neonGreen} />
-                  ) : (
-                    <Text style={styles.productPrice}>{product.localizedPrice}</Text>
-                  )}
-                </View>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Purchases validated server-side. All sales final. 18+ only.
-          </Text>
+    <Sheet visible={visible} onClose={onClose} dismissable={!isBusy} title="Buy coins" testID="iap-sheet">
+      <View style={styles.balanceRow}>
+        <AppText variant="bodySmall">Current balance</AppText>
+        <View style={styles.balanceValue}>
+          <CoinIcon size={16} />
+          <AppText variant="money" style={styles.balanceText}>
+            {formatCoins(balance)}
+          </AppText>
         </View>
       </View>
-    </Modal>
+
+      <AppText variant="bodySmall">
+        Play with coins. Cash out anytime: {BRAND.coinsPerUsd} coins = $1 USDC.
+      </AppText>
+
+      {depositLimit !== null && (
+        <View style={styles.limitRow} testID="iap-deposit-limit">
+          <Ionicons name="shield-checkmark-outline" size={16} color={palette.gold} />
+          <AppText variant="bodySmall" style={styles.flex}>
+            Daily deposit limit: {formatCoins(Math.min(usedToday, depositLimit))} of {formatCoins(depositLimit)} used
+          </AppText>
+          <Pressable onPress={openLimits} accessibilityRole="link" hitSlop={8} testID="iap-set-limits">
+            <AppText variant="bodySmall" tone="gold">
+              Set limits
+            </AppText>
+          </Pressable>
+        </View>
+      )}
+      {pausedUntil && (
+        <View style={styles.status} accessibilityRole="alert" testID="iap-rg-paused">
+          <Ionicons name="cafe-outline" size={18} color={palette.gold} />
+          <AppText variant="bodySmall" style={styles.flex}>
+            {rg.data?.selfExcludedUntil ? "You've self-excluded" : `You're taking a break until ${formatRgTime(pausedUntil)}`}, so
+            coin purchases are paused. You can still cash out anytime.
+          </AppText>
+        </View>
+      )}
+
+      {isBusy && (
+        <View style={styles.status} accessibilityRole="alert">
+          <ActivityIndicator color={palette.gold} size="small" />
+          <AppText variant="bodyStrong">Adding coins…</AppText>
+        </View>
+      )}
+      {purchaseStatus === "success" && (
+        <View style={[styles.status, styles.statusSuccess]} accessibilityRole="alert">
+          <Ionicons name="checkmark-circle" size={18} color={palette.emerald} />
+          <AppText variant="bodyStrong">Coins added</AppText>
+        </View>
+      )}
+      {purchaseError && (
+        <View style={[styles.status, styles.statusError]} accessibilityRole="alert">
+          <Ionicons name="alert-circle" size={18} color={palette.danger} />
+          <AppText variant="bodySmall" style={styles.flex}>
+            {rgNotice ??
+              (purchaseError.toLowerCase().includes("already processed")
+                ? "This purchase was already processed. Your coins were added once."
+                : "Purchase didn't go through. Please try again.")}
+          </AppText>
+        </View>
+      )}
+
+      <View style={styles.grid}>
+        {sorted.map((product, i) => {
+          const pending = pendingProductId === product.productId && isBusy;
+          const overLimit = product.coins > remaining;
+          const blocked = overLimit || !!pausedUntil;
+          return (
+            <CoinPackCard
+              key={product.productId}
+              product={product}
+              tier={Math.min(i, 3)}
+              best={product.productId === best}
+              pending={pending}
+              dimmed={(isBusy && !pending) || blocked}
+              disabled={isBusy || blocked}
+              note={
+                overLimit && !pausedUntil
+                  ? remaining > 0
+                    ? `Over today's limit — ${formatCoins(remaining)} coins left today`
+                    : "Today's deposit limit reached"
+                  : undefined
+              }
+              onPress={() => void onBuy(product.productId)}
+            />
+          );
+        })}
+      </View>
+
+      <AppText variant="caption" align="center">
+        All sales final. 18+ only.
+      </AppText>
+    </Sheet>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
-  },
-  sheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    maxHeight: "75%",
-  },
-
-  header: {
-    padding: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    gap: spacing.xs,
-  },
-  title: { ...typography.heading2, color: colors.neonGreen },
-  subtitle: { ...typography.bodySmall },
-  closeButton: {
-    position: "absolute",
-    right: spacing.lg,
-    top: spacing.lg,
-    width: 32,
-    height: 32,
-    borderRadius: radius.full,
-    backgroundColor: colors.surfaceElevated,
-    justifyContent: "center",
+  flex: { flex: 1 },
+  balanceRow: {
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.s12,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.hairline,
   },
-  closeText: { ...typography.body, color: colors.textSecondary },
-
-  statusBanner: {
+  limitRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    padding: spacing.md,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
+    paddingHorizontal: spacing.s12,
+    paddingVertical: spacing.sm,
     borderRadius: radius.md,
+    backgroundColor: "rgba(233,196,106,0.08)",
     borderWidth: 1,
+    borderColor: "rgba(233,196,106,0.3)",
   },
-  loadingBanner: {
-    backgroundColor: `${colors.neonGreen}11`,
-    borderColor: `${colors.neonGreen}33`,
-  },
-  successBanner: {
-    backgroundColor: `${colors.win}11`,
-    borderColor: `${colors.win}33`,
-  },
-  statusText: { ...typography.bodySmall, color: colors.neonGreen },
-  successText: { color: colors.win, fontWeight: "700" },
-
-  errorBanner: {
-    backgroundColor: `${colors.lose}22`,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: `${colors.lose}44`,
-    padding: spacing.md,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
-  },
-  errorText: { ...typography.bodySmall, color: colors.lose },
-
-  productsContainer: {
-    padding: spacing.lg,
-    gap: spacing.md,
-  },
-  productCard: {
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+  balanceValue: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  balanceText: { fontSize: 15 },
+  status: {
     flexDirection: "row",
     alignItems: "center",
-    padding: spacing.lg,
-    ...shadows.purple,
+    gap: spacing.sm,
+    padding: spacing.s12,
+    borderRadius: radius.md,
+    backgroundColor: "rgba(233,196,106,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(233,196,106,0.3)",
   },
-  productCardActive: {
-    borderColor: colors.neonGreen,
-    backgroundColor: `${colors.neonGreen}11`,
+  statusSuccess: { backgroundColor: "rgba(43,212,143,0.1)", borderColor: "rgba(43,212,143,0.35)" },
+  statusError: { backgroundColor: "rgba(229,72,77,0.1)", borderColor: "rgba(229,72,77,0.35)" },
+  grid: { gap: spacing.s12 },
+  pack: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    padding: spacing.md,
+    paddingTop: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.hairline,
+    overflow: "hidden",
+    ...shadows.e1,
   },
-  productCardPressed: { opacity: 0.8 },
-  productCardDimmed: { opacity: 0.4 },
-
-  productLeft: { flex: 1, gap: 2 },
-  productCoins: {
-    fontSize: 28,
-    fontWeight: "900",
-    color: colors.neonGreen,
-    letterSpacing: -1,
-  },
-  productCoinsLabel: {
-    ...typography.caption,
-    color: colors.textMuted,
-    letterSpacing: 2,
-  },
-  bonusBadge: {
-    alignSelf: "flex-start",
-    marginTop: 4,
-    backgroundColor: colors.warning,
-    borderRadius: radius.sm,
-    paddingHorizontal: 8,
+  packBest: { borderColor: "rgba(233,196,106,0.6)", paddingTop: spacing.lg },
+  packActive: { borderColor: palette.gold },
+  dimmed: { opacity: 0.4 },
+  pressed: { opacity: 0.85 },
+  ribbon: {
+    position: "absolute",
+    top: 0,
+    right: spacing.md,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 2,
+    borderBottomLeftRadius: radius.xs,
+    borderBottomRightRadius: radius.xs,
   },
-  bonusBadgeText: {
-    ...typography.caption,
-    color: colors.background,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-
-  productRight: { alignItems: "flex-end" },
-  productPrice: {
-    ...typography.heading3,
-    color: colors.textPrimary,
-  },
-
-  footer: {
-    padding: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  footerText: { ...typography.caption, textAlign: "center" },
+  ribbonText: { fontFamily: fonts.heavy, fontSize: 9.5, letterSpacing: 1.2, color: palette.goldInk },
+  stack: { height: 36, justifyContent: "center" },
+  stackCoin: { position: "absolute" },
+  packInfo: { flex: 1, gap: 2 },
+  packAmountRow: { flexDirection: "row", alignItems: "baseline", gap: spacing.xs },
+  packCoins: { fontSize: 22 },
+  price: { minWidth: 64, alignItems: "flex-end" },
+  priceText: { color: palette.gold },
 });
