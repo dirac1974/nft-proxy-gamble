@@ -42,6 +42,11 @@ export interface JwtPayload {
   // token. It is decided server-side from User.isAdmin on every admin request.
   // Do not add an `isAdmin` claim here — a token must never be able to assert its
   // own privilege level.
+  // Standard claims set by jwt.sign (M-7): jti is the revocation handle checked
+  // against RevokedToken on every request. Absent on tokens issued before M-7.
+  jti?: string;
+  iat?: number;
+  exp?: number;
 }
 
 export interface IAPVerifyResult {

@@ -5,6 +5,8 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { AppError } from "../middleware/errorHandler.js";
+import { manualRefund } from "../services/mintWorker.js";
+import { getMinterChain } from "../services/mintOrchestrator.js";
 
 const router = Router();
 
@@ -158,6 +160,27 @@ router.post("/users/:userId/set-risk", requireAdmin, async (req, res, next) => {
       next(new AppError(404, "User not found"));
       return;
     }
+    next(err);
+  }
+});
+
+// POST /admin/vouchers/:voucherId/refund — ops decision to abandon a mint that
+// is stuck on a non-terminal condition (e.g. contract paused for hours, or a
+// MANUAL_REVIEW voucher). Refunds only when the chain proves the voucher can no
+// longer mint (sessionId unused, every nonce used for it consumed).
+const refundSchema = z.object({ reason: z.string().min(3).max(300) });
+
+router.post("/vouchers/:voucherId/refund", requireAdmin, async (req, res, next) => {
+  try {
+    const { voucherId } = req.params;
+    const { reason } = refundSchema.parse(req.body);
+    const outcome = await manualRefund(voucherId, reason, getMinterChain());
+    await logAdminAction(req.user!.userId, "refund-voucher", null, { voucherId, reason, outcome }, req.ip);
+    if (outcome === "NO_CHAIN") throw new AppError(503, "Chain not configured; cannot verify voucher is unminted");
+    if (outcome === "NOT_REFUNDABLE") throw new AppError(409, "Voucher is not in a refundable state");
+    if (outcome === "NOT_SAFE") throw new AppError(409, "A mint transaction for this voucher may still land; retry later");
+    res.json({ voucherId, outcome });
+  } catch (err) {
     next(err);
   }
 });

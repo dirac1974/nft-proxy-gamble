@@ -2,12 +2,38 @@ import Constants from "expo-constants";
 import { useWalletStore } from "@/stores/walletStore";
 import { verifyAndExtractBalance, type SignedBalanceResponse } from "./balanceVerification";
 import { getAttestationHeaders } from "./deviceAttestationService";
+import { withClientSeed } from "./clientSeed";
 
-const BASE_URL =
-  (Constants.expoConfig?.extra?.apiUrl as string | undefined) ??
-  "http://localhost:3000";
+// M2: release builds may only talk to an allow-listed https backend.
+export const API_HOST_ALLOWLIST: readonly string[] = ["api.nftproxygamble.com", "api-staging.nftproxygamble.com"];
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+function httpsHost(url: string | undefined): string | null {
+  const m = url ? /^https:\/\/([a-z0-9.-]+)(:\d+)?(\/.*)?$/i.exec(url.trim()) : null;
+  return m ? m[1]!.toLowerCase() : null;
+}
+
+// Bundle-time env wins over the config embedded at native build time, so a
+// rebuilt JS bundle always talks to the backend it was bundled for.
+export function resolveApiBaseUrl(envUrl: string | undefined, extraUrl: string | undefined, isDev: boolean): string {
+  const url = envUrl || extraUrl;
+  if (isDev) return (url ?? "http://localhost:3000").replace(/\/+$/, "");
+  if (!url) throw new Error("API URL not configured (EXPO_PUBLIC_API_URL) — refusing to start a release build");
+  const host = httpsHost(url);
+  if (!host) throw new Error(`API URL must be https:// in release builds (got ${url})`);
+  const allowed = new Set(API_HOST_ALLOWLIST);
+  const extraHost = httpsHost(extraUrl);
+  if (extraHost) allowed.add(extraHost);
+  if (!allowed.has(host)) throw new Error(`API host ${host} is not allow-listed`);
+  return url.trim().replace(/\/+$/, "");
+}
+
+const BASE_URL = resolveApiBaseUrl(
+  process.env.EXPO_PUBLIC_API_URL,
+  Constants.expoConfig?.extra?.apiUrl as string | undefined,
+  __DEV__,
+);
+
+export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = useWalletStore.getState().jwtToken;
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
@@ -31,14 +57,22 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     }
     const body = await res.json().catch(() => ({}));
     const msg = (body as { error?: string }).error ?? `HTTP ${res.status}`;
-    throw new Error(msg);
+    // Message unchanged for existing callers; machine-readable fields (e.g. RG
+    // `code`/`until`) ride along for screens that need them (see ApiError).
+    const { code, until } = body as { code?: unknown; until?: unknown };
+    throw Object.assign(new Error(msg), {
+      status: res.status,
+      ...(typeof code === "string" ? { code } : {}),
+      ...(typeof until === "string" ? { until } : {}),
+      body,
+    });
   }
   return res.json() as Promise<T>;
 }
 
 // Verify a signed balance response and extract the coin balance.
 // Throws if signature is invalid or expired — prevents showing untrusted balance.
-function extractVerifiedBalance(response: SignedBalanceResponse): number {
+export function extractVerifiedBalance(response: SignedBalanceResponse): number {
   const balance = verifyAndExtractBalance(response);
   if (balance === null) {
     throw new Error("Balance signature verification failed — please reconnect.");
@@ -49,16 +83,19 @@ function extractVerifiedBalance(response: SignedBalanceResponse): number {
 // Auth
 export const authApi = {
   nonce: (address: string) =>
-    request<{ nonce: string }>(`/auth/nonce?address=${address}`),
+    request<{ nonce: string; message?: string; expiresAt?: string }>(`/auth/nonce?address=${address}`),
 
-  verify: (address: string, signature: string) =>
+  verify: (address: string, signature: string, message?: string) =>
     request<{ token: string; userId: string; ageConfirmed: boolean; serverSeedChainHash: string | null }>(
       "/auth/verify",
       {
         method: "POST",
-        body: JSON.stringify({ address, signature }),
+        body: JSON.stringify({ address, signature, ...(message ? { message } : {}) }),
       },
     ),
+
+  /** Revokes the current JWT server-side. */
+  logout: () => request<{ loggedOut: boolean; revoked: boolean }>("/auth/logout", { method: "POST" }),
 
   confirmAge: () =>
     request<{ ageConfirmed: boolean }>("/auth/confirm-age", { method: "POST" }),
@@ -76,16 +113,18 @@ export const balanceApi = {
 export type PokerVariant = "jacks-or-better" | "bonus-poker" | "deuces-wild";
 
 export const gameApi = {
-  startSession: (betAmount: number, variant: PokerVariant = "jacks-or-better") =>
-    request<{
-      sessionId: string;
-      gameType: string;
-      serverSeedHash: string;
-      clientSeed: string;
-      nextServerSeedHash?: string; // H-2 chain commitment for the next session
-    }>(
-      "/game/start-session",
-      { method: "POST", body: JSON.stringify({ betAmount, variant }) },
+  startSession: (betAmount: number, variant: PokerVariant = "jacks-or-better", clientSeed?: string) =>
+    withClientSeed("Video poker", clientSeed, (seed) =>
+      request<{
+        sessionId: string;
+        gameType: string;
+        serverSeedHash: string;
+        clientSeed: string;
+        nextServerSeedHash?: string; // H-2 chain commitment for the next session
+      }>(
+        "/game/start-session",
+        { method: "POST", body: JSON.stringify({ betAmount, variant, clientSeed: seed }) },
+      ),
     ),
 
   deal: (sessionId: string) =>
@@ -128,6 +167,32 @@ export const gameApi = {
   },
 };
 
+// Wallet — session-less cashout (POST /wallet/cashout). Same server gates as
+// /game/cashout. idempotencyKey ([A-Za-z0-9_-]{8,64}) makes a retry of the same
+// request return the original voucher instead of cashing out twice.
+export function newIdempotencyKey(): string {
+  return `co-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+export const walletApi = {
+  cashout: async (
+    coinsToCashout: number,
+    idempotencyKey?: string,
+  ): Promise<{ voucherId: string; mintStatus: string; newBalance: number }> => {
+    const attestHeaders = await getAttestationHeaders();
+    const resp = await request<SignedBalanceResponse & { voucherId: string; mintStatus: string }>(
+      "/wallet/cashout",
+      {
+        method: "POST",
+        body: JSON.stringify(idempotencyKey ? { coinsToCashout, idempotencyKey } : { coinsToCashout }),
+        headers: attestHeaders,
+      },
+    );
+    const newBalance = extractVerifiedBalance(resp);
+    return { voucherId: resp.voucherId, mintStatus: resp.mintStatus, newBalance };
+  },
+};
+
 // Roulette
 export type RouletteBetType =
   | "straight" | "split" | "street" | "corner" | "line"
@@ -160,14 +225,16 @@ export interface RouletteSpinResult {
 }
 
 export const rouletteApi = {
-  startSession: () =>
-    request<{
-      sessionId: string;
-      gameType: string;
-      serverSeedHash: string;
-      clientSeed: string;
-      nextServerSeedHash?: string;
-    }>("/roulette/start-session", { method: "POST", body: JSON.stringify({}) }),
+  startSession: (clientSeed?: string) =>
+    withClientSeed("Roulette", clientSeed, (seed) =>
+      request<{
+        sessionId: string;
+        gameType: string;
+        serverSeedHash: string;
+        clientSeed: string;
+        nextServerSeedHash?: string;
+      }>("/roulette/start-session", { method: "POST", body: JSON.stringify({ clientSeed: seed }) }),
+    ),
 
   spin: async (sessionId: string, bets: RouletteBet[]): Promise<RouletteSpinResult> => {
     const resp = await request<
@@ -231,21 +298,23 @@ type RawRound = SignedBalanceResponse & Omit<BlackjackRound, "newBalance">;
 
 function toRound(resp: RawRound): BlackjackRound {
   const newBalance = extractVerifiedBalance(resp); // verifies the signed balance
-  const { coinBalance: _c, balanceSig: _b, sigTimestamp: _t, ...rest } = resp;
+  const { coinBalance: _c, balanceSig: _b, sigTimestamp: _t, sigAlg: _a, ...rest } = resp;
   return { ...(rest as Omit<BlackjackRound, "newBalance">), newBalance };
 }
 
 export const blackjackApi = {
-  startSession: () =>
-    request<{
-      sessionId: string;
-      gameType: string;
-      serverSeedHash: string;
-      clientSeed: string;
-      nextServerSeedHash?: string;
-      numDecks: number;
-      dealerHitsSoft17: boolean;
-    }>("/blackjack/start-session", { method: "POST", body: JSON.stringify({}) }),
+  startSession: (clientSeed?: string) =>
+    withClientSeed("Blackjack", clientSeed, (seed) =>
+      request<{
+        sessionId: string;
+        gameType: string;
+        serverSeedHash: string;
+        clientSeed: string;
+        nextServerSeedHash?: string;
+        numDecks: number;
+        dealerHitsSoft17: boolean;
+      }>("/blackjack/start-session", { method: "POST", body: JSON.stringify({ clientSeed: seed }) }),
+    ),
 
   deal: async (sessionId: string, bet: number): Promise<BlackjackRound> =>
     toRound(await request<RawRound>("/blackjack/deal", { method: "POST", body: JSON.stringify({ sessionId, bet }) })),
@@ -287,4 +356,44 @@ export const iapApi = {
     const newBalance = extractVerifiedBalance(resp);
     return { coinsGranted: resp.coinsGranted, newBalance };
   },
+};
+
+/** Shape of errors thrown by `request` (an Error with optional server fields). */
+export type ApiError = Error & { status?: number; code?: string; until?: string; body?: unknown };
+
+// Responsible gaming (GET/POST /rg). Limits are whole coins per UTC day; null = no limit.
+export interface RgLimits {
+  dailyDepositLimitCoins: number | null;
+  dailyLossLimitCoins: number | null;
+}
+
+export interface RgStatus {
+  limits: RgLimits;
+  /** Queued increases/removals; a key is present only for a limit that is changing. */
+  pending: (Partial<RgLimits> & { effectiveAt: string }) | null;
+  coolOffUntil: string | null;
+  selfExcludedUntil: string | null;
+  selfExclusionPermanent: boolean;
+  today: { depositsCoins: number; netLossCoins: number; resetsAt: string };
+  options: { coolOffHours: number[]; selfExcludeMonths: number[] };
+}
+
+export type CoolOffHours = 24 | 72 | 168 | 720;
+export type SelfExcludeMonths = 6 | 12 | 60 | "permanent";
+export const SELF_EXCLUDE_CONFIRM = "SELF-EXCLUDE";
+
+export const rgApi = {
+  get: () => request<RgStatus>("/rg"),
+  setLimits: (limits: Partial<RgLimits>) =>
+    request<RgStatus & { applied: string[]; queued: string[] }>("/rg/limits", {
+      method: "POST",
+      body: JSON.stringify(limits),
+    }),
+  coolOff: (hours: CoolOffHours) =>
+    request<RgStatus>("/rg/cool-off", { method: "POST", body: JSON.stringify({ hours }) }),
+  selfExclude: (months: SelfExcludeMonths) =>
+    request<RgStatus>("/rg/self-exclude", {
+      method: "POST",
+      body: JSON.stringify({ months, confirm: SELF_EXCLUDE_CONFIRM }),
+    }),
 };
