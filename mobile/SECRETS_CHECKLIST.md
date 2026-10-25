@@ -10,24 +10,21 @@ Use `eas secret:list` to verify.
 | `EXPO_PUBLIC_API_URL` | API client base URL | Backend deployment URL |
 | `EXPO_PUBLIC_WC_PROJECT_ID` | WalletConnect v2 | cloud.walletconnect.com |
 | `EXPO_PUBLIC_CONTRACT_ADDRESS` | NFT redeem/transfer | `contracts/deployments/amoy.json` or mainnet address |
-| `EXPO_PUBLIC_BALANCE_VERIFY_KEY` | Signed balance verification | Derive: see below |
+| `EXPO_PUBLIC_BALANCE_VERIFY_PUBKEY` | Signed balance verification (Ed25519 public key — not secret) | Print: see below |
+| `EXPO_PUBLIC_CHAIN_ID` | Chain selection (80002 Amoy / 137 Polygon) | Set per profile in `eas.json` |
 
-### Deriving EXPO_PUBLIC_BALANCE_VERIFY_KEY
+### Getting EXPO_PUBLIC_BALANCE_VERIFY_PUBKEY
 
-This key must match the signing key used by the backend (`balanceSigning.ts`):
+The backend signs balances with an Ed25519 key derived from `JWT_SECRET`; the app
+only ever holds the PUBLIC key. On the backend host:
 
 ```bash
-# On the backend server (Node.js):
-node -e "
-  const { createHmac } = require('crypto');
-  const key = createHmac('sha256', process.env.JWT_SECRET)
-    .update('nfpg_balance_v1')
-    .digest('hex');
-  console.log(key);
-"
+cd backend && npx tsx scripts/print-balance-pubkey.ts
 ```
 
-The output is the value for `EXPO_PUBLIC_BALANCE_VERIFY_KEY`.
+The output (64 hex chars) is the value for `EXPO_PUBLIC_BALANCE_VERIFY_PUBKEY`.
+The old HMAC `EXPO_PUBLIC_BALANCE_VERIFY_KEY` must be REMOVED from every
+environment — production builds refuse to compile if it is set.
 
 ## Required for production profile only
 
@@ -68,7 +65,7 @@ eas secret:delete --id <secret-id>
 - [ ] All "Required for every profile" secrets set
 - [ ] All "Required for production" secrets set
 - [ ] `CERT_PIN_PRIMARY` and `CERT_PIN_BACKUP` are real SPKI hashes (not placeholder `AAAA...`)
-- [ ] `EXPO_PUBLIC_BALANCE_VERIFY_KEY` matches backend's derived key (test with a signed /balance call)
+- [ ] `EXPO_PUBLIC_BALANCE_VERIFY_PUBKEY` matches `print-balance-pubkey.ts` output (test with a signed /balance call); `EXPO_PUBLIC_BALANCE_VERIFY_KEY` is NOT set
 - [ ] `EXPO_PUBLIC_CONTRACT_ADDRESS` points to the re-deployed contract (with `commitPurchase()`)
 - [ ] `prisma db push` has been run on the production DB (see `docs/DEPLOYMENT_RUNBOOK.md`)
 - [ ] Backend `DEVICE_ATTESTATION_ENFORCE=false` in production until 50+ shadow samples collected

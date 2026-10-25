@@ -1,0 +1,504 @@
+#!/usr/bin/env node
+// Generates every game sound + dealer voice line with ElevenLabs, then writes
+// src/assets/sounds/manifest.ts. Run from mobile/:
+//
+//   ELEVENLABS_API_KEY=... node scripts/gen-audio.mjs            # fill in missing files
+//   ELEVENLABS_API_KEY=... node scripts/gen-audio.mjs --force    # regenerate everything
+//   node scripts/gen-audio.mjs --sfx-fallback                    # procedural SFX only (no key)
+//   node scripts/gen-audio.mjs --offline --force                 # no network at all: re-synthesise every
+//                                                                # procedural .wav, never touch .mp3 files
+//
+// SFX use /v1/sound-generation (key needs the `sound_generation` permission).
+// When that call is not permitted, a procedurally synthesised WAV is written
+// instead so the game is never silent; re-run later to upgrade it to ElevenLabs.
+// Voice uses /v1/text-to-speech (key needs `text_to_speech`).
+import { existsSync, mkdirSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = dirname(fileURLToPath(import.meta.url));
+const OUT = join(ROOT, "..", "src", "assets", "sounds");
+const API = "https://api.elevenlabs.io/v1";
+const KEY = process.env.ELEVENLABS_API_KEY;
+const FORCE = process.argv.includes("--force");
+const OFFLINE = process.argv.includes("--offline");
+const SFX_FALLBACK_ONLY = OFFLINE || process.argv.includes("--sfx-fallback");
+
+// Calm, low British male — reads as a croupier. Override with ELEVENLABS_VOICE_ID.
+const VOICE_ID = process.env.ELEVENLABS_VOICE_ID ?? "JBFqnCBsd6RMkjVDRZzb";
+const VOICE_MODEL = "eleven_multilingual_v2";
+const VOICE_SETTINGS = { stability: 0.6, similarity_boost: 0.8, style: 0.12, use_speaker_boost: true };
+
+export const SFX = {
+  ui_tap: { prompt: "soft muted wooden UI click, very short, premium, no reverb", seconds: 0.5 },
+  ui_toggle: { prompt: "subtle soft felt tap with a faint tick, short UI selection sound", seconds: 0.5 },
+  chip_place: { prompt: "single clay casino poker chip placed down on felt table, crisp close-up", seconds: 0.6 },
+  chip_collect: { prompt: "dealer sweeping a small stack of clay casino chips across felt", seconds: 1.0 },
+  card_deal: { prompt: "single playing card slid quickly across a felt casino table, close-up", seconds: 0.5 },
+  card_flip: { prompt: "playing card flipped over onto felt table, crisp light snap", seconds: 0.5 },
+  card_hold: { prompt: "soft low tactile click, muted button, short", seconds: 0.5 },
+  shuffle: { prompt: "casino dealer riffle shuffle of playing cards, short and clean", seconds: 1.6 },
+  win_small: { prompt: "two soft warm chime notes, elegant and brief, casino win, no voice", seconds: 1.0 },
+  win_medium: { prompt: "warm ascending three-note bell chime with light sparkle, elegant casino win", seconds: 1.6 },
+  win_big: { prompt: "luxurious short orchestral swell with soft bells and a cascade of casino chips, classy celebration", seconds: 3.5 },
+  count_tick: { prompt: "tiny soft coin tick, single short metallic click", seconds: 0.5 },
+  push: { prompt: "neutral soft single thud on felt, understated", seconds: 0.5 },
+  lose: { prompt: "very soft low muted felt tap, neutral, not sad", seconds: 0.5 },
+  roulette_spin: { prompt: "roulette wheel spinning with ivory ball rolling around the wooden track, gradually slowing down", seconds: 3.6 },
+  ball_drop: { prompt: "roulette ball bouncing between metal pocket separators then settling into a pocket", seconds: 1.4 },
+};
+
+export const VOICE = {
+  vo_welcome: "Welcome to the table.",
+  vo_good_luck: "Good luck.",
+  vo_place_bets: "Place your bets.",
+  vo_no_more_bets: "No more bets.",
+  vo_blackjack: "Blackjack.",
+  vo_dealer_bj: "Dealer has blackjack.",
+  vo_insurance: "Insurance?",
+  vo_dealer_bust: "Dealer busts.",
+  vo_push: "Push.",
+  vo_royal: "Royal flush.",
+  vo_straight_flush: "Straight flush.",
+  vo_four_kind: "Four of a kind.",
+  vo_four_deuces: "Four deuces.",
+  vo_free_games: "Free games.",
+};
+
+const RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
+const WORDS = [
+  "Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
+  "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen", "Twenty",
+  "Twenty-one", "Twenty-two", "Twenty-three", "Twenty-four", "Twenty-five", "Twenty-six", "Twenty-seven",
+  "Twenty-eight", "Twenty-nine", "Thirty", "Thirty-one", "Thirty-two", "Thirty-three", "Thirty-four",
+  "Thirty-five", "Thirty-six",
+];
+const numberLine = (n) => (n === 0 ? "Zero. Green." : `${WORDS[n]}. ${RED.has(n) ? "Red" : "Black"}.`);
+
+function existing(base) {
+  for (const ext of [".mp3", ".wav"]) if (existsSync(join(OUT, base + ext))) return base + ext;
+  return null;
+}
+
+async function eleven(path, body, outFile) {
+  if (OFFLINE) throw new Error("offline: network disabled");
+  const res = await fetch(`${API}${path}`, {
+    method: "POST",
+    headers: { "xi-api-key": KEY, "Content-Type": "application/json", Accept: "audio/mpeg" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    const err = new Error(`${res.status} ${text.slice(0, 200)}`);
+    err.status = res.status;
+    throw err;
+  }
+  writeFileSync(join(OUT, outFile), Buffer.from(await res.arrayBuffer()));
+}
+
+// ---------- procedural fallback synth (mono 16-bit WAV) ----------
+// Short SFX render at 44.1 kHz so bell/clack partials (up to ~16 kHz) don't alias;
+// long seamless loops and low-band beds stay at 22.05 kHz to keep the bundle small.
+const SR_HI = 44100;
+const SR_LO = 22050;
+const LOW_RATE = new Set(["slot_spin_loop", "slot_fg_loop", "roulette_spin", "slot_gong", "shuffle"]);
+const SEAMLESS = new Set(["slot_spin_loop", "slot_fg_loop", "slot_anticipation"]);
+let SR = SR_HI;
+const len = (s) => Math.floor(s * SR);
+
+// Loudness buses: gated RMS target (dBFS) with a −1 dBFS sample-peak ceiling.
+const BUS_RMS = { ui: -24, foley: -20, win: -16 };
+const PEAK_CEIL = Math.pow(10, -1 / 20);
+const UI_KEYS = /^(ui_|card_hold|vp_bet|vp_hold|vp_unhold|vp_game_over|keno_mark|keno_unmark|keno_quickpick|keno_clear|keno_max_spots)/;
+const WIN_KEYS = /^(win_|vp_win|slot_win_|slot_gong|slot_fg_intro|slot_scatter_chime)/;
+const busOf = (key) => (UI_KEYS.test(key) ? "ui" : WIN_KEYS.test(key) ? "win" : "foley");
+
+// RMS over 10 ms blocks within 30 dB of the loudest block (ignores decay tails/silence).
+function gatedRms(x) {
+  const B = Math.max(1, Math.floor(SR * 0.01));
+  const blocks = [];
+  for (let i = 0; i < x.length; i += B) {
+    let sum = 0, n = 0;
+    for (let j = i; j < Math.min(x.length, i + B); j++, n++) sum += x[j] * x[j];
+    blocks.push(sum / Math.max(1, n));
+  }
+  const loud = Math.max(...blocks, 0);
+  if (loud <= 0) return 0;
+  const gate = loud * Math.pow(10, -30 / 10);
+  const kept = blocks.filter((b) => b >= gate);
+  return Math.sqrt(kept.reduce((a, b) => a + b, 0) / kept.length);
+}
+
+const LEVELS = [];
+function wav(samples, key) {
+  const bus = busOf(key);
+  let peak = 0;
+  for (const s of samples) peak = Math.max(peak, Math.abs(s));
+  const rms = gatedRms(samples);
+  const target = Math.pow(10, BUS_RMS[bus] / 20);
+  const g = rms > 0 && peak > 0 ? Math.min(target / rms, PEAK_CEIL / peak) : 1;
+  const db = (v) => (v > 0 ? (20 * Math.log10(v)).toFixed(1) : "-inf");
+  LEVELS.push(`${key.padEnd(20)} ${String(SR).padEnd(6)} ${bus.padEnd(6)} rms ${db(rms * g)}  peak ${db(peak * g)}`);
+  const h = Buffer.alloc(44);
+  h.write("RIFF", 0); h.writeUInt32LE(36 + samples.length * 2, 4); h.write("WAVE", 8);
+  h.write("fmt ", 12); h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20); h.writeUInt16LE(1, 22);
+  h.writeUInt32LE(SR, 24); h.writeUInt32LE(SR * 2, 28); h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34);
+  h.write("data", 36); h.writeUInt32LE(samples.length * 2, 40);
+  const d = Buffer.alloc(samples.length * 2);
+  samples.forEach((s, i) => d.writeInt16LE(Math.round(Math.max(-1, Math.min(1, s * g)) * 32767), i * 2));
+  return Buffer.concat([h, d]);
+}
+function render(key, synth) {
+  SR = LOW_RATE.has(key) ? SR_LO : SR_HI;
+  seed = 1234567;
+  const x = synth();
+  if (!SEAMLESS.has(key)) {
+    const f = Math.min(x.length, Math.floor(SR * 0.006)); // 6 ms tail fade: no truncation clicks
+    for (let i = 0; i < f; i++) x[x.length - 1 - i] *= i / f;
+  }
+  return wav(x, key);
+}
+let seed = 1234567;
+const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff) * 2 - 1;
+function lowpass(x, cutoff) {
+  const a = Math.exp((-2 * Math.PI * cutoff) / SR); let y = 0;
+  return x.map((v) => (y = (1 - a) * v + a * y));
+}
+function highpass(x, cutoff) {
+  const lp = lowpass(x, cutoff); return x.map((v, i) => v - lp[i]);
+}
+function noiseBurst(dur, attack, decay, lo, hi) {
+  const n = len(dur); let x = Array.from({ length: n }, rnd);
+  x = highpass(lowpass(x, hi), lo);
+  return x.map((v, i) => { const t = i / SR; return v * Math.min(1, t / attack) * Math.exp(-t / decay); });
+}
+function bell(freq, dur, decay, amp = 1) {
+  const n = len(dur);
+  return Array.from({ length: n }, (_, i) => {
+    const t = i / SR;
+    const env = Math.min(1, t / 0.004) * Math.exp(-t / decay);
+    const p2 = freq * 2.76 < SR * 0.45 ? 0.35 * Math.sin(2 * Math.PI * freq * 2.76 * t) * Math.exp(-t / (decay * 0.4)) : 0;
+    const p3 = freq * 5.4 < SR * 0.45 ? 0.2 * Math.sin(2 * Math.PI * freq * 5.4 * t) * Math.exp(-t / (decay * 0.2)) : 0;
+    return amp * env * (Math.sin(2 * Math.PI * freq * t) + p2 + p3);
+  });
+}
+function mix(total, ...parts) {
+  const out = new Array(len(total)).fill(0);
+  for (const [sig, at, gain = 1] of parts) {
+    const o = len(at);
+    sig.forEach((v, i) => { if (o + i < out.length) out[o + i] += v * gain; });
+  }
+  return out;
+}
+function clack(f = 2400) {
+  return mix(0.12, [noiseBurst(0.08, 0.0005, 0.012, 1500, 9000), 0], [bell(f, 0.1, 0.02, 0.5), 0]);
+}
+const FALLBACK = {
+  ui_tap: () => mix(0.06, [noiseBurst(0.05, 0.0005, 0.006, 800, 5000), 0]),
+  ui_toggle: () => mix(0.08, [noiseBurst(0.06, 0.0005, 0.008, 1200, 7000), 0], [bell(1800, 0.05, 0.012, 0.25), 0]),
+  chip_place: () => mix(0.2, [clack(2600), 0], [clack(3100), 0.035, 0.45]),
+  chip_collect: () => mix(0.9, ...Array.from({ length: 9 }, (_, i) => [clack(2200 + (i % 3) * 400), 0.05 + i * 0.07 + rnd() * 0.02, 0.6]), [noiseBurst(0.8, 0.1, 0.25, 300, 3000), 0, 0.35]),
+  card_deal: () => mix(0.22, [noiseBurst(0.16, 0.02, 0.04, 2000, 10000), 0], [noiseBurst(0.04, 0.0005, 0.008, 600, 4000), 0.12, 0.8]),
+  card_flip: () => mix(0.14, [noiseBurst(0.06, 0.008, 0.015, 2500, 11000), 0], [noiseBurst(0.04, 0.0005, 0.006, 700, 5000), 0.05, 0.9]),
+  card_hold: () => mix(0.08, [noiseBurst(0.05, 0.0005, 0.007, 300, 2500), 0], [bell(620, 0.06, 0.015, 0.35), 0]),
+  shuffle: () => mix(1.4, ...Array.from({ length: 34 }, (_, i) => [noiseBurst(0.03, 0.001, 0.008, 2500, 9000), 0.15 + i * 0.03, 0.5]), [noiseBurst(0.12, 0.005, 0.04, 400, 4000), 1.25]),
+  win_small: () => mix(1.0, [bell(1046.5, 1.0, 0.35), 0], [bell(1568, 0.9, 0.35), 0.12]),
+  win_medium: () => mix(1.6, [bell(784, 1.4, 0.45), 0], [bell(1046.5, 1.3, 0.45), 0.13], [bell(1318.5, 1.2, 0.5), 0.26], [bell(2093, 1.0, 0.3, 0.3), 0.4]),
+  win_big: () => mix(3.4,
+    ...[523.25, 659.25, 783.99, 1046.5, 1318.5, 1568, 2093].map((f, i) => [bell(f, 2.4, 0.8, 0.8), i * 0.11]),
+    ...Array.from({ length: 22 }, (_, i) => [clack(2400 + (i % 4) * 300), 0.9 + i * 0.07 + rnd() * 0.03, 0.35])),
+  count_tick: () => mix(0.05, [bell(2600, 0.04, 0.008, 0.6), 0], [noiseBurst(0.02, 0.0003, 0.003, 3000, 12000), 0, 0.4]),
+  push: () => mix(0.25, [noiseBurst(0.2, 0.002, 0.05, 80, 900), 0]),
+  lose: () => mix(0.22, [noiseBurst(0.18, 0.002, 0.04, 60, 700), 0, 0.8]),
+  roulette_spin: () => {
+    const n = len(3.5); const out = new Array(n).fill(0);
+    let phase = 0;
+    for (let i = 0; i < n; i++) {
+      const t = i / SR; const speed = 14 * Math.pow(1 - t / 3.7, 1.6) + 1.2;
+      phase += speed / SR; const frac = phase % 1;
+      out[i] = (frac < 0.012 ? rnd() * 0.6 : 0) + rnd() * 0.05 * (1 - t / 3.6);
+    }
+    return lowpass(highpass(out, 400), 7000);
+  },
+  ball_drop: () => mix(1.3, ...[0, 0.18, 0.32, 0.43, 0.52, 0.6, 0.66].map((at, i) => [clack(3400 - i * 150), at, 1 - i * 0.12]), [noiseBurst(0.3, 0.005, 0.08, 200, 2000), 0.75, 0.3]),
+};
+
+// ---------- classic video-poker cabinet set (always synthesised) ----------
+// Genre-convention electronic tones, ORIGINAL compositions — no vendor audio.
+function tone(freq, dur, { wave = "square", attack = 0.002, decay = 0.08, amp = 1, glideTo = null } = {}) {
+  const n = len(dur);
+  const nyq = 8000;
+  let phase = 0;
+  return Array.from({ length: n }, (_, i) => {
+    const t = i / SR;
+    const f = glideTo ? freq + (glideTo - freq) * (t / dur) : freq;
+    phase += (2 * Math.PI * f) / SR;
+    let v = 0;
+    if (wave === "square") {
+      for (let h = 1; h * f < nyq && h <= 15; h += 2) v += Math.sin(phase * h) / h;
+      v *= 0.8;
+    } else if (wave === "triangle") {
+      for (let h = 1, k = 0; h * f < nyq && h <= 15; h += 2, k++) v += ((k % 2 ? -1 : 1) * Math.sin(phase * h)) / (h * h);
+    } else v = Math.sin(phase);
+    const env = Math.min(1, t / attack) * Math.exp(-t / decay);
+    return amp * v * env;
+  });
+}
+const NOTE = (semis) => 440 * Math.pow(2, semis / 12); // semis from A4
+const C6 = NOTE(15), D6 = NOTE(17), E6 = NOTE(19), G6 = NOTE(22), A6 = NOTE(24), C7 = NOTE(27);
+const CABINET = {
+  vp_bet1: () => tone(C6, 0.07, { decay: 0.03, amp: 0.7 }),
+  vp_bet2: () => tone(D6, 0.07, { decay: 0.03, amp: 0.7 }),
+  vp_bet3: () => tone(E6, 0.07, { decay: 0.03, amp: 0.7 }),
+  vp_bet4: () => tone(G6, 0.07, { decay: 0.03, amp: 0.7 }),
+  vp_bet5: () => mix(0.16, [tone(A6, 0.07, { decay: 0.03, amp: 0.7 }), 0], [tone(C7, 0.09, { decay: 0.04, amp: 0.7 }), 0.06]),
+  vp_deal: () => mix(0.04, [tone(1760, 0.03, { decay: 0.006, amp: 0.8 }), 0], [noiseBurst(0.02, 0.0003, 0.003, 2000, 9000), 0, 0.25]),
+  vp_draw: () => mix(0.04, [tone(1480, 0.03, { decay: 0.006, amp: 0.8 }), 0], [noiseBurst(0.02, 0.0003, 0.003, 2000, 9000), 0, 0.25]),
+  vp_hold: () => tone(1046.5, 0.07, { decay: 0.04, amp: 0.7, glideTo: 1568 }),
+  vp_unhold: () => tone(1568, 0.06, { decay: 0.03, amp: 0.55, glideTo: 1046.5 }),
+  vp_credit_tick: () => tone(2349, 0.03, { wave: "triangle", decay: 0.008, amp: 0.8 }),
+  vp_game_over: () => mix(0.32, [tone(NOTE(3), 0.14, { wave: "triangle", decay: 0.06 }), 0], [tone(NOTE(-2), 0.2, { wave: "triangle", decay: 0.09 }), 0.11]),
+  // Original 5-note figure: G5 C6 E6 G6 (hold) C7
+  vp_win: () => mix(0.8,
+    ...[NOTE(10), C6, E6, G6].map((f, i) => [tone(f, 0.12, { decay: 0.06, amp: 0.6 }), i * 0.075]),
+    [tone(C7, 0.45, { decay: 0.2, amp: 0.6 }), 0.3], [tone(C7 / 2, 0.45, { wave: "triangle", decay: 0.2, amp: 0.5 }), 0.3]),
+  // Original longer fanfare: rising arpeggio run, trill, resolving chord.
+  vp_win_big: () => {
+    const run = [NOTE(3), NOTE(7), NOTE(10), C6, E6, G6, C7, G6, C7, E6 * 2];
+    const parts = run.map((f, i) => [tone(f, 0.11, { decay: 0.06, amp: 0.55 }), i * 0.07]);
+    for (let i = 0; i < 10; i++) parts.push([tone(i % 2 ? C7 : NOTE(29), 0.06, { decay: 0.04, amp: 0.45 }), 0.75 + i * 0.06]);
+    for (const f of [C6, E6, G6, C7]) parts.push([tone(f, 0.9, { decay: 0.4, amp: 0.4 }), 1.4]);
+    parts.push([tone(C6 / 4, 0.9, { wave: "triangle", decay: 0.4, amp: 0.6 }), 1.4]);
+    return mix(2.4, ...parts);
+  },
+};
+
+// ---------- keno + slot sets (always synthesised; original) ----------
+function karplus(freq, dur, { decay = 0.996, bright = 0.5, amp = 1 } = {}) {
+  const n = len(dur);
+  const period = Math.max(2, Math.round(SR / freq));
+  const d = Math.pow(decay, SR_LO / SR); // keep ring time independent of sample rate
+  const buf = Array.from({ length: period }, () => rnd() * amp);
+  const out = new Array(n);
+  let idx = 0;
+  for (let i = 0; i < n; i++) {
+    const a = buf[idx];
+    const b = buf[(idx + 1) % period];
+    out[i] = a;
+    buf[idx] = d * (bright * a + (1 - bright) * b);
+    idx = (idx + 1) % period;
+  }
+  return out;
+}
+function gongHit(base, dur, amp = 1) {
+  const partials = [[1, 1, 0], [1.48, 0.7, 0.05], [2.01, 0.55, 0.12], [2.66, 0.4, 0.2], [3.2, 0.3, 0.25], [4.1, 0.2, 0.3]];
+  const n = len(dur);
+  return Array.from({ length: n }, (_, i) => {
+    const t = i / SR;
+    let v = 0;
+    for (const [m, a, swell] of partials) {
+      const env = (1 - Math.exp(-t / (0.01 + swell))) * Math.exp(-t / (dur * 0.45));
+      v += a * env * Math.sin(2 * Math.PI * base * m * t + m);
+    }
+    return amp * v;
+  });
+}
+function drum(f0, f1, dur, { noise = 0.3, decay = 0.18, amp = 1 } = {}) {
+  const n = len(dur);
+  let ph = 0;
+  const skin = noiseBurst(dur, 0.001, 0.02, 200, 3000);
+  return Array.from({ length: n }, (_, i) => {
+    const t = i / SR;
+    const f = f1 + (f0 - f1) * Math.exp(-t / 0.05);
+    ph += (2 * Math.PI * f) / SR;
+    return amp * (Math.sin(ph) * Math.exp(-t / decay) + noise * skin[i]);
+  });
+}
+// Mix events into exactly `total` seconds, wrapping overflow to the start → seamless loop.
+function circularMix(total, parts) {
+  const N = len(total);
+  const out = new Array(N).fill(0);
+  for (const [sig, at, gain = 1] of parts) {
+    const o = len(at);
+    sig.forEach((v, i) => { out[(o + i) % N] += v * gain; });
+  }
+  return out;
+}
+const PENTA = [261.63, 293.66, 329.63, 392.0, 440.0, 523.25, 587.33, 659.25, 783.99, 880.0, 1046.5];
+const ballPop = (f) => mix(0.1, [tone(f, 0.06, { wave: "sine", decay: 0.02, amp: 0.8, glideTo: f * 0.7 }), 0], [noiseBurst(0.02, 0.0003, 0.003, 2000, 9000), 0, 0.3]);
+const reelStop = (f0, chime) => mix(0.3, [drum(f0, 45 + (f0 - 120) * 0.3, 0.28, { noise: 0.25, decay: 0.08 }), 0], [bell(chime, 0.15, 0.04, 0.08), 0]);
+
+const KENO_SLOT = {
+  keno_mark: () => mix(0.07, [tone(1318.5, 0.05, { wave: "triangle", decay: 0.012, amp: 0.7 }), 0], [noiseBurst(0.03, 0.0003, 0.004, 1500, 7000), 0, 0.3]),
+  keno_unmark: () => mix(0.07, [tone(880, 0.05, { wave: "triangle", decay: 0.012, amp: 0.6 }), 0], [noiseBurst(0.03, 0.0003, 0.004, 1200, 6000), 0, 0.25]),
+  keno_quickpick: () => mix(0.45, ...Array.from({ length: 8 }, (_, i) => [tone(PENTA[2 + (i % 6)] * 2, 0.05, { wave: "triangle", decay: 0.012, amp: 0.5 }), i * 0.045])),
+  keno_clear: () => mix(0.3, [noiseBurst(0.28, 0.08, 0.06, 800, 6000), 0, 0.6]),
+  keno_max_spots: () => mix(0.16, [tone(220, 0.07, { decay: 0.04, amp: 0.5 }), 0], [tone(196, 0.08, { decay: 0.05, amp: 0.5 }), 0.07]),
+  keno_play: () => mix(0.6, [noiseBurst(0.5, 0.15, 0.12, 300, 4000), 0, 0.7], [drum(110, 55, 0.4, { noise: 0.1, decay: 0.12 }), 0.12, 0.8]),
+  keno_ball_1: () => ballPop(740),
+  keno_ball_2: () => ballPop(830),
+  keno_ball_3: () => ballPop(660),
+  ...Object.fromEntries(Array.from({ length: 10 }, (_, i) => [
+    `keno_hit_${i + 1}`,
+    () => mix(0.45, [bell(PENTA[Math.min(PENTA.length - 1, i)] * 2, 0.45, 0.16, 0.8), 0]),
+  ])),
+  slot_stop_1: () => reelStop(120, 1568),
+  slot_stop_2: () => reelStop(130, 1760),
+  slot_stop_3: () => reelStop(140, 1975.5),
+  slot_stop_4: () => reelStop(150, 2093),
+  slot_stop_5: () => reelStop(160, 2349),
+  slot_scatter_chime: () => mix(0.9, [bell(1046.5, 0.85, 0.3, 0.6), 0], [bell(1568, 0.8, 0.3, 0.45), 0.06]),
+  slot_gong: () => gongHit(146.8, 3.0),
+  // Seamless 1.2 s drum-roll bed (16 even hits, accent every 4th) — games may loop it.
+  slot_anticipation: () => circularMix(1.2, [
+    ...Array.from({ length: 16 }, (_, i) => [drum(i % 4 === 0 ? 105 : 125, 42, 0.14, { noise: 0.35, decay: 0.05, amp: i % 4 === 0 ? 0.6 : 0.38 }), i * 0.075]),
+    [Array.from({ length: len(1.2) }, (_, i) => 0.05 * rnd() * (0.7 + 0.3 * Math.sin((2 * Math.PI * 4 * i) / len(1.2)))), 0],
+  ]),
+  slot_win_small: () => mix(0.9, ...[0, 2, 4, 7].map((k, i) => [karplus(PENTA[k] * 2, 0.6, { decay: 0.995, amp: 0.7 }), i * 0.07])),
+  slot_win_medium: () => mix(2.0,
+    ...[0, 2, 4, 5, 7, 9, 10].map((k, i) => [karplus(PENTA[k] * 2, 0.9, { decay: 0.996, amp: 0.65 }), i * 0.08]),
+    [bell(2093, 1.2, 0.4, 0.25), 0.6], [noiseBurst(0.6, 0.002, 0.15, 4000, 12000), 0.6, 0.15]),
+  slot_win_big: () => {
+    const parts = [];
+    [0, 2, 4, 5, 7, 9, 10, 9, 10].forEach((k, i) => parts.push([karplus(PENTA[k] * 2, 1.0, { decay: 0.996, amp: 0.6 }), i * 0.09]));
+    parts.push([gongHit(110, 3.5, 0.9), 0.85]);
+    for (let i = 0; i < 26; i++) parts.push([noiseBurst(0.03, 0.0005, 0.006, 1500, 12000), 1.0 + Math.abs(rnd()) * 1.6, 0.5]);
+    for (let i = 0; i < 18; i++) parts.push([clack(2300 + (i % 4) * 280), 1.4 + i * 0.09 + rnd() * 0.03, 0.35]);
+    return mix(4.4, ...parts);
+  },
+  // ~2.0 s drum build into an accent; no gong (slot_gong plays first on the trigger).
+  slot_fg_intro: () => {
+    const parts = [];
+    for (let i = 0; i < 8; i++) parts.push([drum(i % 4 === 0 ? 90 : 140, 45, 0.25, { noise: 0.3, decay: 0.09, amp: 0.4 + i * 0.05 }), i * 0.17]);
+    for (let i = 0; i < 7; i++) parts.push([noiseBurst(0.1, 0.002, 0.04, 3000, 12000), 0.085 + i * 0.17, 0.22]);
+    parts.push([drum(80, 40, 0.6, { noise: 0.35, decay: 0.2, amp: 1 }), 1.36]);
+    parts.push([noiseBurst(0.6, 0.004, 0.18, 4000, 14000), 1.36, 0.3]);
+    parts.push([bell(1046.5, 0.6, 0.2, 0.35), 1.36], [bell(1568, 0.6, 0.2, 0.25), 1.36]);
+    return mix(2.0, ...parts);
+  },
+  slot_count_tick: () => mix(0.05, [bell(2793, 0.04, 0.008, 0.5), 0]),
+  slot_returned: () => mix(0.12, [noiseBurst(0.1, 0.001, 0.015, 300, 2500), 0, 0.6]),
+  slot_spin_loop: () => {
+    const total = 1.2;
+    const parts = [];
+    for (let i = 0; i < 18; i++) {
+      parts.push([mix(0.04, [noiseBurst(0.03, 0.0005, 0.004, 900, 5000), 0], [tone(1200 + (i % 3) * 120, 0.02, { wave: "triangle", decay: 0.004, amp: 0.3 }), 0]), i * (total / 18), 0.7]);
+    }
+    for (let i = 0; i < 12; i++) parts.push([karplus(PENTA[[4, 5, 4, 3][i % 4]] * 2, 0.3, { decay: 0.99, amp: 0.18 }), i * (total / 12)]);
+    return circularMix(total, parts);
+  },
+  slot_fg_loop: () => {
+    const beat = 0.6;
+    const total = beat * 16; // 100 BPM, 4 bars = 9.6 s exactly
+    const parts = [];
+    for (let b = 0; b < 16; b++) {
+      parts.push([drum(b % 4 === 0 ? 85 : 120, 45, 0.3, { noise: 0.25, decay: 0.1, amp: b % 4 === 0 ? 0.6 : 0.35 }), b * beat]);
+      parts.push([noiseBurst(0.06, 0.001, 0.02, 5000, 12000), b * beat + beat / 2, 0.15]);
+    }
+    [4, 5, 7, 5, 4, 2, 4, 0, 4, 5, 7, 9, 7, 5, 4, 2].forEach((k, i) => parts.push([karplus(PENTA[k] * 2, 0.8, { decay: 0.995, amp: 0.35 }), i * beat]));
+    [0, 0, 3, 4].forEach((k, i) => parts.push([karplus(PENTA[k], 2.2, { decay: 0.998, amp: 0.3 }), i * beat * 4]));
+    return circularMix(total, parts);
+  },
+};
+
+async function main() {
+  mkdirSync(OUT, { recursive: true });
+  const failures = [];
+  let sfxPermission = !!KEY && !SFX_FALLBACK_ONLY && !OFFLINE;
+
+  for (const [key, spec] of Object.entries(SFX)) {
+    const have = existing(key);
+    if (have?.endsWith(".mp3") && (!FORCE || OFFLINE)) continue; // ElevenLabs render — never shadowed offline
+    if (sfxPermission) {
+      try {
+        await eleven("/sound-generation?output_format=mp3_44100_128", {
+          text: spec.prompt,
+          duration_seconds: spec.seconds,
+          prompt_influence: 0.6,
+        }, `${key}.mp3`);
+        if (existsSync(join(OUT, `${key}.wav`))) unlinkSync(join(OUT, `${key}.wav`));
+        console.log(`sfx  ${key}.mp3  (ElevenLabs)`);
+        continue;
+      } catch (e) {
+        if (e.status === 401 || e.status === 403) {
+          console.warn(`sound-generation not permitted for this key — using procedural fallback. (${e.message})`);
+          sfxPermission = false;
+        } else {
+          failures.push(`${key}: ${e.message}`);
+        }
+      }
+    }
+    if (!have || FORCE) {
+      writeFileSync(join(OUT, `${key}.wav`), render(key, FALLBACK[key]));
+      console.log(`sfx  ${key}.wav  (procedural fallback)`);
+    }
+  }
+
+  for (const [key, synth] of Object.entries({ ...CABINET, ...KENO_SLOT })) {
+    const have = existing(key);
+    if (have && (!FORCE || have.endsWith(".mp3"))) continue;
+    writeFileSync(join(OUT, `${key}.wav`), render(key, synth));
+    console.log(`cab  ${key}.wav`);
+  }
+
+  if (KEY && !SFX_FALLBACK_ONLY && !OFFLINE) {
+    const lines = { ...VOICE };
+    for (let n = 0; n <= 36; n++) lines[`vo_n${n}`] = numberLine(n);
+    for (const [key, text] of Object.entries(lines)) {
+      if (existing(key) && !FORCE) continue;
+      try {
+        await eleven(`/text-to-speech/${VOICE_ID}?output_format=mp3_44100_128`, {
+          text,
+          model_id: VOICE_MODEL,
+          voice_settings: VOICE_SETTINGS,
+        }, `${key}.mp3`);
+        console.log(`voice ${key}.mp3  "${text}"`);
+      } catch (e) {
+        failures.push(`${key}: ${e.message}`);
+      }
+    }
+  }
+
+  writeManifest();
+  if (LEVELS.length) console.log(["", "key                  rate   bus    levels (dBFS)", ...LEVELS].join("\n"));
+  if (failures.length) {
+    console.error("\nFailures:\n" + failures.join("\n"));
+    process.exitCode = 1;
+  }
+}
+
+function writeManifest() {
+  const files = new Set(readdirSync(OUT));
+  const pick = (base) => (files.has(`${base}.mp3`) ? `${base}.mp3` : files.has(`${base}.wav`) ? `${base}.wav` : null);
+  const sfxLines = [...Object.keys(SFX), ...Object.keys(CABINET), ...Object.keys(KENO_SLOT)].map((k) => {
+    const f = pick(k);
+    return f ? `  ${k}: require("./${f}") as number,` : null;
+  }).filter(Boolean);
+  const voiceLines = Object.keys(VOICE).map((k) => {
+    const f = pick(k);
+    return f ? `  ${k}: require("./${f}") as number,` : `  ${k}: undefined,`;
+  });
+  const numLines = Array.from({ length: 37 }, (_, n) => {
+    const f = pick(`vo_n${n}`);
+    return f ? `  require("./${f}") as number,` : "  undefined,";
+  });
+  const src = `// AUTO-GENERATED by scripts/gen-audio.mjs — do not edit by hand.
+/* eslint-disable @typescript-eslint/no-require-imports */
+
+export const SFX_ASSETS = {
+${sfxLines.join("\n")}
+} as const;
+
+export const VOICE_ASSETS: Record<${Object.keys(VOICE).map((k) => `"${k}"`).join(" | ")}, number | undefined> = {
+${voiceLines.join("\n")}
+};
+
+export const ROULETTE_NUMBER_ASSETS: (number | undefined)[] = [
+${numLines.join("\n")}
+];
+`;
+  writeFileSync(join(OUT, "manifest.ts"), src);
+  console.log("wrote src/assets/sounds/manifest.ts");
+}
+
+main();

@@ -22,6 +22,11 @@ import { prisma } from "../db/client.js";
 // the server pick clientSeed keep working; the chain still removes cross-session
 // predictability. New clients gain grinding resistance by supplying clientSeed.
 
+// Client-supplied seed charset shared by every start-session route. ':' is
+// excluded because it is the field separator in the HMAC/keccak messages.
+export const CLIENT_SEED_RE = /^[A-Za-z0-9_-]{1,64}$/;
+export const CLIENT_SEED_MESSAGE = "clientSeed must match [A-Za-z0-9_-]{1,64}";
+
 export interface ConsumedSeed {
   serverSeed: string; // secret until revealed at draw/spin
   serverSeedHash: string; // commitment for THIS session (was published last session)

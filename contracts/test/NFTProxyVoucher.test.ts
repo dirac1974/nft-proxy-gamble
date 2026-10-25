@@ -12,6 +12,9 @@ const COIN_AMOUNT = 1250n;
 const USDC_DECIMALS = 6;
 
 const usdcAmt = (whole: string) => ethers.parseUnits(whole, USDC_DECIMALS);
+// 2026-10 hardening: constructor takes (usdc, admin, dailyMintCapCoins, initialMinter, initialPauser).
+// MINTER/PAUSER can no longer be granted instantly via grantRole (24h queue), so fixtures pass them here.
+const DAILY_CAP = 10_000_000n;
 
 describe("NFTProxyVoucher", function () {
   let voucher: any;
@@ -33,15 +36,12 @@ describe("NFTProxyVoucher", function () {
     usdcAddr = await usdc.getAddress();
 
     const Voucher = await ethers.getContractFactory("NFTProxyVoucher");
-    voucher = await Voucher.deploy(usdcAddr);
+    voucher = await Voucher.deploy(usdcAddr, owner.address, DAILY_CAP, minter.address, pauser.address);
     await voucher.waitForDeployment();
     voucherAddr = await voucher.getAddress();
 
     // Fund the contract with 100,000 USDC of liquidity.
     await usdc.mint(voucherAddr, usdcAmt("100000"));
-
-    await voucher.grantRole(await voucher.MINTER_ROLE(), minter.address);
-    await voucher.grantRole(await voucher.PAUSER_ROLE(), pauser.address);
   });
 
   // ============================================================
@@ -160,15 +160,20 @@ describe("NFTProxyVoucher", function () {
     expect(await voucher.coinBalance(0)).to.equal(max);
   });
 
-  it("T13. reverts redeem if contract has insufficient USDC (drain via timelocked emergency withdrawal)", async function () {
+  it("T13. emergency withdrawal can no longer drain USDC owed to voucher holders (M-1)", async function () {
+    // Previously this test drained the whole float and asserted redeem then failed. Under the
+    // solvency invariant the withdrawal is capped at freeLiquidity(), so the holder stays whole.
     await voucher.connect(minter).mint(user1.address, 10_000, GAME, SESSION);
     const liquidity = await usdc.balanceOf(voucherAddr);
-    await voucher.connect(owner).initiateEmergencyWithdrawal(liquidity, owner.address);
+    await expect(
+      voucher.connect(owner).initiateEmergencyWithdrawal(liquidity, owner.address)
+    ).to.be.revertedWith("Exceeds free liquidity");
+    await voucher.connect(owner).initiateEmergencyWithdrawal(liquidity - usdcAmt("100"), owner.address);
     await time.increase(ONE_DAY);
     await voucher.connect(owner).executeEmergencyWithdrawal();
-    await expect(voucher.connect(user1).redeem(0)).to.be.revertedWith(
-      "Insufficient USDC liquidity"
-    );
+    expect(await usdc.balanceOf(voucherAddr)).to.equal(usdcAmt("100"));
+    await voucher.connect(user1).redeem(0);
+    expect(await usdc.balanceOf(user1.address)).to.equal(usdcAmt("100"));
   });
 
   it("T14. supports multiple vouchers per user", async function () {
@@ -250,12 +255,11 @@ describe("NFTProxyVoucher", function () {
     const reentAddr = await reent.getAddress();
 
     const Voucher = await ethers.getContractFactory("NFTProxyVoucher");
-    const v = await Voucher.deploy(reentAddr);
+    const v = await Voucher.deploy(reentAddr, owner.address, DAILY_CAP, minter.address, ethers.ZeroAddress);
     await v.waitForDeployment();
     const vAddr = await v.getAddress();
 
     await reent.mint(vAddr, usdcAmt("1000"));
-    await v.grantRole(await v.MINTER_ROLE(), minter.address);
 
     // Two vouchers so the reentrant call targets a different tokenId than the outer call.
     await v.connect(minter).mint(user1.address, 100, GAME, SESSION);
@@ -292,7 +296,8 @@ describe("NFTProxyVoucher", function () {
       before + usdcAmt("3.5")
     );
 
-    await voucher.connect(minter).mint(user1.address, 12_345, GAME, SESSION);
+    // Distinct sessionId: sessions are single-use on-chain since the H-2 fix.
+    await voucher.connect(minter).mint(user1.address, 12_345, GAME, ethers.encodeBytes32String("s2"));
     const before2 = await usdc.balanceOf(user1.address);
     await voucher.connect(user1).redeem(1);
     // 12_345 * 10_000 = 123_450_000 raw units = 123.45 USDC
@@ -452,11 +457,10 @@ describe("NFTProxyVoucher", function () {
           const u = await Mock.deploy("USD Coin", "USDC", USDC_DECIMALS);
           await u.waitForDeployment();
           const uAddr = await u.getAddress();
-          const v = await Voucher.deploy(uAddr);
+          const v = await Voucher.deploy(uAddr, owner.address, DAILY_CAP, minter.address, ethers.ZeroAddress);
           await v.waitForDeployment();
           const vAddr = await v.getAddress();
           await u.mint(vAddr, usdcAmt("10000000"));
-          await v.grantRole(await v.MINTER_ROLE(), minter.address);
 
           await v.connect(minter).mint(user1.address, coinAmount, GAME, SESSION);
           const before = await u.balanceOf(user1.address);
@@ -494,9 +498,9 @@ describe("NFTProxyVoucher", function () {
 
   it("T32. constructor reverts on zero USDC address", async function () {
     const Voucher = await ethers.getContractFactory("NFTProxyVoucher");
-    await expect(Voucher.deploy(ethers.ZeroAddress)).to.be.revertedWith(
-      "USDC address required"
-    );
+    await expect(
+      Voucher.deploy(ethers.ZeroAddress, owner.address, DAILY_CAP, minter.address, pauser.address)
+    ).to.be.revertedWith("USDC address required");
   });
 
   it("T33. supportsInterface reports ERC1155 + AccessControl", async function () {

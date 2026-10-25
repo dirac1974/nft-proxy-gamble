@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useWalletConnectModal } from "@walletconnect/modal-react-native";
 import { useWalletStore } from "@/stores/walletStore";
+import { authApi } from "@/services/api";
 import {
   setWalletClient,
   clearWalletClient,
@@ -88,6 +89,8 @@ export function useWalletConnect(): UseWalletConnectReturn {
   }, [isConnected, setNetworkMismatch]);
 
   const disconnect = useCallback(async () => {
+    // Best effort: revoke the JWT server-side before dropping it locally.
+    await authApi.logout().catch(() => null);
     lastAuthAddress.current = null;
     clearWalletClient();
     await storeDisconnect();
