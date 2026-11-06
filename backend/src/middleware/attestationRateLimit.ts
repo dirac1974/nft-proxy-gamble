@@ -1,23 +1,29 @@
 import rateLimit from "express-rate-limit";
 import type { Request } from "express";
 import { config } from "../config/index.js";
+import { userIdFromRequest } from "./auth.js";
 
-// FABLE-2026-07 M-1: throttle money-path requests that arrive WITHOUT device
-// attestation headers. Attested requests are skipped entirely, so legitimate
-// clients (which always send x-attestation-*) are unaffected, while unverified
-// traffic — the shape an attacker's forged/replayed requests take — is limited
-// to a low rate per IP. This is defense-in-depth alongside checkDeviceAttestation
-// (which fails closed in production) and the broader per-route limiter.
-function hasAttestationHeaders(req: Request): boolean {
-  return Boolean(req.headers["x-attestation-platform"] && req.headers["x-attestation-token"]);
+// Per-user key (fallback: client IP, which is correct only with TRUST_PROXY set
+// to the real hop count). Keying on the authenticated user means one abuser
+// behind a shared/NAT IP cannot exhaust everyone's budget, and rotating IPs does
+// not reset a user's budget.
+export function userOrIpKey(req: Request): string {
+  const userId = userIdFromRequest(req);
+  return userId ? `u:${userId}` : `ip:${req.ip ?? "unknown"}`;
 }
 
-export const unattestedRateLimit = rateLimit({
+// FABLE-2026-07 M-1 / red-team L-5: money-path throttle. Previously requests
+// were SKIPPED whenever x-attestation-* headers were merely present, so any
+// client could opt out by sending junk headers. Now the throttle applies to
+// every money-path request, per user. Attestation itself is verified in the
+// route (checkDeviceAttestation, fail-closed in production). The budget is well
+// above legitimate use (cashouts are capped at 5/day; IAP is human-paced).
+export const moneyPathRateLimit = rateLimit({
   windowMs: 60_000,
-  max: 5,
-  // Skip in the test runner (deterministic tests) and for fully-attested requests.
-  skip: (req) => config.NODE_ENV === "test" || hasAttestationHeaders(req),
+  max: 10,
+  keyGenerator: userOrIpKey,
+  skip: () => config.NODE_ENV === "test",
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many unverified requests. Please update the app and try again." },
+  message: { error: "Too many requests. Please wait a minute and try again." },
 });

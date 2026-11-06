@@ -109,3 +109,33 @@ describe("verifyHand", () => {
     expect(result.deckMatches).toBe(false);
   });
 });
+
+describe("verifyVideoPokerHand (ProvablyFairModal helper)", () => {
+  // Lazy require keeps this suite free of RN rendering concerns.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { verifyVideoPokerHand, isVerified } = require("@/components/ProvablyFairModal") as typeof import("@/components/ProvablyFairModal");
+
+  it("verifies a held-two hand from store-shaped state", () => {
+    const deck = generateDeck(SERVER_SEED, CLIENT_SEED, 0);
+    const holds = [true, false, true, false, false];
+    const dealtCards = deck.slice(0, 5);
+    const drawnCards = [deck[0]!, deck[5]!, deck[2]!, deck[6]!, deck[7]!];
+    const v = verifyVideoPokerHand(
+      { sessionId: "s", serverSeedHash: hashServerSeed(SERVER_SEED), clientSeed: CLIENT_SEED, betAmount: 5 },
+      { dealtCards, holds },
+      { drawnCards, rank: "LOSE", payout: 0, serverSeed: SERVER_SEED },
+    );
+    expect(isVerified(v)).toBe(true);
+  });
+
+  it("flags a swapped replacement card", () => {
+    const deck = generateDeck(SERVER_SEED, CLIENT_SEED, 0);
+    const holds = [false, false, false, false, false];
+    const v = verifyVideoPokerHand(
+      { sessionId: "s", serverSeedHash: hashServerSeed(SERVER_SEED), clientSeed: CLIENT_SEED, betAmount: 1 },
+      { dealtCards: deck.slice(0, 5), holds },
+      { drawnCards: [deck[6]!, deck[5]!, deck[7]!, deck[8]!, deck[9]!], rank: "LOSE", payout: 0, serverSeed: SERVER_SEED },
+    );
+    expect(isVerified(v)).toBe(false);
+  });
+});

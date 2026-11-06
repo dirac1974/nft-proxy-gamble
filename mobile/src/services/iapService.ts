@@ -103,6 +103,12 @@ async function handlePurchaseComplete(purchase: Purchase): Promise<void> {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Purchase verification failed";
     store.setPurchaseError(msg);
+    // Responsible-gaming refusal (deposit limit / break / self-exclusion): the
+    // server did NOT record or credit this receipt. Leave the store
+    // transaction unfinished so it is not consumed — it is redelivered later
+    // (and redeemable once allowed); Google Play auto-refunds unacknowledged
+    // purchases after 3 days.
+    if (((err as { code?: unknown }).code as string | undefined)?.startsWith?.("RG_")) return;
     // Still finish so the purchase isn't stuck pending
     await finishTransaction({ purchase, isConsumable: true }).catch(() => null);
   }

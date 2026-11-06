@@ -17,7 +17,7 @@ tags:
 - launchApp
 
 - assertVisible:
-    id: "balance-display"
+    id: "balance-pill"
 
 # Trigger IAP flow with a replayed receipt hash via test helper
 - runScript:
@@ -28,8 +28,8 @@ tags:
 
 # Error must surface — balance must NOT have changed twice
 - assertNotVisible:
-    text: "Purchase complete"
+    id: "global-toast"
 
 # The 409 should show an error state in the IAP sheet or lobby
 - assertVisible:
-    text: "already processed"
+    text: ".*already processed.*"

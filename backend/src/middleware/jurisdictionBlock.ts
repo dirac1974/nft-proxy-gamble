@@ -1,4 +1,5 @@
-import type { Request, Response, NextFunction } from "express";
+import type { Request, Response, NextFunction, RequestHandler } from "express";
+import { config } from "../config/index.js";
 
 // Two-letter ISO 3166-1 country codes for jurisdictions where the app is not
 // permitted. List is intentionally conservative for closed-beta launch — every
@@ -49,23 +50,45 @@ function detectCountry(req: Request): string | null {
   return null;
 }
 
-// Apply to money-paths only — /game/cashout and /iap/verify-purchase.
+// Apply to money-paths only — /game/cashout, /wallet/cashout, /iap/verify-purchase.
 // Auth + lobby reads (/balance, /nfts, /game/start-session) are not gated,
 // so a user from a blocked region can still see they have a wallet connected
 // and read state. They just cannot move money in/out.
-export function requireAllowedJurisdiction(req: Request, res: Response, next: NextFunction): void {
-  const country = detectCountry(req);
-  // In testnet beta we don't yet require the header to be set — only block
-  // explicit matches. Once headers are guaranteed by the edge, flip to fail-closed.
-  if (country && BLOCKED_COUNTRIES.has(country)) {
-    res.status(451).json({
-      error: "Service not available in your jurisdiction",
-      country,
-    });
-    return;
-  }
-  next();
+//
+// Fail-closed (red-team HIGH, geo-block bypass): with headerRequired=true
+// (GEO_HEADER_REQUIRED, default true in production) a request WITHOUT a trusted
+// edge country header is refused with 403. Otherwise an attacker reaching the
+// origin directly, or via any path that strips the header, bypassed the block.
+//
+// DEPLOYMENT REQUIREMENT: the origin must ONLY be reachable through the edge
+// (Cloudflare / Vercel) that sets CF-IPCountry / X-Vercel-IP-Country, e.g.
+// firewall the origin to the edge's IP ranges or use an authenticated tunnel.
+// If clients can reach the origin directly they can send these headers
+// themselves and claim any country.
+export function createJurisdictionGuard(opts: { headerRequired: boolean }): RequestHandler {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const country = detectCountry(req);
+    if (!country) {
+      if (opts.headerRequired) {
+        res.status(403).json({ error: "We couldn't confirm your location", code: "GEO_UNVERIFIED" });
+        return;
+      }
+      next();
+      return;
+    }
+    if (BLOCKED_COUNTRIES.has(country)) {
+      res.status(451).json({
+        error: "Service not available in your jurisdiction",
+        country,
+      });
+      return;
+    }
+    next();
+  };
 }
+
+export const requireAllowedJurisdiction: RequestHandler = (req, res, next) =>
+  createJurisdictionGuard({ headerRequired: config.GEO_HEADER_REQUIRED })(req, res, next);
 
 // Exposed for tests + admin tooling.
 export function isJurisdictionBlocked(country: string): boolean {
