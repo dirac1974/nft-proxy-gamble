@@ -4,31 +4,30 @@ import { WinOverlay, classifyWin } from "@/components/WinOverlay";
 
 jest.mock("react-native-reanimated", () => require("react-native-reanimated/mock"));
 
-describe("classifyWin", () => {
-  it("returns null for payout 0", () => {
+describe("classifyWin (net-based)", () => {
+  it("returns null for a loss or push — never celebrate getting your stake back", () => {
     expect(classifyWin(0, 1)).toBeNull();
-    expect(classifyWin(0, 5)).toBeNull();
+    expect(classifyWin(-5, 5)).toBeNull();
   });
 
-  it("returns 'big' for Royal Flush (per-coin payout >= 50)", () => {
-    expect(classifyWin(250, 1)).toBe("big"); // Royal Flush 1 coin: 250/1 = 250
-    expect(classifyWin(50, 1)).toBe("big");  // Straight Flush 1 coin: 50/1 = 50
+  it("returns null for a zero bet", () => {
+    expect(classifyWin(10, 0)).toBeNull();
   });
 
-  it("returns 'medium' for Full House / Four of a Kind", () => {
-    expect(classifyWin(9, 1)).toBe("medium"); // Full House 1 coin
-    expect(classifyWin(45, 5)).toBe("medium"); // Full House 5 coins: 45/5 = 9
-    expect(classifyWin(25, 1)).toBe("medium"); // Four of a Kind
+  it("small below 5x net", () => {
+    expect(classifyWin(1, 1)).toBe("small"); // Two Pair: pays 2, net 1
+    expect(classifyWin(4, 1)).toBe("small");
   });
 
-  it("returns 'small' for Jacks or Better / Two Pair", () => {
-    expect(classifyWin(1, 1)).toBe("small");
-    expect(classifyWin(2, 1)).toBe("small");
-    expect(classifyWin(6, 1)).toBe("small"); // Flush
+  it("medium from 5x to below 25x net", () => {
+    expect(classifyWin(5, 1)).toBe("medium"); // Flush 6 → net 5
+    expect(classifyWin(40, 5)).toBe("medium"); // Full House at 5 coins
+    expect(classifyWin(24, 1)).toBe("medium"); // Quads net 24
   });
 
-  it("handles max-bet Royal Flush (4000 coins)", () => {
-    expect(classifyWin(4000, 5)).toBe("big"); // 4000/5 = 800
+  it("big from 25x net", () => {
+    expect(classifyWin(49, 1)).toBe("big"); // Straight Flush net
+    expect(classifyWin(3995, 5)).toBe("big"); // Max-bet Royal
   });
 });
 
@@ -37,38 +36,30 @@ describe("WinOverlay component", () => {
 
   it("renders nothing when visible=false", () => {
     const { toJSON } = render(
-      <WinOverlay visible={false} rank="Full House" payout={9} tier="medium" onDismiss={noop} />
+      <WinOverlay visible={false} title="Full House" amount={8} tier="medium" onDismiss={noop} />,
     );
     expect(toJSON()).toBeNull();
   });
 
-  it("renders rank and payout when visible=true", () => {
+  it("renders the title when visible", () => {
     const { getByText } = render(
-      <WinOverlay visible={true} rank="Four of a Kind" payout={25} tier="medium" onDismiss={noop} />
+      <WinOverlay visible title="Four of a Kind" amount={24} tier="medium" onDismiss={noop} />,
     );
     expect(getByText("Four of a Kind")).toBeTruthy();
-    expect(getByText("+25 coins")).toBeTruthy();
   });
 
-  it("shows BIG WIN label for big tier", () => {
-    const { getByText } = render(
-      <WinOverlay visible={true} rank="Royal Flush" payout={800} tier="big" onDismiss={noop} />
-    );
-    expect(getByText("BIG WIN!")).toBeTruthy();
+  it("shows BIG WIN for big tier only", () => {
+    const big = render(<WinOverlay visible title="Royal Flush" amount={3995} tier="big" onDismiss={noop} />);
+    expect(big.getByText("BIG WIN")).toBeTruthy();
+    const med = render(<WinOverlay visible title="Full House" amount={8} tier="medium" onDismiss={noop} />);
+    expect(med.queryByText("BIG WIN")).toBeNull();
   });
 
-  it("does not show BIG WIN label for medium tier", () => {
-    const { queryByText } = render(
-      <WinOverlay visible={true} rank="Full House" payout={9} tier="medium" onDismiss={noop} />
-    );
-    expect(queryByText("BIG WIN!")).toBeNull();
-  });
-
-  it("has accessibilityRole alert", () => {
+  it("is announced as an alert with the net amount", () => {
     const { getByRole } = render(
-      <WinOverlay visible={true} rank="Flush" payout={6} tier="small" onDismiss={noop} />
+      <WinOverlay visible title="Flush" amount={5} tier="medium" onDismiss={noop} />,
     );
-    // includeHiddenElements: card starts at opacity 0 due to entrance animation
-    expect(getByRole("alert", { includeHiddenElements: true })).toBeTruthy();
+    const alert = getByRole("alert", { includeHiddenElements: true });
+    expect(alert.props.accessibilityLabel).toContain("5 coins");
   });
 });

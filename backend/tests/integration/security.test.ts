@@ -1,28 +1,13 @@
 import request from "supertest";
 import { Wallet } from "ethers";
-import { createHmac } from "crypto";
 import { createApp } from "../../src/app.js";
 import { prisma, setupTestDb, teardownTestDb } from "./setup.js";
+import { verifyBalanceSig } from "../../src/services/balanceSigning.js";
 
 const app = createApp();
 const testWallet = Wallet.createRandom();
 let authToken: string;
 let userId: string;
-
-function deriveTestSigningKey(): Buffer {
-  return createHmac("sha256", process.env.JWT_SECRET!).update("nfpg_balance_v1").digest();
-}
-
-function verifyBalanceSig(
-  uid: string,
-  coinBalance: number,
-  sigTimestamp: number,
-  balanceSig: string,
-): boolean {
-  const payload = `${uid}:${coinBalance}:${sigTimestamp}`;
-  const expected = createHmac("sha256", deriveTestSigningKey()).update(payload).digest("hex");
-  return expected === balanceSig;
-}
 
 beforeAll(async () => {
   await setupTestDb();
@@ -47,7 +32,8 @@ describe("GET /balance — signed response", () => {
       .set("Authorization", `Bearer ${authToken}`);
     expect(res.status).toBe(200);
     expect(res.body.coinBalance).toBeGreaterThanOrEqual(0);
-    expect(res.body.balanceSig).toMatch(/^[0-9a-f]{64}$/);
+    expect(res.body.balanceSig).toMatch(/^[0-9a-f]{128}$/);
+    expect(res.body.sigAlg).toBe("ed25519");
     expect(res.body.sigTimestamp).toBeGreaterThan(0);
   });
 
@@ -91,7 +77,7 @@ describe("POST /game/draw — signed response", () => {
       .set("Authorization", `Bearer ${authToken}`)
       .send({ sessionId, holds: [false, false, false, false, false] });
     expect(res.status).toBe(200);
-    expect(res.body.balanceSig).toMatch(/^[0-9a-f]{64}$/);
+    expect(res.body.balanceSig).toMatch(/^[0-9a-f]{128}$/);
     expect(res.body.sigTimestamp).toBeGreaterThan(0);
   });
 

@@ -73,7 +73,7 @@ describe("POST /roulette/spin", () => {
     const balAfter = (await request(app).get("/balance").set("Authorization", `Bearer ${token}`)).body.coinBalance;
     expect(balAfter).toBe(balBefore - totalWagered + totalReturn);
     // signed balance present
-    expect(res.body.balanceSig).toMatch(/^[0-9a-f]{64}$/);
+    expect(res.body.balanceSig).toMatch(/^[0-9a-f]{128}$/);
   });
 
   it("rejects a second spin on the same session (no seed reuse)", async () => {

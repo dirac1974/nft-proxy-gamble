@@ -79,7 +79,7 @@ describe("full game flow: start → deal → draw", () => {
     const balanceAfter = balanceRes.body.coinBalance as number;
     expect(balanceAfter).toBe(balanceBefore - 2);
     // Verify signed balance format
-    expect(balanceRes.body.balanceSig).toMatch(/^[0-9a-f]{64}$/);
+    expect(balanceRes.body.balanceSig).toMatch(/^[0-9a-f]{128}$/);
   });
 
   it("draw returns rank, payout, serverSeed, signed balance, and final hand", async () => {
@@ -95,7 +95,7 @@ describe("full game flow: start → deal → draw", () => {
     // Commit-reveal: serverSeed revealed on draw
     expect((drawRes.body as { serverSeed: string }).serverSeed).toBeTruthy();
     // Signed balance: balanceSig + sigTimestamp present
-    expect((drawRes.body as { balanceSig: string }).balanceSig).toMatch(/^[0-9a-f]{64}$/);
+    expect((drawRes.body as { balanceSig: string }).balanceSig).toMatch(/^[0-9a-f]{128}$/);
     expect(typeof (drawRes.body as { sigTimestamp: number }).sigTimestamp).toBe("number");
   });
 
@@ -143,7 +143,7 @@ describe("POST /game/cashout", () => {
     expect((res.body as { voucherId: string }).voucherId).toBeTruthy();
     expect((res.body as { mintStatus: string }).mintStatus).toBe("PENDING");
     // Signed balance in cashout response
-    expect((res.body as { balanceSig: string }).balanceSig).toMatch(/^[0-9a-f]{64}$/);
+    expect((res.body as { balanceSig: string }).balanceSig).toMatch(/^[0-9a-f]{128}$/);
     expect(typeof (res.body as { sigTimestamp: number }).sigTimestamp).toBe("number");
     // Post-cashout balance should be 900 (1000 - 100)
     expect((res.body as { coinBalance: number }).coinBalance).toBe(900);

@@ -19,6 +19,10 @@ tags:
 ---
 - launchApp
 
+# The full balance readout lives on the Wallet tab
+- tapOn:
+    text: "Wallet"
+
 - assertVisible:
     id: "balance-display"
 

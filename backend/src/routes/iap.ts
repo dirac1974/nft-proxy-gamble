@@ -4,13 +4,21 @@ import { prisma } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { requireAllowedJurisdiction } from "../middleware/jurisdictionBlock.js";
-import { unattestedRateLimit } from "../middleware/attestationRateLimit.js";
+import { moneyPathRateLimit } from "../middleware/attestationRateLimit.js";
 import { verifyAppleReceipt, verifyGoogleReceipt } from "../services/iapVerifier.js";
 import { signBalance } from "../services/balanceSigning.js";
-import { queuePurchaseCommitment } from "../services/purchaseCommitmentService.js";
+import { kickChainWorker } from "../services/chainWorker.js";
 import { recordAnalyticsEvent } from "../services/analyticsService.js";
 import { checkDeviceAttestation } from "../services/deviceAttestationService.js";
 import type { AttestationPlatform } from "../types/index.js";
+import {
+  depositLimitBlock,
+  depositsToday,
+  exclusionBlock,
+  loadRgState,
+  lockUser,
+  rgError,
+} from "../services/responsibleGaming.js";
 
 const router = Router();
 
@@ -26,7 +34,7 @@ const purchaseSchema = z.discriminatedUnion("platform", [
   }),
 ]);
 
-router.post("/verify-purchase", requireAuth, requireAllowedJurisdiction, unattestedRateLimit, async (req, res, next) => {
+router.post("/verify-purchase", requireAuth, requireAllowedJurisdiction, moneyPathRateLimit, async (req, res, next) => {
   try {
     const body = purchaseSchema.parse(req.body);
     const userId = req.user!.userId;
@@ -40,6 +48,12 @@ router.post("/verify-purchase", requireAuth, requireAllowedJurisdiction, unattes
       throw new AppError(403, "Device attestation failed. Please update the app.");
     }
 
+    // Responsible gaming: no purchases during a cool-off / self-exclusion.
+    // Checked before the receipt is verified or recorded.
+    const now = new Date();
+    const excluded = exclusionBlock(await loadRgState(userId, now), now);
+    if (excluded) throw rgError(excluded);
+
     const result =
       body.platform === "apple"
         ? await verifyAppleReceipt(body.receiptData)
@@ -47,9 +61,30 @@ router.post("/verify-purchase", requireAuth, requireAllowedJurisdiction, unattes
 
     if (!result.valid) throw new AppError(422, "Receipt is invalid or unrecognized product");
 
-    // Atomic: create receipt + credit balance in one transaction
-    const [receipt, user] = await prisma.$transaction([
-      prisma.iAPReceipt.create({
+    // Atomic: deposit-limit check + create receipt + credit balance in one
+    // transaction, serialized on the User row so parallel purchases cannot
+    // jointly exceed the daily deposit limit.
+    //
+    // RG_DEPOSIT_LIMIT is raised BEFORE anything is recorded or credited: no
+    // IAPReceipt row is written, so the receipt is NOT consumed and the client
+    // must leave the store transaction unfinished (it can be redeemed after the
+    // daily reset). Refunding the store charge is out of scope — the player is
+    // told to contact support / the store; see the response `error` text.
+    const user = await prisma.$transaction(async (tx) => {
+      await lockUser(tx, userId);
+      const rg = await loadRgState(userId, now, tx);
+      const deposited = await depositsToday(tx, userId, now);
+      const block = depositLimitBlock(rg.dailyDepositLimitCoins, deposited, result.coinsGranted, now);
+      if (block) {
+        const limit = rg.dailyDepositLimitCoins!;
+        throw rgError(
+          block,
+          `This purchase was not credited: it would take you over your daily deposit limit (${deposited} of ${limit} coins used today). ` +
+            "Your receipt has not been used — you can redeem it after the daily reset, or contact the store for a refund.",
+          { depositedTodayCoins: deposited, dailyDepositLimitCoins: limit, attemptedCoins: result.coinsGranted },
+        );
+      }
+      await tx.iAPReceipt.create({
         data: {
           userId,
           platform: body.platform,
@@ -57,32 +92,33 @@ router.post("/verify-purchase", requireAuth, requireAllowedJurisdiction, unattes
           productId: result.productId,
           coinsGranted: result.coinsGranted,
         },
-      }),
-      prisma.user.update({
+      });
+      return tx.user.update({
         where: { id: userId },
         data: { coinBalance: { increment: result.coinsGranted } },
         select: { coinBalance: true, walletAddress: true },
-      }),
-    ]);
+      });
+    });
 
     // Non-blocking analytics event for IAP purchase
     recordAnalyticsEvent(userId, { type: "iap_purchase", coinsAdded: result.coinsGranted }).catch(
       (err) => console.error("[analytics] iap event error:", err),
     );
 
-    // Queue on-chain commitment (async — does not block coin credit)
-    queuePurchaseCommitment({
-      user: user.walletAddress as `0x${string}`,
-      coinsAdded: result.coinsGranted,
-      receiptHash: `0x${result.receiptHash}` as `0x${string}`,
-      iapRecordId: receipt.id,
-    }).catch((err) => console.error("[commitPurchase] queue failed", err));
+    // On-chain PurchaseCommitted audit: the IAPReceipt row (commitStatus
+    // PENDING) is the durable job; the chain worker sends it. Never blocks here.
+    kickChainWorker();
 
     res.json({
       coinsGranted: result.coinsGranted,
       ...signBalance(userId, user.coinBalance),
     });
   } catch (err: unknown) {
+    if (err instanceof AppError && err.extra?.code === "RG_DEPOSIT_LIMIT") {
+      await prisma.rgEvent
+        .create({ data: { userId: req.user!.userId, type: "DEPOSIT_BLOCKED", payload: err.extra as object } })
+        .catch((e) => console.error("[rg] audit error:", e));
+    }
     // Prisma unique violation on receiptHash = replay attack
     if ((err as { code?: string }).code === "P2002") {
       next(new AppError(409, "Receipt already redeemed"));
