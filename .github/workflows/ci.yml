@@ -13,8 +13,8 @@ jobs:
       run:
         working-directory: contracts
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
           cache: npm
@@ -78,7 +78,7 @@ jobs:
         run: npm test
 
       - name: Upload gas report artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: gas-report
           path: contracts/gasReport.txt
@@ -90,15 +90,15 @@ jobs:
     needs: contracts
     continue-on-error: true # soft-fail until findings are triaged; tighten after first clean run
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: contracts/package-lock.json
       - run: npm ci
         working-directory: contracts
-      - uses: crytic/slither-action@v0.4.0
+      - uses: crytic/slither-action@f197989dea5b53e986d0f88c60a034ddd77ec9a8 # v0.4.0
         with:
           target: contracts/
           solc-version: 0.8.24
@@ -131,8 +131,8 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
           cache: npm
@@ -143,10 +143,12 @@ jobs:
         run: npx prisma generate
       - name: Type-check
         run: npx tsc --noEmit
+      # Some unit tests drive real routes whose middleware (e.g. the
+      # responsible-gaming gate) reads the DB, so the schema must exist first.
+      - name: Push DB schema
+        run: npx prisma db push --force-reset --skip-generate
       - name: Unit tests
         run: npm run test:unit
-      - name: Push DB schema (integration tests)
-        run: npx prisma db push --force-reset --skip-generate
       - name: Integration tests
         run: npm run test:integration
 
@@ -157,8 +159,8 @@ jobs:
       run:
         working-directory: mobile
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
           cache: npm
@@ -172,3 +174,52 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+      # Supply chain: fail on CRITICAL advisories in shipped (non-dev) deps.
+      # Allowlist: none needed as of 2026-10-12. If a build-time-only critical
+      # (expo CLI / metro tooling that never ships in the bundle) must be tolerated,
+      # add its GHSA id to AUDIT_ALLOW below with a dated justification.
+      - name: npm audit (prod deps, critical)
+        env:
+          AUDIT_ALLOW: "" # space-separated GHSA ids, e.g. "GHSA-xxxx-xxxx-xxxx"
+        run: |
+          if npm audit --omit=dev --audit-level=critical; then exit 0; fi
+          if [ -z "$AUDIT_ALLOW" ]; then exit 1; fi
+          npm audit --omit=dev --json > audit.json || true
+          node -e '
+            const a = require("./audit.json"); const allow = new Set(process.env.AUDIT_ALLOW.split(/\s+/).filter(Boolean));
+            const bad = [];
+            for (const v of Object.values(a.vulnerabilities || {})) for (const via of v.via)
+              if (typeof via === "object" && via.severity === "critical" && !allow.has(via.url.split("/").pop())) bad.push(v.name + " " + via.url);
+            if (bad.length) { console.error("Critical advisories not allow-listed:\n" + [...new Set(bad)].join("\n")); process.exit(1); }
+            console.log("Only allow-listed critical advisories present.");'
+
+      # M1: prove a release bundle contains no E2E hooks or private-key literals.
+      # Canary E2E values are injected on purpose: they must be dead-stripped.
+      - name: Release bundle secret scan
+        env:
+          CI: "1"
+          NODE_ENV: production
+          EXPO_NO_DOTENV: "1"
+          EXPO_PUBLIC_API_URL: https://api.nftproxygamble.com
+          EXPO_PUBLIC_CHAIN_ID: "137"
+          EXPO_PUBLIC_WC_PROJECT_ID: ci_dummy
+          EXPO_PUBLIC_BALANCE_VERIFY_PUBKEY: "0000000000000000000000000000000000000000000000000000000000000000"
+          EXPO_PUBLIC_E2E_WALLET_PK: "0xc0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00"
+          EXPO_PUBLIC_E2E_CHAIN_RPC: http://10.0.2.2:8545
+          EXPO_PUBLIC_E2E_CHAIN_ID: "31337"
+        run: |
+          npx expo export --platform android --no-bytecode --output-dir "$RUNNER_TEMP/bundle"
+          fail=0
+          for B in "$RUNNER_TEMP"/bundle/_expo/static/js/android/*.js; do
+            if grep -q 'EXPO_PUBLIC_E2E' "$B"; then echo "::error::EXPO_PUBLIC_E2E reference in $B"; fail=1; fi
+            if grep -q 'c0ffee00c0ffee00' "$B"; then echo "::error::E2E wallet key canary leaked into $B"; fail=1; fi
+            if grep -q '10\.0\.2\.2:8545' "$B"; then echo "::error::E2E RPC leaked into $B"; fail=1; fi
+            # Any quoted 64-hex literal (private-key shaped) must originate from a library
+            # constant (curve params, ABI selectors …) present verbatim in node_modules.
+            grep -oE "['\"\`](0x)?[0-9a-fA-F]{64}['\"\`]" "$B" | tr -d "'\"\`" | sed 's/^0x//' | sort -u > "$RUNNER_TEMP/cand.txt"
+            grep -rhoF -f "$RUNNER_TEMP/cand.txt" node_modules --include='*.js' --include='*.mjs' --include='*.cjs' | sort -u > "$RUNNER_TEMP/known.txt" || true
+            unknown=$(comm -23 "$RUNNER_TEMP/cand.txt" "$RUNNER_TEMP/known.txt" | wc -l)
+            if [ "$unknown" -ne 0 ]; then echo "::error::$unknown unexplained 64-hex literal(s) in $B (possible private key) — values not printed"; fail=1; fi
+          done
+          exit $fail

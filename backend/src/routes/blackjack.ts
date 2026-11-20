@@ -2,10 +2,11 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireCanWager } from "../middleware/responsibleGaming.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { signBalance } from "../services/balanceSigning.js";
 import { recordAnalyticsEvent } from "../services/analyticsService.js";
-import { consumeServerSeed, prismaChainStore } from "../services/serverSeedChain.js";
+import { CLIENT_SEED_MESSAGE, CLIENT_SEED_RE, consumeServerSeed, prismaChainStore } from "../services/serverSeedChain.js";
 import {
   BLACKJACK_GAME_TYPE,
   DEFAULT_NUM_DECKS,
@@ -43,9 +44,9 @@ function readState(session: { hands: unknown }): BlackjackState | null {
 // Publishes serverSeedHash + clientSeed BEFORE any bet, plus the NEXT session's
 // server-seed commitment (H-2 chain). One round per session (C-1).
 // ---------------------------------------------------------------------------
-const startSchema = z.object({ clientSeed: z.string().min(1).max(256).optional() });
+const startSchema = z.object({ clientSeed: z.string().regex(CLIENT_SEED_RE, CLIENT_SEED_MESSAGE).optional() });
 
-router.post("/start-session", requireAuth, async (req, res, next) => {
+router.post("/start-session", requireAuth, requireCanWager, async (req, res, next) => {
   try {
     const { clientSeed: clientSeedOverride } = startSchema.parse(req.body);
     const userId = req.user!.userId;
@@ -83,26 +84,33 @@ async function loadSession(sessionId: string, userId: string) {
 }
 
 // Apply a state transition inside a serialized transaction. Claims the session
-// (ACTIVE→AWAITING_DRAW) so parallel calls can't both mutate it; debits the
+// (ACTIVE→AWAITING_DRAW) with a compare-and-swap on the exact `hands` value the
+// caller validated, so parallel calls can't both mutate it; debits the
 // incremental wager atomically (gte guard) and, on a settled round, credits the
 // return. Any BlackjackError → 400 rolls the whole transaction back (no claim,
 // no debit). Returns the new state + post balance.
+//
+// Why CAS on hands and not just state: the winner restores ACTIVE at the end, so
+// a state-only claim let a loser queued on the row lock apply its (stale) action
+// on top of the winner's state, and its wager delta — computed against the
+// pre-race totalWagered — debited e.g. a double a second time after a split.
 async function transition(
   sessionId: string,
   userId: string,
-  prevWagered: number,
   produce: (shoe: number[], prev: BlackjackState | null) => BlackjackState,
-  session: { serverSeed: string; clientSeed: string },
+  session: { serverSeed: string; clientSeed: string; hands: unknown },
 ): Promise<{ state: BlackjackState; balance: number }> {
   const shoe = shoeFor(session);
+  const expectedHands = JSON.stringify(session.hands);
   try {
     return await prisma.$transaction(async (tx) => {
-      const claimed = await tx.gameSession.update({
-        where: { id: sessionId, state: "ACTIVE" },
-        data: { state: "AWAITING_DRAW" },
-        select: { hands: true },
-      });
-      const prev = readState(claimed);
+      const claimed = await tx.$executeRaw`
+        UPDATE "GameSession" SET "state" = 'AWAITING_DRAW', "updatedAt" = NOW()
+        WHERE "id" = ${sessionId} AND "userId" = ${userId}
+          AND "state" = 'ACTIVE' AND "hands" = ${expectedHands}::jsonb`;
+      if (claimed !== 1) throw Object.assign(new Error("claim lost"), { code: "P2025" });
+      const prev = readState(session);
+      const prevWagered = prev?.totalWagered ?? 0;
 
       let next: BlackjackState;
       try {
@@ -184,7 +192,7 @@ const dealSchema = z.object({
   bet: z.number().int().min(BJ_MIN_BET).max(BJ_MAX_BET),
 });
 
-router.post("/deal", requireAuth, async (req, res, next) => {
+router.post("/deal", requireAuth, requireCanWager, async (req, res, next) => {
   try {
     const { sessionId, bet } = dealSchema.parse(req.body);
     const userId = req.user!.userId;
@@ -195,7 +203,6 @@ router.post("/deal", requireAuth, async (req, res, next) => {
     const { state, balance } = await transition(
       sessionId,
       userId,
-      0,
       (shoe, prev) => {
         if (prev) throw new BlackjackError("already dealt");
         return deal(shoe, bet, { numDecks: DEFAULT_NUM_DECKS, dealerHitsSoft17: DEALER_HITS_SOFT_17 });
@@ -234,7 +241,6 @@ router.post("/action", requireAuth, async (req, res, next) => {
     const { state, balance } = await transition(
       sessionId,
       userId,
-      current.totalWagered,
       (shoe, prev) => {
         if (!prev) throw new BlackjackError("no active round");
         return applyAction(prev, action as BlackjackAction, shoe);
@@ -272,7 +278,6 @@ router.post("/insurance", requireAuth, async (req, res, next) => {
     const { state, balance } = await transition(
       sessionId,
       userId,
-      current.totalWagered,
       (shoe, prev) => {
         if (!prev) throw new BlackjackError("no active round");
         return resolveInsurance(prev, take, shoe);

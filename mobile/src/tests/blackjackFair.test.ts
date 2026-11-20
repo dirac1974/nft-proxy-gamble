@@ -55,3 +55,20 @@ describe("verifyBlackjackDeal", () => {
     expect(res.cardsMatch).toBe(false);
   });
 });
+
+describe("verifyBlackjackDeal after a split", () => {
+  const serverSeed = "srv";
+  const clientSeed = "cli";
+  const shoe = generateShoe(serverSeed, clientSeed, 6);
+  const hash = hashServerSeed(serverSeed);
+
+  it("must be fed the opening hand captured at the deal, not the post-split hand", () => {
+    const opening = [shoe[0]!, shoe[2]!];
+    const postSplitHand0 = [shoe[0]!, shoe[4]!];
+    const dealer = [shoe[1]!, shoe[3]!];
+    expect(verifyBlackjackDeal(serverSeed, hash, clientSeed, 6, opening, dealer).cardsMatch).toBe(true);
+    if (shoe[4] !== shoe[2]) {
+      expect(verifyBlackjackDeal(serverSeed, hash, clientSeed, 6, postSplitHand0, dealer).cardsMatch).toBe(false);
+    }
+  });
+});
