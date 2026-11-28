@@ -48,7 +48,7 @@ describe("NetworkBanner", () => {
     useWalletStore.setState({ networkMismatch: true });
     const { getByText } = render(<NetworkBanner />);
     expect(getByText(/Wrong network/i)).toBeTruthy();
-    expect(getByText("Switch")).toBeTruthy();
+    expect(getByText("Fix it")).toBeTruthy();
   });
 
   it("renders when connectionError contains 'Wrong network'", () => {

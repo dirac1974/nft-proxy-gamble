@@ -7,6 +7,10 @@ jest.mock("@/stores/walletStore", () => ({
   },
 }));
 
+// Legacy HMAC path only (no EXPO_PUBLIC_BALANCE_VERIFY_PUBKEY). The ed25519 path is
+// covered without mocks in balanceVerificationEd25519.test.ts.
+jest.mock("@noble/curves/ed25519", () => ({ ed25519: { verify: jest.fn(() => false) } }));
+
 // Mock @noble/hashes modules
 const mockHmacFn = jest.fn();
 jest.mock("@noble/hashes/hmac", () => ({
@@ -37,6 +41,7 @@ beforeEach(() => {
   mockHmacFn.mockReturnValue(Buffer.from(VALID_SIG, "hex"));
   // Set env var for each test
   process.env.EXPO_PUBLIC_BALANCE_VERIFY_KEY = VALID_KEY_HEX;
+  delete process.env.EXPO_PUBLIC_BALANCE_VERIFY_PUBKEY;
   (process.env as Record<string, string>).NODE_ENV = "test";
 });
 

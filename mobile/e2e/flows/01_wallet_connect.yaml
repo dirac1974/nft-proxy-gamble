@@ -1,5 +1,5 @@
 appId: com.nftproxygamble.app
-name: "Wallet Connect + SIWE Authentication"
+name: "First run + Wallet Connect + SIWE Authentication"
 tags:
   - auth
   - critical
@@ -8,59 +8,63 @@ tags:
 - launchApp:
     clearState: true
 
-# Lobby tab should show connect prompt
+# First-run age gate (local declaration) appears before anything else
 - assertVisible:
-    text: "Connect Wallet"
-    enabled: true
-
+    text: "Are you 18 or older?"
 - tapOn:
-    text: "Connect Wallet"
+    id: "age-yes"
 
-# WalletConnect sheet opens
+# Onboarding cards — skip straight to the lobby
+- assertVisible:
+    text: "Buy coins, play games."
+- tapOn:
+    id: "onboarding-skip"
+
+# Logged-out lobby is browsable
+- assertVisible:
+    text: "AURUM"
+- assertVisible:
+    id: "tile-video-poker"
+- assertVisible:
+    id: "tile-blackjack"
+- assertVisible:
+    id: "tile-roulette"
+
+# Tapping a game while logged out opens the Connect sheet
+- tapOn:
+    id: "tile-video-poker"
+- assertVisible:
+    text: "Connect your wallet"
+- tapOn:
+    id: "connect-wallet-button"
+
+# WalletConnect modal opens
 - assertVisible:
     text: "Connect via QR"
-
 - tapOn:
     text: "Connect via QR"
 
 # In sandbox mode WalletConnect deep-link completes automatically.
-# Wait for authenticated state — balance display appears.
 - waitForAnimationToEnd:
     timeout: 8000
 
-- assertVisible:
-    id: "balance-display"
-
-# Sign-In With Ethereum confirmation prompt
+# Sign-In With Ethereum confirmation prompt (wallet side)
 - assertVisible:
     text: "Sign to authenticate"
     enabled: true
-
 - tapOn:
     text: "Sign to authenticate"
 
 - waitForAnimationToEnd:
     timeout: 5000
 
-# Age gate appears for new users
-- assertVisible:
-    text: "Age Verification"
-
-- assertVisible:
-    text: "I am 18 or older"
-
-- tapOn:
-    text: "I am 18 or older"
-
-- waitForAnimationToEnd:
-    timeout: 3000
-
-# Age gate dismissed — Lobby now fully visible
+# Server age confirmation is auto-submitted from the first-run declaration,
+# so the server age gate should not block the lobby.
 - assertNotVisible:
-    text: "Age Verification"
+    id: "age-gate-modal"
 
+# Authenticated lobby shows the balance pill with the buy button
 - assertVisible:
-    text: "NFT PROXY"
-
+    id: "balance-pill"
 - assertVisible:
-    text: "Video Poker"
+    id: "buy-coins-button"

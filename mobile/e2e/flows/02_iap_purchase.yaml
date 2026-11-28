@@ -9,48 +9,47 @@ tags:
 
 # Must be authenticated (depends on 01_wallet_connect completing first in a suite run)
 - assertVisible:
-    id: "balance-display"
+    id: "balance-pill"
 
 - tapOn:
-    text: "Buy Coins"
+    id: "buy-coins-button"
 
 # IAP sheet opens
 - assertVisible:
-    text: "100 coins"
-    enabled: true
-
+    id: "iap-sheet"
 - assertVisible:
-    text: "$0.99"
+    id: "coin-pack-100"
+- assertVisible:
+    text: "\$0.99"
 
-# Select 100-coin product
+# Select 100-coin pack
 - tapOn:
-    text: "100 coins"
+    id: "coin-pack-100"
 
 # Sandbox IAP sheet appears (iOS StoreKit / Android test environment)
 - assertVisible:
     text: "Confirm your In-App Purchase"
-
 - tapOn:
     text: "Buy"
 
 - waitForAnimationToEnd:
     timeout: 10000
 
-# Sheet closes after server verification
+# Sheet auto-closes after server verification and a toast confirms
 - assertNotVisible:
-    text: "Confirm your In-App Purchase"
+    id: "iap-sheet"
+- assertVisible:
+    id: "global-toast"
 
 # Balance should have increased (server-authoritative)
 - assertVisible:
-    id: "balance-display"
+    id: "balance-pill"
 
 # Adversarial: sheet dismissed without purchase — balance must NOT change
 - tapOn:
-    text: "Buy Coins"
-
+    id: "buy-coins-button"
 - tapOn:
-    text: "550 coins"
-
+    id: "coin-pack-550"
 - assertVisible:
     text: "Confirm your In-App Purchase"
 
@@ -63,4 +62,4 @@ tags:
 
 # Balance unchanged
 - assertVisible:
-    id: "balance-display"
+    id: "balance-pill"

@@ -75,4 +75,26 @@ describe("gameStore", () => {
     expect(state.session).toBeNull();
     expect(state.coinBalance).toBe(500); // balance persists across reset
   });
+
+  it("reset keeps bet size and variant (only hand state clears)", () => {
+    act(() => useGameStore.getState().setBetAmount(5));
+    act(() => useGameStore.getState().setVariant("deuces-wild"));
+    act(() => useGameStore.getState().reset());
+    const state = useGameStore.getState();
+    expect(state.betAmount).toBe(5);
+    expect(state.variant).toBe("deuces-wild");
+    expect(state.dealt).toBeNull();
+    expect(state.result).toBeNull();
+  });
+
+  it("setVariant is ignored mid-hand", () => {
+    act(() => useGameStore.getState().setVariant("jacks-or-better"));
+    act(() => useGameStore.getState().setSession({ sessionId: "s1", serverSeedHash: "h", clientSeed: "c", betAmount: 1 }));
+    act(() => useGameStore.getState().setDealt([0, 1, 2, 3, 4]));
+    act(() => useGameStore.getState().setVariant("bonus-poker"));
+    expect(useGameStore.getState().variant).toBe("jacks-or-better");
+    act(() => useGameStore.getState().setResult({ drawnCards: [0, 1, 2, 3, 4], rank: "LOSE", payout: 0, serverSeed: "s" }, 10));
+    act(() => useGameStore.getState().setVariant("bonus-poker"));
+    expect(useGameStore.getState().variant).toBe("bonus-poker");
+  });
 });
